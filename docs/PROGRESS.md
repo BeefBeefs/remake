@@ -59,11 +59,15 @@ Newest entries at the bottom. Run `npm run assets && npm run build && npm run se
 - Correction: Table.Tbd 900-907 are the player stat tables (exe 0x44e34c, per gender and level), not drop tables. Monster exp is Mct record field 696 (derived from the exe's kill-exp function: exp at monster+0x17c, HP at +0xd4 = field 654); gold uses field 669 (best guess, +-50% spread). Item drops use a drop level (monster field 660, or the 4/15/20/22 chest value of sentence 24) with a PLACEHOLDER generator: item price band of 300 * 1.2^level.
 
 ## Remaining script sentences
-- 13 `(var,const)` = multiply (pairs with 14 divide); 37/38 = warp gate use / switch on (Table.Tbd 40 rows = `(0, scenario index, cost?)` with names in the string column); gates opened are remembered as `w:<scenario>` and the destination menu is a dialog list.
+- 13 `(var,const)` = multiply (pairs with 14 divide); 37/38 = warp gate use / switch on (Table.Tbd 40 rows = `(0, scenario index, entry id)` with names in the string column); gates opened are remembered as `w:<scenario>` and the destination menu is a dialog list.
 - 42/43/63 `(a,b)` are party/network precondition checks; offline they reset both vars to 0 so the script's `a != b` branch never fires.
 - 7/8/20/26/40/41/45/60/64/72 are visual/NPC-marker sentences with no offline effect and are accepted as no-ops (no more "unimplemented" warnings in scenarios 0, 6, 10003).
-- Still guessed: warp cost (col 2 of Table 40) is not charged yet.
 
 ## Quest items
 - The town script's two hand-in quests want item section 4 ids 99000000 (Malse's Gem) and 99000001 (Syria's Spirit Stone); the flags are set in scenario 0 (vars 1000029-1000032) and no dungeon script grants them (no item-grant sentence, no kill status on those bosses), so the exe must drop them from the thieves.
 - Black Hammer (scenario 00000004 boss, id 0) now drops Malse's Gem; the goblin boss of 00010001 drops the Spirit Stone (GUESS for the location: quest text only says "Goblins at the ruins"). Drops stop once the item is held or the quest is completed.
+
+## Warp cost, gold, item generator (investigation)
+- **Warp cost: there is none.** Table 40 col 2 is not a price: the gate window (exe 0x40c9bf, rows with a per-row "open" flag array at +0xa0bc, 10 rows per page) copies col 1 and col 2 into the selected entry (+0x440/+0x444) and the click handler (0x41c9c5) passes them straight to the map-change routine 0x426200 as (scenario, entry) - the same pair as script sentence 17. No gold is subtracted and the manual (control.html "Use a Gate") mentions no fee. Entry ids (2,3,4,6, 50/51 for towns and far gates) do not match the 10000000+n zones of those maps, so the remake keeps arriving at the gate zone 10000200. Table 41 (48 x 1, strings only) is the Mission List text ("Take back Malse's gem." ...), not part of the gates.
+- **Gold: `[669]` kept.** The exe's kill function (0x4134a0) only handles exp; the gold roll lives elsewhere (not found). Scale check: chests give 10-30 gold early and 50-100 in the ruins (sentence 10, category 4 id 0), monster `[669]` is 30-195 (Goblin 30, Hammer Goblin 140), so the remake's 0.5x-1.5x of it is the right order of magnitude.
+- **Item generator: still the price-band placeholder.** Leads for later: Table 31 rows 100-256 are `(-1, a, b, -1, 1)` with `a` rising 1..47 and `b` 1..38 (looks like drop level -> max item rank / modifier tier); Table 30 (343 x 22) is `(1, x, 10 x (value, 111|1))` rows, probably per-item-type modifier slots. Neither could be tied to the exe's drop code yet.
