@@ -27,3 +27,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `spells.mjs` — profession spell learning.
 - `attrs.mjs` — attribute medicines and status values.
 - `itembonus.mjs` — variant item bonuses (attack %, speed %, attribute levels) and tooltips.
+- `wheel.mjs` — monster attributes and the weakness wheel multiplier.

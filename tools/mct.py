@@ -31,7 +31,7 @@ def parse(path):
             # [660] drop level (-1 = drops nothing, e.g. the trap-room Hole Goblins), [695..697] gold chance %, min, max (exe 0x45a030: monster+0x198 / +0x19c / +0x1a0; values scale with HP). [669] is unidentified. Other fields not decoded.
             v = struct.unpack_from('<700i', d, j + 4 + 36)
             ok = lambda x: x if 0 <= x < 10**7 else 0   # boss records with a different layout hold garbage here
-            rec_extra['st'] = dict(hp=v[654], atk=v[655], def_=v[657], spd=v[675], dlv=v[660], exp=ok(v[659]), gchance=ok(v[695]), gmin=ok(v[696]), gmax=ok(v[697]))
+            rec_extra['st'] = dict(hp=v[654], atk=v[655], def_=v[657], spd=v[675], dlv=v[660], exp=ok(v[659]), gchance=ok(v[695]), gmin=ok(v[696]), gmax=ok(v[697]), attr=v[652] if 0 <= v[652] <= 7 else 0)
         out.append(dict(name=d[i+4:i+4+L].decode(), kind=kind, model=model, id=ident, a=w[1], b=w[2], dir=w[7], radius=w[0], col=col[:3].hex(), **rec_extra))
     return out
 if __name__ == '__main__': print(json.dumps(parse(sys.argv[1]), indent=1))

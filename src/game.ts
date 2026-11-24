@@ -298,7 +298,7 @@ export class GameScene implements Scene {
     this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
     const p = this.player; this.spawnPos = { x: p.x, y: p.y };
     const self = this;
-    this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d, false), sfx: id => audio.sfx(id, 0.7), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
+    this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: (d, attr) => this.hitPlayer(d, false, attr), sfx: id => audio.sfx(id, 0.7), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
     this.petCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), enemies: () => this.actors.filter(a => a.enemy && !a.gen && a.alive), hit: (a, d) => this.damage(a, d) };
     this.drawPlayer = {
       get y() { return p.y; },
@@ -474,22 +474,25 @@ export class GameScene implements Scene {
     }
   }
   /** Monster hit on the hero. Negative Thunder / Metal levels do nothing; positive ones dodge (melee / magic). Magic damage is scaled by the Dark level. */
-  private hitPlayer(d: number, magic: boolean) {
+  private hitPlayer(d: number, magic: boolean, attr?: number) {
     if (this.dead) return; const h = this.hud, ev = Math.max(0, this.win.attrLv(magic ? 7 : 3)) * 0.05 + (magic ? this.win.pct(1, 71) : this.win.pct(1, 59)) / 100;
     if (Math.random() < ev) { this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: 'Miss' }); return; }
-    if (magic) d = Math.max(1, Math.round(d / this.win.attrMul(5))); d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
+    if (magic) d = Math.max(1, Math.round(d / this.win.attrMul(5)));
+    if (attr !== undefined) d = Math.max(1, Math.round(d / this.wheel(attr))); d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
     // exe 0x412a40 monster->player: power*(9+rand%3)/10 - defence*Table11[neutral=10]/10, minimum 1
     h.hp = Math.max(0, h.hp - d); this.win.wearArmor();
     this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` }); audio.sfx(SFX.hurt, 0.8);
     if (h.hp <= 0) { this.dead = true; this.target = null; this.atkT = -1; this.player.anim = 23; this.player.t = 0; }
   }
+  /** Weakness wheel (manual): Fire/Water, Earth/Thunder, Holy/Dark, Gel/Metal are opposites; a strong opposite level is an advantage, a low own level a disadvantage. GUESS: damage x (1 + 5 % per level of (opposite - same)), limited to 0.5-1.5; monster attribute = Mct field 652 (0 Fire, 1 Water, 2 Earth, 3 Thunder, 5 Dark ...). */
+  private wheel(monsterAttr: number) { const w = this.win; return Math.max(0.5, Math.min(1.5, 1 + 0.05 * (w.attrLv(monsterAttr ^ 1) - w.attrLv(monsterAttr)))); }
   private hurtEnemy(a: Actor) {
     // exe 0x412a40 (player->monster): damage = power * (9 + rand%3 | 10 + rand%3) * Table11[neutral=10] / 100 - monster flat defence (+0xe8).
     // power = weapon attack (item field 26; fists = 10) * strength% (stat table row 4: 140 at level 1, +10 per fighter level). The real player attack builder was not found, so using strength as a multiplier is a GUESS.
     // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
     const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
     if (Math.random() < Math.max(0, -this.win.attrLv(2)) * 0.05) { this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: 'Miss' }); return; }   // negative Earth level = lower hit rate
-    const raw = power * (this.powerT > 0 ? 1.5 : 1) * (this.tripleLeft > 0 ? 1.4 : 1) * (9 + Math.floor(Math.random() * 3)) / 10; this.win.wearWeapon(); { const w = this.win.inv.equipped('weapon')[0]; this.usage[w && ItemDb.isRanged(w.item) ? 'ranged' : 'melee']++; }
+    const raw = power * this.wheel(a.stats.attr ?? 0) * (this.powerT > 0 ? 1.5 : 1) * (this.tripleLeft > 0 ? 1.4 : 1) * (9 + Math.floor(Math.random() * 3)) / 10; this.win.wearWeapon(); { const w = this.win.inv.equipped('weapon')[0]; this.usage[w && ItemDb.isRanged(w.item) ? 'ranged' : 'melee']++; }
     this.damage(a, Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0)))));
   }
   /** Apply final damage to a monster: floater, sound, and the death rewards (experience, gold, item drop, kill script event). */

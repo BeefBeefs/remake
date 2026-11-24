@@ -4,7 +4,7 @@ import { Drawable, worldToReal } from './map.js';
 import { Zone, ZoneRec, loadZones } from './zones.js';
 import type { App } from './app.js';
 
-export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; /** per-monster parameters from the Mct record (tools/mct.py): hit points, attack power, speed %, drop chance %, drop level (-1 = none) */ st?: { hp: number; atk: number; def_: number; spd: number; dlv: number; exp: number; gchance: number; gmin: number; gmax: number }; }
+export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; /** per-monster parameters from the Mct record (tools/mct.py): hit points, attack power, speed %, drop chance %, drop level (-1 = none) */ st?: { hp: number; atk: number; def_: number; spd: number; dlv: number; exp: number; gchance: number; gmin: number; gmax: number; attr?: number }; }
 const FRAME_MS = 80;
 /** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
 const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
@@ -15,7 +15,7 @@ export const ENEMY_STATS: Record<number, { hp: number; dmg: [number, number]; ex
   2: { hp: 45, dmg: [4, 9], exp: 12, gold: [8, 30], speed: 0.075 },
   5: { hp: 200, dmg: [8, 16], exp: 120, gold: [200, 400], speed: 0.09 },
 };
-export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; /** Ranged attack: a bolt from the monster's ground position toward (tx, ty). */ shoot?(x: number, y: number, tx: number, ty: number, dmg: number): void; /** Play Voice00.Voc entry `id` (monster attack sounds, exe 0x42a000-0x430000). */ sfx?(id: number): void; }
+export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number, attr?: number): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; /** Ranged attack: a bolt from the monster's ground position toward (tx, ty). */ shoot?(x: number, y: number, tx: number, ty: number, dmg: number): void; /** Play Voice00.Voc entry `id` (monster attack sounds, exe 0x42a000-0x430000). */ sfx?(id: number): void; }
 type State = 'idle' | 'walk' | 'attack' | 'die';
 const ANIM: Record<State, number> = { idle: 0, walk: 1, attack: 2, die: 3 };
 /** Draw order of CAF layers (1 and 0 are the body for the player; higher ones are optional equipment/overlay variants). */
@@ -30,7 +30,7 @@ export class Actor implements Drawable {
   /** Shamans (model 5) cast bolts from a distance (GUESS from their cast sounds/animation set; the exact range and rate are not decoded). */
   get ranged() { return this.enemy && this.rec.model === 5; }
   hurt(fromX: number, fromY: number) { const dx = this.x - fromX, dy = this.y - fromY, n = Math.hypot(dx, dy) || 1; this.stun = 240; this.kx = dx / n; this.ky = dy / n; if (this.state === 'attack' && !this.hitDone) this.set('idle'); }
-  stats: { hp: number; dmg: [number, number]; exp: number; gold: [number, number]; speed: number; goldChance?: number; defense?: number } = ENEMY_STATS[1];
+  stats: { hp: number; dmg: [number, number]; exp: number; gold: [number, number]; speed: number; goldChance?: number; defense?: number; attr?: number } = ENEMY_STATS[1];
   private constructor(public rec: ActorRec, private set_: SpriteSet, private sdw: SpriteSet, private caf: Caf) {
     [this.x, this.y] = worldToReal(rec.a, rec.b); this.dir = rec.dir % 9;
     if (rec.kind === 'enemy') {
@@ -41,7 +41,7 @@ export class Actor implements Drawable {
       if (st && !this.gen) {
         // Hit points, attack, speed, exp and the gold chance/min/max come from the Mct record (Mct power multiplier on top of hp/attack); gold/exp/drop fields verified against the exe death routine (0x45a000/0x45a030).
         const hp = Math.max(1, r(st.hp * k)), at = st.atk * Math.sqrt(k), noLoot = st.dlv < 0;
-        this.stats = { hp, dmg: [Math.max(1, r(at)), Math.max(1, r(at))], exp: st.exp, gold: noLoot ? [0, 0] : [st.gmin, Math.max(st.gmin, st.gmax)], goldChance: st.gchance, defense: st.def_, speed: 0.07 * st.spd / 170 };
+        this.stats = { hp, dmg: [Math.max(1, r(at)), Math.max(1, r(at))], exp: st.exp, gold: noLoot ? [0, 0] : [st.gmin, Math.max(st.gmin, st.gmax)], goldChance: st.gchance, defense: st.def_, attr: st.attr ?? 0, speed: 0.07 * st.spd / 170 };
       }
       if (this.gen) this.stats = { hp: 80, dmg: [0, 0], exp: 30, gold: [0, 0], speed: 0 };   // PLACEHOLDER hp for the Enemy Hole generators
       this.hp = this.maxHp = this.stats.hp;
@@ -89,11 +89,11 @@ export class Actor implements Drawable {
     const frames = this.caf.anims[this.animOv ?? ANIM.attack]?.dirs[this.dir]?.frames || 10;
     if (this.state === 'attack') {
       if (this.slam) {   // golem slam: heavy blow with an area around the monster
-        if (!this.hitDone && this.t >= frames * FRAME_MS * 0.6) { this.hitDone = true; const dm = Math.round(this.stats.dmg[1] * 1.6); if (Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) < 150 * this.scale) c.hitPlayer(dm); if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < 150 * this.scale) c.hitPet?.(dm); }
+        if (!this.hitDone && this.t >= frames * FRAME_MS * 0.6) { this.hitDone = true; const dm = Math.round(this.stats.dmg[1] * 1.6); if (Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) < 150 * this.scale) c.hitPlayer(dm, this.stats.attr); if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < 150 * this.scale) c.hitPet?.(dm); }
         if (this.t >= frames * FRAME_MS) this.set('idle'); return;
       }
       if (this.shot) { if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); c.shoot?.(this.x, this.y, tx, ty, dm); c.sfx?.(21); } if (this.t >= frames * FRAME_MS) { this.shot = false; this.set('idle'); } return; }
-      if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70 * this.scale) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm); } }
+      if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70 * this.scale) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm, this.stats.attr); } }
       if (this.t >= frames * FRAME_MS) this.set('idle');
       return;
     }

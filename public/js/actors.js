@@ -55,7 +55,7 @@ export class Actor {
             if (st && !this.gen) {
                 // Hit points, attack, speed, exp and the gold chance/min/max come from the Mct record (Mct power multiplier on top of hp/attack); gold/exp/drop fields verified against the exe death routine (0x45a000/0x45a030).
                 const hp = Math.max(1, r(st.hp * k)), at = st.atk * Math.sqrt(k), noLoot = st.dlv < 0;
-                this.stats = { hp, dmg: [Math.max(1, r(at)), Math.max(1, r(at))], exp: st.exp, gold: noLoot ? [0, 0] : [st.gmin, Math.max(st.gmin, st.gmax)], goldChance: st.gchance, defense: st.def_, speed: 0.07 * st.spd / 170 };
+                this.stats = { hp, dmg: [Math.max(1, r(at)), Math.max(1, r(at))], exp: st.exp, gold: noLoot ? [0, 0] : [st.gmin, Math.max(st.gmin, st.gmax)], goldChance: st.gchance, defense: st.def_, attr: st.attr ?? 0, speed: 0.07 * st.spd / 170 };
             }
             if (this.gen)
                 this.stats = { hp: 80, dmg: [0, 0], exp: 30, gold: [0, 0], speed: 0 }; // PLACEHOLDER hp for the Enemy Hole generators
@@ -126,7 +126,7 @@ export class Actor {
                     this.hitDone = true;
                     const dm = Math.round(this.stats.dmg[1] * 1.6);
                     if (Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) < 150 * this.scale)
-                        c.hitPlayer(dm);
+                        c.hitPlayer(dm, this.stats.attr);
                     if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < 150 * this.scale)
                         c.hitPet?.(dm);
                 }
@@ -154,7 +154,7 @@ export class Actor {
                     if (onPet)
                         c.hitPet?.(dm);
                     else
-                        c.hitPlayer(dm);
+                        c.hitPlayer(dm, this.stats.attr);
                 }
             }
             if (this.t >= frames * FRAME_MS)
