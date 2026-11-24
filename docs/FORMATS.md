@@ -41,6 +41,15 @@ u32, u32 trailer
 The 9 groups are directions (8 + 1 spare); the player has 23 layers per direction (body, equipment variants, weapon...) whose
 pattern indices point into the matching `Animation00.Njp`. Equipment-to-layer mapping is still TODO.
 
+## Maps (work in progress)
+- `Map/Ground/<n>.Gnd` (`RPGSCRN_GNDv000`): `u32 W, H, chipW(64), chipH(48), 160, 160`, then `u8 compressed` + RCLIB-L block of `W*H` cells x 6 bytes
+  (three i16 per cell, values 0..31, all three fields share the same value set), then a second `u8 + RCLIB-L` block (646384 bytes in 3rd_2-1: mostly 0/1/3 as u16 pairs; probably the walkability/"area judge" grid).
+- `Map/Pattern/<n>.Lst`: 64 lines, one `.njp`/`.sdw` filename per upd slot (unused slots are `?`). Ground tile sets are `3rdmap_*.njp` (64x48 tiles; 00 = base types in groups of 4 variants: grass, dirt, sand, grass2, dark, water; 01/03 = transitions; 04/05 = dirt/sand variants).
+- `Map/<n>.Map` (`MAPED_FILE v000`): 36 bytes: four u32 (1,1,1,1) + a short name.
+- `Map/Object/<n>.Obl` (`RPGSCRN_OBJv001`): not decoded yet.
+- **Open question:** how a cell's three values map to (upd slot, pattern). The renderer (`GROUNDBLOCK::SetPacket`) passes cell fields 2 and 3 to the UPDIB packet call, but treating them as (Lst slot, pattern) does not yield sensible slots (values exceed the 18 filled slots).
+  Rendering the first field as an index into the concatenation of the first ground sets gives a plausible terrain, but transitions don't line up, so that is not confirmed.
+
 ## Other formats (headers seen, not yet decoded)
 | ext | magic | role (guess) |
 |---|---|---|
