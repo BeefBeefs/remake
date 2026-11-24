@@ -1,6 +1,8 @@
 import { SpriteSet } from './sprites.js';
 /** Native screen size of the original game (the HUD patterns hold absolute 640x480 positions). */
 export const SCREEN_W = 640, SCREEN_H = 480, HUD_Y = 412;
+/** Belt pocket slot rectangles of the HUD (the frames are part of the panel image): 1-4 on the upper row, 5-8 on the lower one. */
+export const BELT = Array.from({ length: 8 }, (_, k) => ({ x: (k < 4 ? 360 : 408) + (k % 4) * 32, y: k < 4 ? 417 : 449, w: 26, h: 23 }));
 /** HUD built from System/Game/Pattern/Bar.njp (+ Font00 / System cursor). Pattern numbers per docs/FORMATS.md. */
 export class Gui {
     constructor(bar, font, sys) {

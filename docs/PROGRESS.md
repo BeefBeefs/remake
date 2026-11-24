@@ -170,3 +170,10 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 - `src/settings.ts`: Music volume, Sound effects volume (remake additions) and Display Darkness, stored in `shadowflare_settings`. `audio.setVolumes` applies them.
 - `src/dark.ts`: Display Darkness. `Game/Dark.njp` patterns 1-6 are grayscale elliptical light masks (90x60 ... 280x200); the mask brightness is punched out of a black layer around the player (pattern 6, 88% opacity). Applied to maps named `d??`/`y??` (dungeons, ruins) - which maps are dark in the exe is not known, this is a heuristic.
 - Keys now follow the manual's shortcut list: S status (C kept), I items, Q missions, H help, R run/walk, Esc menu. Mute moved to F12 (M is Magic in the original), the debug overlay is G only (F1-F8 are magic hotkeys in the original).
+
+## GUI: belt pocket and item use
+- `gui.ts` `BELT`: the eight belt slot rectangles of the HUD panel (slots 1-4 on the upper row, 5-8 on the lower; the frames are part of the panel art, located from a screenshot of Game_Bar).
+- The belt auto-fills with the first eight belt-capable consumables (section 3, field 26 == 1); the original lets you place them yourself - not implemented. Icons are drawn into the slots.
+- Keys 1-8 or right click (belt slot or item window) use an item: Tablet restores HP (field 27), Capsule MP (28), Vitality/Mental Source and fruits raise max HP/MP permanently (29/30, kept in `hud.hpBonus/mpBonus` and applied by `applyStats`). Meat (field 31) is companion food and just shows a notice. Full HP/MP refuses the item.
+- `app.ts` gained right-click input (`rclicked`, context menu suppressed). Test: `/tmp/belt.mjs` style Playwright run (tablet, capsule, source, apple verified).
+- Not done: MINE (B), magic/attack bar (F1-F9), companion HP/attack mode (Space), power-up (P) - need the magic and companion systems first. The bonuses live in `hud` and are saved with it.

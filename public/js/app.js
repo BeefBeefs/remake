@@ -7,6 +7,7 @@ export class Input {
         this.y = SCREEN_H / 2;
         this.down = false;
         this.clicked = false;
+        this.rclicked = false;
         this.keys = new Set();
         this.typed = [];
         this.pressed = new Set();
@@ -19,6 +20,7 @@ export class App {
         this.scene = null;
         this.sets = new Map();
         this.rawClick = false;
+        this.rawRight = false;
         cv.width = SCREEN_W;
         cv.height = SCREEN_H;
         this.ctx = cv.getContext('2d');
@@ -28,7 +30,10 @@ export class App {
         cv.addEventListener('mousedown', e => { if (e.button === 0) {
             i.down = true;
             this.rawClick = true;
-        } cv.focus(); });
+        }
+        else if (e.button === 2)
+            this.rawRight = true; cv.focus(); });
+        cv.addEventListener('contextmenu', e => e.preventDefault());
         addEventListener('mouseup', () => i.down = false);
         addEventListener('keydown', e => {
             const k = e.key.toLowerCase();
@@ -56,9 +61,12 @@ export class App {
             const i = this.input;
             i.clicked = this.rawClick;
             this.rawClick = false;
+            i.rclicked = this.rawRight;
+            this.rawRight = false;
             this.scene?.update(dt);
             this.scene?.draw(this.ctx);
             i.clicked = false;
+            i.rclicked = false;
             i.typed.length = 0;
             i.pressed.clear();
             requestAnimationFrame(tick);

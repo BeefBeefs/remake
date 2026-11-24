@@ -12,6 +12,10 @@ export class ItemDb {
     /** Footprint in inventory cells (fields 7 x 8). */
     static size(it) { return [it.f['7'] || 1, it.f['8'] || 1]; }
     static price(it) { return it.f['5'] ?? 0; }
+    /** Belt-pocket candidates: tablets, capsules, sources and fruits (consumables flagged with field 26). */
+    static beltable(it) { return it.sec === 3 && (it.f['26'] ?? 0) === 1; }
+    /** Effect of using a consumable: HP / MP recovered (fields 27 / 28) and permanent max HP / MP gained (fields 29 / 30). */
+    static effect(it) { return { hp: it.f['27'] ?? 0, mp: it.f['28'] ?? 0, maxHp: it.f['29'] ?? 0, maxMp: it.f['30'] ?? 0 }; }
     /** Equipment slot: weapons/accessories by section, armor by field 0 (0 head, 1 body, 2 shield/book, 3 boots). Null for consumables/misc. */
     static slot(it) { return it.sec === 0 ? 'weapon' : it.sec === 1 ? ARMOR_SLOTS[it.f['0'] ?? 1] ?? null : it.sec === 2 ? 'accessory' : null; }
     /** Weapon damage range (fields 36/37) and attack speed in percent (field 27). */

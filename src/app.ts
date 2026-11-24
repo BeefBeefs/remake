@@ -8,7 +8,7 @@ export interface Scene {
 
 /** Shared input state; `clicked` is true for exactly one frame after a left button press. */
 export class Input {
-  x = SCREEN_W / 2; y = SCREEN_H / 2; down = false; clicked = false;
+  x = SCREEN_W / 2; y = SCREEN_H / 2; down = false; clicked = false; rclicked = false;
   keys = new Set<string>(); typed: string[] = []; pressed = new Set<string>();
 }
 
@@ -17,13 +17,14 @@ export class App {
   input = new Input();
   scene: Scene | null = null;
   private sets = new Map<string, Promise<SpriteSet>>();
-  private rawClick = false;
+  private rawClick = false; private rawRight = false;
   constructor(public cv: HTMLCanvasElement) {
     cv.width = SCREEN_W; cv.height = SCREEN_H;
     this.ctx = cv.getContext('2d')!; this.ctx.imageSmoothingEnabled = false;
     const i = this.input;
     cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(); i.x = (e.clientX - r.left) * SCREEN_W / r.width; i.y = (e.clientY - r.top) * SCREEN_H / r.height; });
-    cv.addEventListener('mousedown', e => { if (e.button === 0) { i.down = true; this.rawClick = true; } cv.focus(); });
+    cv.addEventListener('mousedown', e => { if (e.button === 0) { i.down = true; this.rawClick = true; } else if (e.button === 2) this.rawRight = true; cv.focus(); });
+    cv.addEventListener('contextmenu', e => e.preventDefault());
     addEventListener('mouseup', () => i.down = false);
     addEventListener('keydown', e => {
       const k = e.key.toLowerCase(); if (!i.keys.has(k)) i.pressed.add(k);
@@ -41,9 +42,9 @@ export class App {
     let last = performance.now();
     const tick = (now: number) => {
       const dt = Math.max(0, Math.min(50, now - last)); last = now;
-      const i = this.input; i.clicked = this.rawClick; this.rawClick = false;
+      const i = this.input; i.clicked = this.rawClick; this.rawClick = false; i.rclicked = this.rawRight; this.rawRight = false;
       this.scene?.update(dt); this.scene?.draw(this.ctx);
-      i.clicked = false; i.typed.length = 0; i.pressed.clear();
+      i.clicked = false; i.rclicked = false; i.typed.length = 0; i.pressed.clear();
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);

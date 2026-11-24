@@ -5,6 +5,7 @@ const MAIN = [['settings', 'Settings'], ['missions', 'Mission List'], ['map', 'M
 export const HELP = [
     ['Left click', 'Walk / talk / attack / pick up'], ['Ctrl + click', 'Run while Walk is selected'], ['R', 'Switch Walk / Run'],
     ['S or C', 'Status window'], ['I', 'Item window'], ['Q', 'Mission List'], ['H', 'This help'], ['Esc', 'Game menu / close windows'],
+    ['1 - 8', 'Use belt pocket item (or right click)'], ['Right click', 'Use an item in the item window'],
     ['F12', 'Mute sound'], ['G', 'Debug overlay'],
 ];
 /** Game Menu (MENU button / Esc): frame from Game/Status pattern 119, entries from the manual: Settings, Mission List, Map, Help, Save and Return to Title, Save and Exit. */

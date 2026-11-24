@@ -6,7 +6,12 @@ export const SCREEN_W = 640, SCREEN_H = 480, HUD_Y = 412;
 export interface HudState {
   hp: number; hpMax: number; mp: number; mpMax: number;
   level: number; exp: number; expMax: number; running: boolean;
+  /** Permanent max HP / MP gained from Vitality Source, Mental Source and the fruits. */
+  hpBonus?: number; mpBonus?: number;
 }
+
+/** Belt pocket slot rectangles of the HUD (the frames are part of the panel image): 1-4 on the upper row, 5-8 on the lower one. */
+export const BELT: { x: number; y: number; w: number; h: number }[] = Array.from({ length: 8 }, (_, k) => ({ x: (k < 4 ? 360 : 408) + (k % 4) * 32, y: k < 4 ? 417 : 449, w: 26, h: 23 }));
 
 /** HUD built from System/Game/Pattern/Bar.njp (+ Font00 / System cursor). Pattern numbers per docs/FORMATS.md. */
 export class Gui {

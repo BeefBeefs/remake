@@ -5,7 +5,7 @@ import { audio } from './audio.js';
 import { Shop, shopStock, sellPrice } from './shop.js';
 import { loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
-import { Gui, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
+import { Gui, SCREEN_W, SCREEN_H, HUD_Y, BELT } from './gui.js';
 import { Text } from './app.js';
 import { Windows } from './windows.js';
 import { ItemDb } from './items.js';
@@ -551,13 +551,49 @@ export class GameScene {
         g.vm?.event(7, 4294967295); // status 7: map start (area name notice, initial object states)
         return g;
     }
+    /** Belt pocket: the first eight belt-capable consumables of the inventory fill slots 1-8 (the original lets you place them yourself - not implemented). */
+    belt() { return this.win.inv.entries.filter(e => ItemDb.beltable(e.item)).slice(0, 8); }
+    /** Use a consumable: tablets restore HP (field 27), capsules MP (28); Vitality/Mental Source and the fruits raise max HP/MP for good (29/30). Meat is companion food. */
+    useItem(e) {
+        const it = e.item, fx = ItemDb.effect(it), h = this.hud;
+        if (it.sec !== 3 || (!fx.hp && !fx.mp && !fx.maxHp && !fx.maxMp)) {
+            this.banner = { text: it.f['31'] ? 'Meat is food for your companion' : 'This item cannot be used', t: 0 };
+            return;
+        }
+        if (this.dead)
+            return;
+        if (fx.hp && !fx.maxHp && h.hp >= h.hpMax && !fx.mp) {
+            this.banner = { text: 'HP is already full', t: 0 };
+            return;
+        }
+        if (fx.mp && !fx.hp && h.mp >= h.mpMax) {
+            this.banner = { text: 'MP is already full', t: 0 };
+            return;
+        }
+        this.win.inv.remove(e);
+        if (fx.maxHp)
+            h.hpBonus = (h.hpBonus ?? 0) + fx.maxHp;
+        if (fx.maxMp)
+            h.mpBonus = (h.mpBonus ?? 0) + fx.maxMp;
+        if (fx.maxHp || fx.maxMp) {
+            this.applyStats(false);
+            this.banner = { text: `${it.name}: maximum ${fx.maxHp ? 'HP' : 'MP'} +${fx.maxHp || fx.maxMp}`, t: 0 };
+        }
+        const hp = Math.min(fx.hp, h.hpMax - h.hp), mp = Math.min(fx.mp, h.mpMax - h.mp);
+        h.hp += hp;
+        h.mp += mp;
+        if (hp > 0)
+            this.floaters.push({ x: this.player.x, y: this.player.y - 90, t: 0, s: `+${hp}` });
+        if (mp > 0)
+            this.floaters.push({ x: this.player.x, y: this.player.y - 106, t: 0, s: `+${mp} MP` });
+    }
     /** Hero stats from the exe's stat tables (src/pstats.ts); a level-up refills HP/MP. */
     applyStats(refill) {
         if (!this.tables['900'])
             return;
         const h = this.hud, ps = playerStats(this.tables, this.gender, h.level), full = h.hp >= h.hpMax && h.mp >= h.mpMax;
-        h.hpMax = ps.hp;
-        h.mpMax = ps.mp;
+        h.hpMax = ps.hp + (h.hpBonus ?? 0);
+        h.mpMax = ps.mp + (h.mpBonus ?? 0);
         this.win.ps = ps;
         if (refill || full) {
             h.hp = h.hpMax;
@@ -694,6 +730,17 @@ export class GameScene {
             this.menu.open('help');
             this.paused = true;
             return;
+        }
+        for (let k = 0; k < 8; k++)
+            if (inp.pressed.has(String(k + 1))) {
+                const e = this.belt()[k];
+                if (e)
+                    this.useItem(e);
+            }
+        if (inp.rclicked) { // right click: belt slot, or a consumable in the item window
+            const k = BELT.findIndex(r => inp.x >= r.x && inp.x < r.x + r.w && inp.y >= r.y && inp.y < r.y + r.h), e = k >= 0 ? this.belt()[k] : this.win.entryAt(inp.x, inp.y);
+            if (e)
+                this.useItem(e);
         }
         if (inp.pressed.has('escape') && this.qlog)
             this.toggleQuestLog();
@@ -888,6 +935,7 @@ export class GameScene {
         ctx.fillRect(0, HUD_Y, SCREEN_W, SCREEN_H - HUD_Y);
         this.win.draw(ctx, this.hud, this.name, inp.x, inp.y);
         this.gui.draw(ctx, this.hud);
+        this.belt().forEach((e, k) => this.win.drawIcon(ctx, e.item, BELT[k].x + BELT[k].w / 2, BELT[k].y + BELT[k].h / 2, 0.7));
         this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y);
         if (this.qlog)
             this.drawQuestLog(ctx);
