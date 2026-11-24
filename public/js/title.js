@@ -1,3 +1,4 @@
+import { audio } from './audio.js';
 import { put, inRect, Text } from './app.js';
 import { SelectScene } from './select.js';
 import { GameScene, readSave } from './game.js';
@@ -11,7 +12,7 @@ export class TitleScene {
         this.msgT = 0;
         this.items = [1, 2, 3];
     }
-    static async create(app) { return new TitleScene(app, await app.gui('Title_Title'), await Text.load(app)); }
+    static async create(app) { audio.bgm('title'); return new TitleScene(app, await app.gui('Title_Title'), await Text.load(app)); }
     update(dt) {
         const i = this.app.input;
         this.msgT = Math.max(0, this.msgT - dt);

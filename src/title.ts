@@ -1,3 +1,4 @@
+import { audio } from './audio.js';
 import { App, Scene, put, inRect, Text } from './app.js';
 import { SpriteSet } from './sprites.js';
 import { SelectScene } from './select.js';
@@ -7,7 +8,7 @@ import { GameScene, readSave } from './game.js';
 export class TitleScene implements Scene {
   private msg = ''; private msgT = 0;
   private constructor(private app: App, private t: SpriteSet, private text: Text) {}
-  static async create(app: App) { return new TitleScene(app, await app.gui('Title_Title'), await Text.load(app)); }
+  static async create(app: App) { audio.bgm('title'); return new TitleScene(app, await app.gui('Title_Title'), await Text.load(app)); }
   private items = [1, 2, 3];
   update(dt: number) {
     const i = this.app.input; this.msgT = Math.max(0, this.msgT - dt);

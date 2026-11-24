@@ -3,6 +3,7 @@ import { loadCaf, Caf } from './caf.js';
 import { GameMap, Drawable, worldToReal } from './map.js';
 import { ItemDef } from './items.js';
 import { Zone } from './zones.js';
+import { audio } from './audio.js';
 import { Shop, shopStock, sellPrice } from './shop.js';
 import { Actor, ActorCtx, loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
@@ -28,6 +29,8 @@ const savedVars = new Map<string, Map<string, number>>(); let savedGlobals = new
 interface GroundSave { x: number; y: number; sec: number; idx: number; gold: number; }
 const savedGround = new Map<string, GroundSave[]>();
 /** Zone ids whose visibility differs from the Mct default (opened chests ...), per scenario. */
+/** PLACEHOLDER combat sound ids (indices into Voice00.Voc; script-driven sounds use the real ids, e.g. chest 77/78, Black Hammer's taunts 40-43). */
+const SFX = { hit: 1, hurt: 2, kill: 10 };
 const savedZones = new Map<string, Record<number, boolean>>();
 const SAVE_KEY = 'shadowflare_save_v1';
 export interface SaveData {
@@ -156,6 +159,8 @@ export class GameScene implements Scene {
     const q = list[Math.min(this.qlog!.sel, list.length - 1)][0], desc = this.tables[String(700 + q)]?.s ?? [];
     desc.forEach((l, i) => this.text.draw(ctx, clean(l).slice(0, 50), 12, 60 + list.length * 14 + i * 13));
   }
+  /** Background track for a scenario (PLACEHOLDER mapping by area type: town 'city', fields 'field', Dusty Ruins 'dungeon'; the original choice is not decoded). */
+  musicFor(scenario: string) { return scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
   private shop: Shop | null = null;
   private openShop(index: number) {
     this.qlog = null; this.shop = new Shop(shopStock(this.win.db, index)); this.dlg = null; this.win.item = true;
@@ -216,6 +221,7 @@ export class GameScene implements Scene {
       partner: () => this.partner,
       gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
       openShop: i => this.openShop(i),
+      sound: id => { audio.sfx(id); },
       notice: text => { this.banner = { text: text.split('\n')[0].replace(/[^\x20-\x7e]/g, '?'), t: 0 }; },
       hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
       takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e) this.win.inv.remove(e); },
@@ -245,6 +251,7 @@ export class GameScene implements Scene {
     }
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
     g.zones = sc.zones; g.tables = tables; g.expTable = tables['13'].v; g.titles = tables['41']?.s ?? []; g.syncExp();
+    audio.bgm(g.musicFor(scenario));
     g.vm?.event(7, 4294967295);   // status 7: map start (area name notice, initial object states)
     return g;
   }
@@ -268,14 +275,14 @@ export class GameScene implements Scene {
   }
   private hitPlayer(d: number) {
     if (this.dead) return; const h = this.hud; d = Math.max(1, d - Math.floor(this.win.stats().defense * 0.5)); h.hp = Math.max(0, h.hp - d);
-    this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` });
+    this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` }); audio.sfx(SFX.hurt, 0.8);
     if (h.hp <= 0) { this.dead = true; this.target = null; this.atkT = -1; this.player.anim = 23; this.player.t = 0; }
   }
   private hurtEnemy(a: Actor) {
     // placeholder formula: base from level + a roll of the equipped weapon's attack range (fists when none)
     const st = this.win.stats(), roll = st.atkMin + Math.random() * (st.atkMax - st.atkMin);
     const dmg = Math.max(1, Math.round((4 + this.hud.level * 2 + (st.atkMax ? roll : 2)) * (0.9 + Math.random() * 0.2)));
-    a.hp -= dmg; this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) });
+    a.hp -= dmg; this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) }); audio.sfx(a.hp <= 0 ? SFX.kill : SFX.hit, 0.8);
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp();
       if (this.vm?.event(4, 14000000 + a.rec.id)) this.openDialog();
@@ -299,6 +306,7 @@ export class GameScene implements Scene {
     if (inp.pressed.has('c')) this.win.status = !this.win.status;
     if (inp.pressed.has('i')) this.win.item = !this.win.item;
     if (inp.pressed.has('q')) this.toggleQuestLog();
+    if (inp.pressed.has('m')) audio.toggleMute();
     if (inp.pressed.has('escape') && this.qlog) this.toggleQuestLog();
     else if (inp.pressed.has('escape')) { if (this.win.status || this.win.item) this.win.status = this.win.item = false; else this.paused = !this.paused; }
     if (inp.clicked) {
@@ -321,7 +329,8 @@ export class GameScene implements Scene {
       return;
     }
     if (this.dlg) { this.updateDialog(); return; }
-    if (this.vm && (this.pollT += dt) > 500) { this.pollT = 0; this.vm.poll(); if (this.vm.pending) this.openDialog(); }
+    if ((this.pollT += dt) > 500) { const near = this.actors.some(a => a.rec.boss !== undefined && a.alive && Math.hypot(a.x - this.player.x, (a.y - this.player.y) * 1.6) < 500); audio.bgm(near ? 'bgm3' : this.musicFor(this.scenario)); }
+    if (this.vm && this.pollT > 500) { this.pollT = 0; this.vm.poll(); if (this.vm.pending) this.openDialog(); }
     const hov = inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
     const gh = !hov && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
     const zov = !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.zones.find(z => z.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;

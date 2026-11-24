@@ -1,5 +1,6 @@
 import { loadCaf } from './caf.js';
 import { GameMap, worldToReal } from './map.js';
+import { audio } from './audio.js';
 import { Shop, shopStock, sellPrice } from './shop.js';
 import { loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
@@ -23,6 +24,8 @@ const savedVars = new Map();
 let savedGlobals = new Map();
 const savedGround = new Map();
 /** Zone ids whose visibility differs from the Mct default (opened chests ...), per scenario. */
+/** PLACEHOLDER combat sound ids (indices into Voice00.Voc; script-driven sounds use the real ids, e.g. chest 77/78, Black Hammer's taunts 40-43). */
+const SFX = { hit: 1, hurt: 2, kill: 10 };
 const savedZones = new Map();
 const SAVE_KEY = 'shadowflare_save_v1';
 export function readSave() { try {
@@ -197,6 +200,8 @@ export class GameScene {
         const q = list[Math.min(this.qlog.sel, list.length - 1)][0], desc = this.tables[String(700 + q)]?.s ?? [];
         desc.forEach((l, i) => this.text.draw(ctx, clean(l).slice(0, 50), 12, 60 + list.length * 14 + i * 13));
     }
+    /** Background track for a scenario (PLACEHOLDER mapping by area type: town 'city', fields 'field', Dusty Ruins 'dungeon'; the original choice is not decoded). */
+    musicFor(scenario) { return scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
     openShop(index) {
         this.qlog = null;
         this.shop = new Shop(shopStock(this.win.db, index));
@@ -336,6 +341,7 @@ export class GameScene {
                 partner: () => this.partner,
                 gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
                 openShop: i => this.openShop(i),
+                sound: id => { audio.sfx(id); },
                 notice: text => { this.banner = { text: text.split('\n')[0].replace(/[^\x20-\x7e]/g, '?'), t: 0 }; },
                 hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
                 takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e)
@@ -414,6 +420,7 @@ export class GameScene {
         g.expTable = tables['13'].v;
         g.titles = tables['41']?.s ?? [];
         g.syncExp();
+        audio.bgm(g.musicFor(scenario));
         g.vm?.event(7, 4294967295); // status 7: map start (area name notice, initial object states)
         return g;
     }
@@ -453,6 +460,7 @@ export class GameScene {
         d = Math.max(1, d - Math.floor(this.win.stats().defense * 0.5));
         h.hp = Math.max(0, h.hp - d);
         this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` });
+        audio.sfx(SFX.hurt, 0.8);
         if (h.hp <= 0) {
             this.dead = true;
             this.target = null;
@@ -467,6 +475,7 @@ export class GameScene {
         const dmg = Math.max(1, Math.round((4 + this.hud.level * 2 + (st.atkMax ? roll : 2)) * (0.9 + Math.random() * 0.2)));
         a.hp -= dmg;
         this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) });
+        audio.sfx(a.hp <= 0 ? SFX.kill : SFX.hit, 0.8);
         if (a.hp <= 0) {
             a.die();
             this.totalExp += a.stats.exp;
@@ -506,6 +515,8 @@ export class GameScene {
             this.win.item = !this.win.item;
         if (inp.pressed.has('q'))
             this.toggleQuestLog();
+        if (inp.pressed.has('m'))
+            audio.toggleMute();
         if (inp.pressed.has('escape') && this.qlog)
             this.toggleQuestLog();
         else if (inp.pressed.has('escape')) {
@@ -555,7 +566,11 @@ export class GameScene {
             this.updateDialog();
             return;
         }
-        if (this.vm && (this.pollT += dt) > 500) {
+        if ((this.pollT += dt) > 500) {
+            const near = this.actors.some(a => a.rec.boss !== undefined && a.alive && Math.hypot(a.x - this.player.x, (a.y - this.player.y) * 1.6) < 500);
+            audio.bgm(near ? 'bgm3' : this.musicFor(this.scenario));
+        }
+        if (this.vm && this.pollT > 500) {
             this.pollT = 0;
             this.vm.poll();
             if (this.vm.pending)

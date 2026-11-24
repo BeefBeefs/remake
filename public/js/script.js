@@ -167,7 +167,9 @@ export class ScriptVM {
             case 6: return true;
             case 9:
             case 4: return true; // repair an item / coin sound (no durability yet)
-            case 16: return true; // play sound effect at a position (audio not implemented)
+            case 16:
+                this.hooks?.sound(ev(0), ev(2), ev(3));
+                return true; // (sound id, 0, x, y)
             case 24:
                 this.hooks?.randomDrop(ev(0), ev(1), ev(2));
                 return true;
