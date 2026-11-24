@@ -17,3 +17,17 @@ export function careerOptions(current: number, level: number, u: Usage): number[
   for (let c = 1; c < 4; c++) if (c !== current && level >= REQUIRE.level && u[KEY[c]!] >= REQUIRE.uses[c]) out.push(c);
   return out;
 }
+
+/**
+ * Spell learning (manual: "the types of magic and the order in which spells are learned depend on the player's profession and their basic attributes").
+ * The real rules are not decoded (Tables 104-107 / skill data), so this tree is a GUESS: [spell id, professions that may learn it (0 Mercenary 1 Warrior 2 Wizard 3 Hunter), hero level needed].
+ * Heal (606) and Fire Ball (601) are known from the start.
+ */
+export const SPELL_TREE: [id: number, careers: number[], level: number][] = [
+  [606, [0, 1, 2, 3], 1], [601, [0, 1, 2, 3], 1], [617, [0, 1, 2, 3], 4], [602, [0, 1, 2, 3], 6],
+  [608, [1], 8], [615, [1], 12], [619, [1], 15],
+  [603, [2, 3], 10], [610, [2], 8], [604, [2], 12], [605, [2], 14], [609, [2], 10], [618, [2], 16], [611, [2], 18], [613, [2], 22], [612, [2], 20], [621, [2], 30],
+  [616, [3], 8], [614, [3], 12], [607, [0, 1, 2, 3], 10], [620, [3], 14],
+];
+/** Spells a hero of this profession and level may know. */
+export function spellsFor(career: number, level: number): number[] { return SPELL_TREE.filter(([, c, l]) => c.includes(career) && level >= l).map(([id]) => id); }

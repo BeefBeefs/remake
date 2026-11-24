@@ -8,6 +8,8 @@ export const CAREER_BTN = { x: 20, y: 388, w: 160, h: 18 };
 export const SET_BTN = [{ x: 540, y: 394, w: 22, h: 16 }, { x: 566, y: 394, w: 26, h: 16 }];
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
 export class Windows {
+    /** Multiplier of the status parameter an attribute drives (manual: Fire attack, Water defense, Earth hit, Thunder evasion, Holy magic attack, Dark magic defense, Gel magic hit, Metal magic evasion). GUESS: 5 % per level. */
+    attrMul(i) { return 1 + 0.05 * this.attr[i]; }
     constructor(st, icons, text, db) {
         this.st = st;
         this.icons = icons;
@@ -26,6 +28,8 @@ export class Windows {
         this.hudOver = null;
         this.inv = new Inventory();
         this.gold = 0;
+        /** Basic attribute levels -10..10 in the status window's order: Fire, Water, Earth, Thunder, Holy, Dark, Gel, Metal (changed by the elemental medicines). */
+        this.attr = Array(8).fill(0);
         /** Town warehouse (Warehouse Transfer Box). */
         this.wh = new Inventory();
         /** Tooltip hint for clicking an inventory item while a side panel (shop / warehouse) is open; overrides the sell price. */
@@ -47,7 +51,8 @@ export class Windows {
         const w = this.inv.equipped('weapon').find(e => !Inventory.broken(e));
         const [atkMin, atkMax] = w ? ItemDb.attack(eff(w)) : [0, 0];
         const twoH = !!w && ItemDb.twoHanded(eff(w));
-        return { atkMin, atkMax, defense: this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) && !(twoH && ItemDb.slot(e.item) === 'shield') ? ItemDb.defense(eff(e)) : 0), 0), speed: w ? ItemDb.speed(eff(w)) : 100 };
+        const fire = this.attrMul(0), water = this.attrMul(1);
+        return { atkMin: Math.round(atkMin * fire), atkMax: Math.round(atkMax * fire), defense: Math.round(water * this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) && !(twoH && ItemDb.slot(e.item) === 'shield') ? ItemDb.defense(eff(e)) : 0), 0)), speed: w ? ItemDb.speed(eff(w)) : 100 };
     }
     /** Durability wear (GUESS: 1 point per weapon hit dealt; 1 point on one random worn armor piece per hit taken). */
     wearWeapon() { const w = this.inv.equipped('weapon')[0]; if (w && ItemDb.maxDur(w.item) > 0)
@@ -99,17 +104,18 @@ export class Windows {
             v(n(ps?.strength), 66, 115);
             v(rng, 152, 115);
             v(cs.defense, 262, 115);
-            v(n(ps?.hit), 68, 139);
-            v(n(ps?.eva), 252, 139);
+            const sc = (x, i) => x === undefined ? undefined : Math.round(x * this.attrMul(i));
+            v(n(sc(ps?.hit, 2)), 68, 139);
+            v(n(sc(ps?.eva, 3)), 252, 139);
             v('--', 96, 163);
             v(`${cs.speed}%`, 252, 163);
             v(`${h.mp}/${h.mpMax}`, 60, 194);
             v('--', 70, 218);
             v('--', 240, 218);
-            v(n(ps?.mhit), 80, 242);
-            v(n(ps?.meva), 270, 242);
+            v(n(sc(ps?.mhit, 6)), 80, 242);
+            v(n(sc(ps?.meva, 7)), 270, 242);
             for (let i = 0; i < 8; i++)
-                v('0', 262, 267 + i * 16);
+                v(this.attr[i], 262, 267 + i * 16);
             if (this.careerOpts.length) {
                 const hot = mx >= CAREER_BTN.x && mx < CAREER_BTN.x + CAREER_BTN.w && my >= CAREER_BTN.y && my < CAREER_BTN.y + CAREER_BTN.h;
                 ctx.fillStyle = hot ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.55)';

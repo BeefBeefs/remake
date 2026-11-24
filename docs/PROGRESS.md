@@ -255,5 +255,18 @@ Gargoyle (anim 7) shoots a bolt, golem (anim 5) does a ground slam with an area 
 ## Sound effects
 From the exe: item method 0x466110 returns weapon sounds (swing 47 / 48, bow 93, impact 1 / 2); monster behaviour functions use 22 (melee), 21 (cast release), 94 (cast start), 29 / 23 (bats), 19 (slam). GUESS: "light" vs "heavy" weapon is approximated by the arms class because item+0x28 has no mapped Ibn field. Hurt / kill sounds remain placeholders.
 
+## Controls from the manual
+- Shift + mouse button = attack in place (no walking; swings at the nearest enemy in reach, or at thin air); Ctrl = run while moving; plain CapsLock (and Shift+CapsLock) swaps the two equipment sets; R toggles walk/run (already there). Test: `shiftclick.mjs`.
+- The Special Items window (X) is "Episode 3 and later" per the manual, so it is intentionally not built for Episode 1.
+
+## Triple Attack
+Warrior only, with a melee weapon, right click with the sword icon selected on the Magic/Attack bar, or left + right click (manual). Three consecutive strikes at one target. GUESSES: required level 10 (`TRIPLE_LEVEL`), +40 % damage per strike, 2.5 s cooldown. Test: `triple.mjs`.
+
+## Spell learning by profession
+The manual says which spells are learned and in which order depends on profession and basic attributes, but nothing in the data was decoded for it, so `SPELL_TREE` in `career.ts` is a GUESS: [spell, professions, level]. Spells are learned automatically when the hero qualifies (banner "Learned ..."), never forgotten. Only Heal and the Fire Ball / Ice Bolt / Plasma bolts actually work; other spells still say they cannot be cast yet. Test: `spells.mjs`.
+
+## Attribute levels
+Status window shows the eight levels (Fire, Water, Earth, Thunder, Holy, Dark, Gel, Metal; -10..10). Source: the elemental medicines (consumables 12-20: field 22 = 3, field 23 = attribute 1-8; White Medicine has no field 23). GUESSES: a medicine gives +1 and lowers the opposite attribute (Fire/Water, Earth/Thunder, Holy/Dark, Gel/Metal) by 1; White Medicine resets all to 0; 5 % per level. Effects (from the manual): Fire = attack, Water = defense, Earth = hit rate (negative levels make the hero miss 5 % per level; positive ones only raise the displayed Hit Rate), Thunder = evasion (positive levels dodge melee hits 5 % per level), Holy = bolt damage, Dark = less magic damage taken, Gel = displayed magic hit rate, Metal = dodge chance against magic. Item bonuses (the undecoded (kind, value, chance) field triplets on weapons/armor/accessories) and monster attributes / the weakness wheel are NOT implemented. Test: `attrs.mjs`.
+
 ## Still not implemented
-Attribute levels, profession spell gating, triple attack, Ctrl/Shift click controls, R walk/run key, X special-items window, plain CapsLock swap.
+Item attribute bonuses and monster attributes (weakness wheel), the "special effects" when two opposite attributes are maximised, real spell-learning rules, Walking Speed / M.Attack / M.Defense values in the Status window, the other spells' effects.

@@ -15,7 +15,7 @@ import { MapWindow } from './mapwin.js';
 import { Gui, SCREEN_W, SCREEN_H, HUD_Y, BELT, MINE_BTN, POWER_BTN, PET_GAUGE, inBox } from './gui.js';
 import { Text } from './app.js';
 import { Windows, SET_BTN, CAREER_BTN } from './windows.js';
-import { CLASS_OF, careerOptions } from './career.js';
+import { CLASS_OF, careerOptions, spellsFor } from './career.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 import { writeSlot, firstFree } from './saves.js';
@@ -33,6 +33,8 @@ const savedGround = new Map();
 /** GUESS: share of dropped magical variants that are still unidentified (the original rate is not decoded). */
 const UNID_CHANCE = 0.6;
 /** Voice00.Voc ids. From the exe: the item method 0x466110 returns the weapon sounds (kind 0/1 swing 47 or 48 [light weapon 48], bow/gun class 93, kind 4 impact 1 = light / 2 = heavy); monster behaviour functions use constants 22 (melee, most common), 21 (cast release), 94 (cast start), 29/23 (bats), 19. Which weapon counts as 'light' (item+0x28 < 60) is not mapped to an Item.Ibn field, so the arms class stands in (GUESS); hurt / kill keep placeholders. */
+const TRIPLE_LEVEL = 10;
+const ATTRS = ['Fire', 'Water', 'Earth', 'Thunder', 'Holy', 'Dark', 'Gel', 'Metal'];
 const SFX = { hit: 1, hurt: 2, kill: 10, heavyHit: 2, swingLight: 48, swingHeavy: 47, swingBow: 93 };
 const savedZones = new Map();
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
@@ -58,7 +60,7 @@ export class GameScene {
         this.stash();
         const d = {
             v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-            career: this.win.career, usage: this.usage, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
+            career: this.win.career, attr: this.win.attr, usage: this.usage, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
             inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, (e.eq ? 1 : 0) | (e.alt ? 2 : 0), e.unid ? 1 : 0, e.dur ?? -1]),
             vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
             magic: this.magic.save(), explored: this.mapwin.encode(), pet: this.pet?.save(this.petKills),
@@ -278,7 +280,14 @@ export class GameScene {
             return; // scripts re-issue some effects every poll
         this.fxList.push({ fx, id, x, y, t: 0 });
     }
-    refreshCareer() { this.win.careerOpts = careerOptions(this.win.career, this.hud.level, this.usage); if (!this.win.careerOpts.length)
+    refreshCareer() { {
+        const nw = spellsFor(this.win.career, this.hud.level).filter(id => !this.magic.known.includes(id));
+        if (nw.length && !this.dead) {
+            for (const id of nw)
+                this.magic.learn(id);
+            this.banner = { text: nw.length === 1 ? `Learned ${this.magic.spell(nw[0]).name}` : `Learned ${nw.length} new spells`, t: 0 };
+        }
+    } this.win.careerOpts = careerOptions(this.win.career, this.hud.level, this.usage); if (!this.win.careerOpts.length)
         this.win.careerMenu = false; }
     openWarehouse() {
         this.qlog = null;
@@ -438,6 +447,9 @@ export class GameScene {
         this.fxList = [];
         /** Career change bookkeeping: how often melee / magic / ranged attacks were used (saved). */
         this.usage = { melee: 0, magic: 0, ranged: 0 };
+        /** Triple Attack (manual): "only warriors that have reached a certain level" with a melee weapon. GUESS: Warrior, level >= TRIPLE_LEVEL, three strikes at +40 % damage, 2.5 s cooldown. */
+        this.tripleLeft = 0;
+        this.tripleCd = 0;
         /** Arrows / shot pellets of the hero's ranged arms (GUESS: 0.7 px/ms, damage on arrival). */
         this.arrows = [];
         const mk = map.markerReal();
@@ -445,7 +457,7 @@ export class GameScene {
         const p = this.player;
         this.spawnPos = { x: p.x, y: p.y };
         const self = this;
-        this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d), sfx: id => audio.sfx(id, 0.7), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
+        this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d, false), sfx: id => audio.sfx(id, 0.7), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
         this.petCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), enemies: () => this.actors.filter(a => a.enemy && !a.gen && a.alive), hit: (a, d) => this.damage(a, d) };
         this.drawPlayer = {
             get y() { return p.y; },
@@ -606,6 +618,8 @@ export class GameScene {
             g.win.gold = ld.gold;
             g.win.inv.set = ld.invSet ?? 0;
             g.win.career = ld.career ?? 0;
+            if (ld.attr?.length === 8)
+                g.win.attr = [...ld.attr];
             g.usage = ld.usage ?? g.usage;
             for (const [sec, idx, x, y, , unid, dur] of ld.wh ?? []) {
                 const item = win.db.get(sec, idx);
@@ -629,6 +643,7 @@ export class GameScene {
             g.win.inv = cr.win.inv;
             g.win.wh = cr.win.wh;
             g.win.career = cr.win.career;
+            g.win.attr = cr.win.attr;
             g.usage = cr.usage ?? g.usage;
             g.win.gold = cr.win.gold;
         }
@@ -736,6 +751,21 @@ export class GameScene {
             this.floaters.push({ x: pet.x, y: pet.y - 60, t: 0, s: `+${hp}` });
             return;
         }
+        if (it.sec === 3 && it.f['22'] === 3) { // medicines: Fire..Metal Medicine (field 23 = attribute 1-8) raise that basic attribute, White Medicine (no field 23) resets them all
+            const a = this.win.attr, k = (it.f['23'] ?? 0) - 1;
+            this.win.inv.remove(e);
+            if (k < 0) {
+                a.fill(0);
+                this.banner = { text: 'All attribute levels returned to 0', t: 0 };
+            }
+            else {
+                a[k] = Math.min(10, a[k] + 1);
+                const o = k ^ 1;
+                a[o] = Math.max(-10, a[o] - 1);
+                this.banner = { text: `${ATTRS[k]} level ${a[k]}`, t: 0 };
+            } // GUESS: the opposite attribute (Fire/Water, Earth/Thunder, Holy/Dark, Gel/Metal) drops by one
+            return;
+        }
         if (it.sec !== 3 || (!fx.hp && !fx.mp && !fx.maxHp && !fx.maxMp)) {
             this.banner = { text: 'This item cannot be used', t: 0 };
             return;
@@ -810,10 +840,17 @@ export class GameScene {
             this.win.item = true;
         }
     }
-    hitPlayer(d) {
+    /** Monster hit on the hero. Negative Thunder / Metal levels do nothing; positive ones dodge (melee / magic). Magic damage is scaled by the Dark level. */
+    hitPlayer(d, magic) {
         if (this.dead)
             return;
-        const h = this.hud;
+        const h = this.hud, ev = Math.max(0, this.win.attr[magic ? 7 : 3]) * 0.05;
+        if (Math.random() < ev) {
+            this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: 'Miss' });
+            return;
+        }
+        if (magic)
+            d = Math.max(1, Math.round(d / this.win.attrMul(5)));
         d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
         // exe 0x412a40 monster->player: power*(9+rand%3)/10 - defence*Table11[neutral=10]/10, minimum 1
         h.hp = Math.max(0, h.hp - d);
@@ -833,7 +870,11 @@ export class GameScene {
         // power = weapon attack (item field 26; fists = 10) * strength% (stat table row 4: 140 at level 1, +10 per fighter level). The real player attack builder was not found, so using strength as a multiplier is a GUESS.
         // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
         const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
-        const raw = power * (this.powerT > 0 ? 1.5 : 1) * (9 + Math.floor(Math.random() * 3)) / 10;
+        if (Math.random() < Math.max(0, -this.win.attr[2]) * 0.05) {
+            this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: 'Miss' });
+            return;
+        } // negative Earth level = lower hit rate
+        const raw = power * (this.powerT > 0 ? 1.5 : 1) * (this.tripleLeft > 0 ? 1.4 : 1) * (9 + Math.floor(Math.random() * 3)) / 10;
         this.win.wearWeapon();
         {
             const w = this.win.inv.equipped('weapon')[0];
@@ -1007,6 +1048,20 @@ export class GameScene {
     rightAction() {
         const inp = this.app.input, m = this.magic, wx = inp.x + this.camX, wy = inp.y + this.camY, sp = m.selected();
         const hov = this.actors.find(a => a.enemy && a.alive && a.hit(wx, wy));
+        if ((!sp || inp.down) && this.tripleOk() && this.tripleLeft <= 0 && this.tripleCd <= 0) { // manual: Warrior Triple Attack = right click with the sword icon (or left + right click)
+            const p0 = this.player, t = hov ?? this.actors.filter(a => a.enemy && a.alive && Math.hypot(a.x - p0.x, (a.y - p0.y) * 1.6) < 90 * a.scale)[0];
+            if (t) {
+                this.target = t;
+                this.tripleLeft = 3;
+                this.tripleCd = 2500;
+                this.atkT = 0;
+                this.atkHit = false;
+                p0.anim = 3;
+                p0.t = 0;
+                p0.dir = actorDir(t.x - p0.x, t.y - p0.y);
+                return;
+            }
+        }
         if (!sp) {
             if (hov)
                 this.target = hov;
@@ -1039,7 +1094,7 @@ export class GameScene {
             const tx = hov ? hov.x : wx, ty = hov ? hov.y : wy + 30, dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
             if (this.atkT < 0)
                 p.dir = dirIndex(dx, dy);
-            this.shots.push({ x: p.x, y: p.y, vx: dx / d, vy: dy / d, t: 0, spell: sp, dmg: (24 + 3 * (h.level - 1)) * m.power(sp.id) * (this.powerT > 0 ? 1.3 : 1) });
+            this.shots.push({ x: p.x, y: p.y, vx: dx / d, vy: dy / d, t: 0, spell: sp, dmg: (24 + 3 * (h.level - 1)) * m.power(sp.id) * this.win.attrMul(4) * (this.powerT > 0 ? 1.3 : 1) });
         }
         h.mp -= sp.mp;
         this.usage.magic++;
@@ -1048,6 +1103,7 @@ export class GameScene {
         if (m.use(sp.id))
             this.banner = { text: `${sp.name} reached magic level ${m.level(sp.id)}`, t: 0 };
     }
+    tripleOk() { return this.win.career === 1 && this.hud.level >= TRIPLE_LEVEL && !this.rangedWeapon() && this.win.inv.equipped('weapon').length > 0; }
     rangedWeapon() { const w = this.win.inv.equipped('weapon').find(e => !Inventory.broken(e)); return !!w && ItemDb.isRanged(w.unid ? this.win.db.base(w.item) : w.item); }
     updateArrows(dt) {
         for (const a of this.arrows) {
@@ -1071,7 +1127,7 @@ export class GameScene {
             b.y += b.vy * 0.2 * dt;
             if (!this.dead && Math.hypot(b.x - this.player.x, (b.y - this.player.y) * 1.6) < 24) {
                 b.t = 9999;
-                this.hitPlayer(b.dmg);
+                this.hitPlayer(b.dmg, true);
             }
             else if (this.map.blockedReal(b.x, b.y))
                 b.t = 9999;
@@ -1081,6 +1137,8 @@ export class GameScene {
     updateShots(dt) {
         if (this.castT > 0)
             this.castT -= dt;
+        if (this.tripleCd > 0)
+            this.tripleCd -= dt;
         for (const s of this.shots) {
             s.t += dt;
             s.x += s.vx * 0.5 * dt;
@@ -1414,9 +1472,16 @@ export class GameScene {
                 }
             }
             if (p.t >= dur) {
-                this.atkT = -1;
-                p.anim = ANIM_IDLE;
-                p.t = 0;
+                if (this.tripleLeft > 0 && --this.tripleLeft > 0 && this.target?.alive) {
+                    this.atkHit = false;
+                    p.t = 0;
+                }
+                else {
+                    this.tripleLeft = 0;
+                    this.atkT = -1;
+                    p.anim = ANIM_IDLE;
+                    p.t = 0;
+                }
             }
         }
     }

@@ -22,3 +22,7 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `twohand.mjs` — two-handed weapons disable the shield; bow attacks.
 - `special.mjs` — gargoyle bolt and golem slam.
 - `fx.mjs` — script effect sprite spawning.
+- `shiftclick.mjs` — Shift+click attack in place, Ctrl run, CapsLock set swap.
+- `triple.mjs` — Warrior Triple Attack.
+- `spells.mjs` — profession spell learning.
+- `attrs.mjs` — attribute medicines and status values.
