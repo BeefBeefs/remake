@@ -24,6 +24,10 @@ export interface ScriptHooks {
   takeItem(cat: number, id: number): void;
   /** Sentence 16: play sound effect `id` (index into Voice00.Voc) at world position (a, b). */
   sound(id: number, a: number, b: number): void;
+  /** Sentences 31/32: first monster slot (script char number) in [a, b] that is alive / free (dead or not yet summoned), -1 if none. */
+  findSlot(a: number, b: number, alive: boolean): number;
+  /** Sentence 25: summon the monster of slot `slot` at world position (a, b). */
+  spawnSlot(slot: number, a: number, b: number): void;
   /** Sentence 49: show a short notice (area name at map start, hints) for a message id. */
   notice(text: string): void;
   /** Sentence 5: open the trade window of shop `index`. */
@@ -91,7 +95,11 @@ export class ScriptVM {
       case 44: this.set(o[0][0], o[0][1], this.hooks?.partner() ?? -1); return true;
       case 34: this.set(o[1][0], o[1][1], -1); return true;   // zone/player interaction state: -1 = not applicable (the town gate is hard-wired in game.ts)
       // Decoded but not simulated yet: 27 named warp zone, 46/56 object state fields, 36/30/33 spawn hazard/effect objects, 65 ambient colour.
-      case 27: case 46: case 56: case 36: case 30: case 33: case 65: return true;
+      case 35: this.set(o[2][0], o[2][1], 0); return true;   // (x, y, var): terrain/judge value at a position, not modelled
+      case 28: case 29: case 27: case 46: case 56: case 36: case 30: case 33: case 65: return true;
+      case 31: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1); return true;
+      case 32: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), false) ?? -1); return true;
+      case 25: this.hooks?.spawnSlot(ev(0), ev(1), ev(2)); return true;   // (slot, x, y, effect type)
       case 5: this.hooks?.openShop(ev(0)); return true;
       case 51: { this.fmt = []; for (const [k, v] of o) { if (k === 0 && v === -1) break; this.fmt.push(this.get(k, v)); } return true; }   // arguments of the next message's %d
       case 52: this.set(o[1][0], o[1][1], 0); return true;   // repair cost of the item in an equipment slot: items have no durability yet -> 0

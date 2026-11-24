@@ -116,6 +116,11 @@ export class ScriptVM {
                 this.set(o[1][0], o[1][1], -1);
                 return true; // zone/player interaction state: -1 = not applicable (the town gate is hard-wired in game.ts)
             // Decoded but not simulated yet: 27 named warp zone, 46/56 object state fields, 36/30/33 spawn hazard/effect objects, 65 ambient colour.
+            case 35:
+                this.set(o[2][0], o[2][1], 0);
+                return true; // (x, y, var): terrain/judge value at a position, not modelled
+            case 28:
+            case 29:
             case 27:
             case 46:
             case 56:
@@ -123,6 +128,15 @@ export class ScriptVM {
             case 30:
             case 33:
             case 65: return true;
+            case 31:
+                this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1);
+                return true;
+            case 32:
+                this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), false) ?? -1);
+                return true;
+            case 25:
+                this.hooks?.spawnSlot(ev(0), ev(1), ev(2));
+                return true; // (slot, x, y, effect type)
             case 5:
                 this.hooks?.openShop(ev(0));
                 return true;

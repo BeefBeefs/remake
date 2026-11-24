@@ -30,6 +30,8 @@ export class Actor {
         this.stats = ENEMY_STATS[1];
         /** Hidden by script sentence 23 (e.g. partner NPCs that are following the player). */
         this.hidden = false;
+        /** Member of a scripted monster group (sentences 25/31/32): dormant until the script summons it, reusable after death. */
+        this.slot = false;
         [this.x, this.y] = worldToReal(rec.a, rec.b);
         this.dir = rec.dir % 9;
         if (rec.kind === 'enemy') {
@@ -55,10 +57,14 @@ export class Actor {
         this.t = 0;
         this.hitDone = false;
     } }
+    /** Bring a dormant/dead slot monster into the world at real position (x, y). */
+    revive(x, y) { this.x = x; this.y = y; this.hp = this.maxHp; this.hidden = false; this.deadT = 0; this.set('idle'); this.state = 'idle'; }
+    /** A slot is free when its monster is hidden or dead (sentence 32). */
+    get free() { return this.hidden || this.state === 'die'; }
     die() { this.set('die'); this.deadT = 0; }
     update(dt, c) {
         this.t += dt;
-        if (!this.enemy || !c)
+        if (this.hidden || !this.enemy || !c)
             return;
         if (this.state === 'die') {
             this.deadT += dt;

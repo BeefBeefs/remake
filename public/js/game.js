@@ -279,6 +279,7 @@ export class GameScene {
         this.banner = null;
         this.partner = -1;
         this.pollT = 0;
+        this.musicT = 0;
         this.zones = [];
         this.tables = {};
         this.expTable = [];
@@ -341,6 +342,11 @@ export class GameScene {
                 partner: () => this.partner,
                 gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
                 openShop: i => this.openShop(i),
+                findSlot: (a, b, alive) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id >= a && 14000000 + m.rec.id <= b && (alive ? !m.free : m.free)); return m ? 14000000 + m.rec.id : -1; },
+                spawnSlot: (slot, a, b) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id === slot); if (m) {
+                    const [x, y] = worldToReal(a, b);
+                    m.revive(x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 60);
+                } },
                 sound: id => { audio.sfx(id); },
                 notice: text => { this.banner = { text: text.split('\n')[0].replace(/[^\x20-\x7e]/g, '?'), t: 0 }; },
                 hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
@@ -414,6 +420,19 @@ export class GameScene {
             g.totalExp = cr.totalExp;
             g.win.inv = cr.win.inv;
             g.win.gold = cr.win.gold;
+        }
+        // monsters addressed by script slot ranges (sentences 31/32) start dormant: the script summons them (trap rooms, waves)
+        if (vm) {
+            const ranges = [];
+            for (const b of vm.data.blocks)
+                for (const [sid, ops] of b)
+                    if ((sid === 31 || sid === 32) && ops[0][0] < 3 && ops[1][0] < 3)
+                        ranges.push([ops[0][1], ops[1][1]]);
+            for (const a of g.actors)
+                if (a.enemy && ranges.some(([lo, hi]) => 14000000 + a.rec.id >= lo && 14000000 + a.rec.id <= hi)) {
+                    a.slot = true;
+                    a.hidden = true;
+                }
         }
         g.zones = sc.zones;
         g.tables = tables;
@@ -498,7 +517,10 @@ export class GameScene {
         }
         for (const a of this.actors)
             a.update(dt, this.actorCtx);
-        this.actors = this.actors.filter(a => !(a.enemy && a.state === 'die' && a.deadT > 6000));
+        for (const a of this.actors)
+            if (a.slot && a.state === 'die' && a.deadT > 3000)
+                a.hidden = true;
+        this.actors = this.actors.filter(a => !(a.enemy && !a.slot && a.state === 'die' && a.deadT > 6000));
         for (const f of this.floaters)
             f.t += dt;
         this.floaters = this.floaters.filter(f => f.t < 900);
@@ -566,11 +588,13 @@ export class GameScene {
             this.updateDialog();
             return;
         }
-        if ((this.pollT += dt) > 500) {
+        if ((this.musicT += dt) > 500) {
+            this.musicT = 0;
             const near = this.actors.some(a => a.rec.boss !== undefined && a.alive && Math.hypot(a.x - this.player.x, (a.y - this.player.y) * 1.6) < 500);
             audio.bgm(near ? 'bgm3' : this.musicFor(this.scenario));
         }
-        if (this.vm && this.pollT > 500) {
+        // status-5 polls run at the script tick rate (~30 Hz): scripts count ticks in their variables (e.g. 180 ticks before a trap room spawns)
+        if (this.vm && (this.pollT += dt) > 33) {
             this.pollT = 0;
             this.vm.poll();
             if (this.vm.pending)

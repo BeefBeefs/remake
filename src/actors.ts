@@ -39,6 +39,8 @@ export class Actor implements Drawable {
   get enemy() { return this.rec.kind === 'enemy'; }
   /** Hidden by script sentence 23 (e.g. partner NPCs that are following the player). */
   hidden = false;
+  /** Member of a scripted monster group (sentences 25/31/32): dormant until the script summons it, reusable after death. */
+  slot = false;
   get alive() { return !this.hidden && (!this.enemy || this.state !== 'die'); }
   get solid() { return this.alive; }
   /** Collision radius in real pixels (the Mct radius is in world units). */
@@ -49,10 +51,14 @@ export class Actor implements Drawable {
     return new Actor(r, set, sdw, caf);
   }
   private set(st: State) { if (this.state !== st) { this.state = st; this.t = 0; this.hitDone = false; } }
+  /** Bring a dormant/dead slot monster into the world at real position (x, y). */
+  revive(x: number, y: number) { this.x = x; this.y = y; this.hp = this.maxHp; this.hidden = false; this.deadT = 0; this.set('idle'); this.state = 'idle'; }
+  /** A slot is free when its monster is hidden or dead (sentence 32). */
+  get free() { return this.hidden || this.state === 'die'; }
   die() { this.set('die'); this.deadT = 0; }
   update(dt: number, c?: ActorCtx) {
     this.t += dt;
-    if (!this.enemy || !c) return;
+    if (this.hidden || !this.enemy || !c) return;
     if (this.state === 'die') { this.deadT += dt; return; }
     const dx = c.px - this.x, dy = (c.py - this.y) * 1.6, d = Math.hypot(dx, dy);
     const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
