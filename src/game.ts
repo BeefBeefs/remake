@@ -106,13 +106,26 @@ export class GameScene implements Scene {
     if (!ok) { this.banner = { text: 'This area is not available', t: 0 }; return; }
     this.target = null; this.travel(id, entry);
   }
-  /** Walkable real-pixel point nearest to the centre of exit zone `entry`. */
+  /** True when the walkable point (x, y) connects to at least `need` other points (8 px grid): exit zones sit inside wall gates, and the nearest free point can be a closed pocket. */
+  private openArea(x: number, y: number, need = 400): boolean {
+    const S = 8, key = (i: number, j: number) => i * 100003 + j, seen = new Set<number>(), q: [number, number][] = [[Math.round(x / S), Math.round(y / S)]];
+    seen.add(key(q[0][0], q[0][1]));
+    while (q.length && seen.size < need) {
+      const [i, j] = q.pop()!;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const ni = i + di, nj = j + dj, k = key(ni, nj);
+        if (!seen.has(k) && !this.map.blockedReal(ni * S, nj * S)) { seen.add(k); q.push([ni, nj]); }
+      }
+    }
+    return seen.size >= need;
+  }
+  /** Walkable real-pixel point nearest to the centre of exit zone `entry` that is not a closed pocket. */
   private entryPoint(entry: number): [number, number] | null {
     const z = this.zones.find(z => z.rec.id === 10000000 + entry); if (!z) return null;
     const r = z.rec.rect, [cx, cy] = worldToReal(z.rec.a + (r[0] + r[2]) / 2, z.rec.b + (r[1] + r[3]) / 2);
     for (let rad = 0; rad < 1500; rad += 8) for (let k = 0; k < Math.max(1, rad / 4); k++) {
       const an = k / Math.max(1, rad / 4) * Math.PI * 2, x = cx + Math.cos(an) * rad, y = cy + Math.sin(an) * rad * 0.6;
-      if (!this.map.blockedReal(x, y)) return [x, y];
+      if (!this.map.blockedReal(x, y) && this.openArea(x, y)) return [x, y];
     }
     return null;
   }

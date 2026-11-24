@@ -42,7 +42,7 @@ def parse_objects(path):
     d = open(path, 'rb').read(); out = []
     for o in range(0x230, len(d) - 120):
         v = struct.unpack_from('<30i', d, o)
-        if 0 <= v[0] < 100000 and 0 <= v[1] < 10000 and v[25] == 1000 and v[27] == v[28] == v[29] == 1000 and v[10] == 8 and v[11] == 3:
+        if 0 <= v[0] < 100000 and -1 <= v[1] < 10000 and v[25] == 1000 and v[27] == v[28] == v[29] == 1000 and v[10] == 8 and v[11] == 3:
             out.append(dict(id=10000000 + v[0], type=v[1], a=v[4], b=v[5], rect=list(v[6:10]), vis=v[12], pat=v[18]))
     return out
 
