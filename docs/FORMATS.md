@@ -50,7 +50,7 @@ A map `NAME` consists of three files: `Ground/NAME.Gnd`, `Object/NAME.Obl`, `Pat
 **Gnd** – 16-byte magic header, then `w,h,chipW,chipH` (u32 x4, 200x200 cells of 64x48), a flag byte and an RCLIB-L block holding `w*h` cells of 3 x i16 `(base, slot, pattern)`:
 - `base`: index into the *concatenated* patterns of the ground sets (slot 0 first). 0 with slot 0/pattern 0 = empty.
 - `slot, pattern`: overlay. Slots < groundSlots are ground overlays drawn on the cell; higher slots are decor objects anchored at cell centre x, cell top + 40.
-A second RCLIB-L block follows (walkability/area info; not decoded yet, exported as `judge`).
+A second RCLIB-L block follows: the **judge grid**, 568 x 569 u16 cells (row-major), each a 160 x 160 square in *world* (a,b) space (header words at +32/+36 = 160). Cell index: `gx = floor(a/160) + 1`, `gy = floor(b/160) + 268` (fitted: 2575 of 2577 tree objects sit on blocked cells). Values: 0 = free, 1 = blocked (outside the map and under trees/rocks/water), 3 = free special zone (paths / event areas, meaning unknown), plus a single 0x8000 flag cell (probably a start/marker point). The world->real transform means the grid is a 45-degree diamond in screen space.
 
 **Obl** – header (16 bytes), u32 count, then 42-byte records: `i32 x, i32 y` (world coords), 9 x i16 (slot, pattern, -1, 1000, flags, 0, 1000, 1000, 1000), 4 x i32 judgement rect.
 

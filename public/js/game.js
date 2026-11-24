@@ -17,9 +17,14 @@ async function main() {
     st.textContent = 'loading…';
     const [map, set, caf] = await Promise.all([GameMap.load(MAP), SpriteSet.load('data/ep1/male'), loadCaf('data/ep1/male.caf.json')]);
     st.textContent = `${MAP} ${map.m.w}x${map.m.h}, ${map.m.objects.length} objects — WASD/arrows to walk, Shift to run`;
-    const player = { x: +(q.get('x') ?? 3600), y: +(q.get('y') ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
+    const mk = map.markerReal();
+    const player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
+    let debug = false;
     const keys = new Set();
-    addEventListener('keydown', e => { keys.add(e.key.toLowerCase()); if (e.key.startsWith('Arrow'))
+    addEventListener('keydown', e => { keys.add(e.key.toLowerCase()); if (e.key === 'F1' || e.key === 'g') {
+        debug = !debug;
+        e.preventDefault();
+    } if (e.key.startsWith('Arrow'))
         e.preventDefault(); });
     addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
     window.game = { player, keys, map };
@@ -59,8 +64,16 @@ async function main() {
             if (di >= 0)
                 player.dir = di;
             const sp = (run ? 0.30 : 0.16) * dt, n = Math.hypot(dx, dy);
-            player.x = Math.max(0, Math.min(map.realW - 1, player.x + dx / n * sp));
-            player.y = Math.max(0, Math.min(map.realH - 1, player.y + dy / n * sp));
+            const nx = player.x + dx / n * sp, ny = player.y + dy / n * sp;
+            // slide along obstacles: try both axes, then each alone
+            if (!map.blockedReal(nx, ny)) {
+                player.x = nx;
+                player.y = ny;
+            }
+            else if (!map.blockedReal(nx, player.y))
+                player.x = nx;
+            else if (!map.blockedReal(player.x, ny))
+                player.y = ny;
             const na = run ? ANIM_RUN : ANIM_WALK;
             if (na !== player.anim) {
                 player.anim = na;
@@ -75,6 +88,8 @@ async function main() {
         const camX = Math.round(Math.max(0, Math.min(map.realW - cv.width, player.x - cv.width / 2)));
         const camY = Math.round(Math.max(0, Math.min(map.realH - cv.height, player.y - cv.height / 2)));
         map.draw(ctx, camX, camY, cv.width, cv.height, [drawPlayer]);
+        if (debug)
+            map.drawJudge(ctx, camX, camY, cv.width, cv.height);
         requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);

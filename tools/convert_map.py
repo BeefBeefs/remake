@@ -35,7 +35,14 @@ def convert_map(name):
     assert len(cells) == W * H * 6
     # judge/area block (second RCLIB block)
     first_end = 16 + 24 + 1 + 16 + struct.unpack_from('<I', g, 16 + 24 + 1 + 12)[0]
-    judge, _, _ = rclib.lz(g, first_end + 1)
+    jraw, _, _ = rclib.lz(g, first_end + 1)
+    # walkability grid: u16 per 160x160 world-unit cell (header words 8,9 of the file = 160,160)
+    jcw, jch = struct.unpack_from('<2I', g, 32)
+    JW, JH = 568, 569
+    assert len(jraw) == JW * JH * 2, len(jraw)
+    jv = struct.unpack('<%dH' % (JW * JH), jraw)
+    marker = [i for i, x in enumerate(jv) if x & 0x8000]
+    judge = bytes(min(x & 0x7fff, 255) for x in jv)
     o = open(find('Object', name, ('.obl',)), 'rb').read()
     n, = struct.unpack_from('<I', o, 16)
     objs = []
@@ -59,7 +66,8 @@ def convert_map(name):
     os.makedirs(os.path.join(OUT, 'maps'), exist_ok=True)
     meta = dict(name=name, w=W, h=H, chipW=cw, chipH=ch, groundSlots=ground,
                 lst=[outname(f) if f else '' for f in lst],
-                cells=base64.b64encode(cells).decode(), judge=base64.b64encode(judge).decode(), objects=objs)
+                cells=base64.b64encode(cells).decode(), judge=base64.b64encode(judge).decode(),
+                judgeW=JW, judgeH=JH, judgeCell=jcw, judgeOrigin=[jcw, 268 * jch], marker=[[i % JW, i // JW] for i in marker], objects=objs)
     json.dump(meta, open(os.path.join(OUT, 'maps', name + '.json'), 'w'), separators=(',', ':'))
     return meta
 
