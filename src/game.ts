@@ -9,7 +9,7 @@ import { TitleScene } from './title.js';
 import type { Gender } from './select.js';
 
 const q = new URLSearchParams(location.search);
-const MAP = q.get('map') ?? '3rd_2-1';
+const MAP = q.get('map') ?? 'f00_01';
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
 const FRAME_MS = 60;

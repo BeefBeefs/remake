@@ -45,6 +45,8 @@ export class GameMap {
     blockedReal(rx, ry) { const [a, b] = realToWorld(rx, ry); return this.judgeAt(a, b) === 1; }
     /** Real-pixel position of the judge-grid marker cell (centre). */
     markerReal() {
+        if (this.m.spawn)
+            return worldToReal(this.m.spawn[0], this.m.spawn[1]);
         const mk = this.m.marker[0];
         if (!mk)
             return null;

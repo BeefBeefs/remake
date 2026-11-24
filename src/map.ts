@@ -2,7 +2,7 @@ import { SpriteSet, Frame } from './sprites.js';
 
 export interface MapJson {
   name: string; w: number; h: number; chipW: number; chipH: number; groundSlots: number;
-  lst: string[]; cells: string; judge: string; judgeW: number; judgeH: number; judgeCell: number; judgeOrigin: [number, number]; marker: [number, number][]; objects: [x: number, y: number, slot: number, pat: number][];
+  lst: string[]; cells: string; judge: string; judgeW: number; judgeH: number; judgeCell: number; judgeOrigin: [number, number]; marker: [number, number][]; spawn: [number, number] | null; objects: [x: number, y: number, slot: number, pat: number][];
 }
 
 /** World (iso) -> real pixel conversion used by RKC_RPGSCRN (defaults 15 / 10). */
@@ -50,6 +50,7 @@ export class GameMap {
   blockedReal(rx: number, ry: number): boolean { const [a, b] = realToWorld(rx, ry); return this.judgeAt(a, b) === 1; }
   /** Real-pixel position of the judge-grid marker cell (centre). */
   markerReal(): [number, number] | null {
+    if (this.m.spawn) return worldToReal(this.m.spawn[0], this.m.spawn[1]);
     const mk = this.m.marker[0]; if (!mk) return null;
     const { judgeCell: C, judgeOrigin: [oa, ob] } = this.m;
     return worldToReal((mk[0] + 0.5) * C - oa, (mk[1] + 0.5) * C - ob);

@@ -37,8 +37,12 @@ def convert_map(name):
     first_end = 16 + 24 + 1 + 16 + struct.unpack_from('<I', g, 16 + 24 + 1 + 12)[0]
     jraw, _, _ = rclib.lz(g, first_end + 1)
     # walkability grid: u16 per 160x160 world-unit cell (header words 8,9 of the file = 160,160)
-    jcw, jch = struct.unpack_from('<2I', g, 32)
-    JW, JH = 568, 569
+    jcw, jch = struct.unpack_from('<2I', g, 32)  # (read before use below)
+    # grid covers the whole (rotated) map rectangle: a = world x in [0, amax], b = world y in [bmin, bmax]
+    import math
+    Rw, Rh = W * cw, H * ch
+    amax = (Rh * 10 + Rw * 100 / 15 * 1.0) / 2; bmin = -Rw * 100 / 15 / 2; bmax = Rh * 10 / 2
+    JW = int(amax // jcw) + 2; OB = math.ceil(-bmin / jch) + 1; JH = OB + math.ceil(bmax / jch) + 1
     assert len(jraw) == JW * JH * 2, len(jraw)
     jv = struct.unpack('<%dH' % (JW * JH), jraw)
     marker = [i for i, x in enumerate(jv) if x & 0x8000]
@@ -63,11 +67,22 @@ def convert_map(name):
         m = sets[f]
         if m['images'] and m['images'][0][3] == cw and m['images'][0][4] == ch and not f.lower().endswith('.sdw'): ground += 1
         else: break
+    # spawn: the flagged marker cell if it is walkable, else the walkable cell nearest to the centroid of the objects
+    def free(gx, gy): return 0 <= gx < JW and 0 <= gy < JH and judge[gy * JW + gx] == 0
+    def to_cell(a, b): return int((a + jcw) // jcw), int((b + OB * jch) // jch)
+    spawn = None
+    if marker and free(marker[0] % JW, marker[0] // JW): spawn = (marker[0] % JW, marker[0] // JW)
+    elif objs:
+        cx, cy = to_cell(sum(o[0] for o in objs) / len(objs), sum(o[1] for o in objs) / len(objs))
+        for r in range(0, 400):
+            c = [(x, y) for y in range(cy - r, cy + r + 1) for x in range(cx - r, cx + r + 1) if max(abs(x - cx), abs(y - cy)) == r and free(x, y)]
+            if c: spawn = c[0]; break
+    spawn = [spawn[0] * jcw - jcw + jcw // 2, spawn[1] * jch - OB * jch + jch // 2] if spawn else None   # world (a, b)
     os.makedirs(os.path.join(OUT, 'maps'), exist_ok=True)
     meta = dict(name=name, w=W, h=H, chipW=cw, chipH=ch, groundSlots=ground,
                 lst=[outname(f) if f else '' for f in lst],
                 cells=base64.b64encode(cells).decode(), judge=base64.b64encode(judge).decode(),
-                judgeW=JW, judgeH=JH, judgeCell=jcw, judgeOrigin=[jcw, 268 * jch], marker=[[i % JW, i // JW] for i in marker], objects=objs)
+                judgeW=JW, judgeH=JH, judgeCell=jcw, judgeOrigin=[jcw, OB * jch], marker=[[i % JW, i // JW] for i in marker], spawn=spawn, objects=objs)
     json.dump(meta, open(os.path.join(OUT, 'maps', name + '.json'), 'w'), separators=(',', ':'))
     return meta
 

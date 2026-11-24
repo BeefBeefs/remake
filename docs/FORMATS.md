@@ -50,7 +50,7 @@ A map `NAME` consists of three files: `Ground/NAME.Gnd`, `Object/NAME.Obl`, `Pat
 **Gnd** – 16-byte magic header, then `w,h,chipW,chipH` (u32 x4, 200x200 cells of 64x48), a flag byte and an RCLIB-L block holding `w*h` cells of 3 x i16 `(base, slot, pattern)`:
 - `base`: index into the *concatenated* patterns of the ground sets (slot 0 first). 0 with slot 0/pattern 0 = empty.
 - `slot, pattern`: overlay. Slots < groundSlots are ground overlays drawn on the cell; higher slots are decor objects anchored at cell centre x, cell top + 40.
-A second RCLIB-L block follows: the **judge grid**, 568 x 569 u16 cells (row-major), each a 160 x 160 square in *world* (a,b) space (header words at +32/+36 = 160). Cell index: `gx = floor(a/160) + 1`, `gy = floor(b/160) + 268` (fitted: 2575 of 2577 tree objects sit on blocked cells). Values: 0 = free, 1 = blocked (outside the map and under trees/rocks/water), 3 = free special zone (paths / event areas, meaning unknown), plus a single 0x8000 flag cell (probably a start/marker point). The world->real transform means the grid is a 45-degree diamond in screen space.
+A second RCLIB-L block follows: the **judge grid**, 568 x 569 u16 cells (row-major), each a 160 x 160 square in *world* (a,b) space (header words at +32/+36 = 160). Cell index: `gx = floor(a/160) + 1`, `gy = floor(b/160) + 268` (fitted: 2575 of 2577 tree objects sit on blocked cells). Values: 0 = free, 1 = blocked (outside the map and under trees/rocks/water), 3 = free special zone (paths / event areas, meaning unknown), plus a single 0x8000 flag cell (probably a start/marker point). The world->real transform means the grid is a 45-degree diamond in screen space. Grid size depends on the map: with R = (w*chipW, h*chipH) in real pixels, `amax = (Rh*10 + Rw*100/15)/2`, `jw = floor(amax/160)+2`, `ob = ceil((Rw*100/15/2)/160)+1`, `jh = ob + ceil((Rh*10/2)/160) + 1`, origin = (160, ob*160) (3rd_2-1: 568x569, f00_01: 852x852). Verified on Remote Town (f00_01), where blocked cells trace the palisade, barrels and tree trunks exactly. The 0x8000-flagged cells are a *zone* (13x4 cells on f00_01, in the wall ring: probably the town exit), not a spawn point; `convert_map.py` therefore computes `spawn` itself (marker if walkable, else the walkable cell nearest the object centroid).
 
 **Obl** – header (16 bytes), u32 count, then 42-byte records: `i32 x, i32 y` (world coords), 9 x i16 (slot, pattern, -1, 1000, flags, 0, 1000, 1000, 1000), 4 x i32 judgement rect.
 
@@ -104,3 +104,12 @@ All UI sprite sets are ordinary `.njp` files whose pattern rects hold **absolute
 | 4 | quest / misc items | 45 | 100 |
 
 Fields known so far (index): 1 = item id (category*1e6 + n), 5 = price, 7/8 = footprint in inventory cells (w x h), 11 = icon pattern in `System/Game/Pattern/Item0000.njp`, 15-21 = 1000-based multipliers; weapon stat blocks start around 25 (probably attack min/max/speed) and (min, max, 100) triples at 60+, 84+ (element/status boosts). `tools/build_data.py` writes `data/ep1/items.json` (zero fields omitted).
+
+## Scenario/<id>/ (Scenario.Scs, .Mct, .Njp)
+
+Folders: 00000000 (Remote Town, map f00_01), 00000001.., 000100xx, 01000000.., 99000000.. (36 total).
+
+**Scenario.Scs** ("ScenaScriptV000\0"), layout from RKC_RPG_SCRIPT::ReadBinary (parses exactly to EOF, `tools/scs.py`):
+`u32 n; n x (u32 id, i32 value)` flag list A (ids 1000000+, initial values), `u32 n; ...` flag list B (empty in scenario 0), `u32 n; n x (u32 id, u32 len, bytes)` **messages** (bit-inverted cp932, real English dialogue, ids 1000000+), `u32 n; n x 4 x u32` status table, `u32 n` sentence blocks, each `u32 m; m x { u32 id; u32 k; k x (u32 opcode, i32 operand) }`. Opcodes seen: 0,1,2,4,5,6,7,8,10,11,12 (e.g. `(2, msgId)` show message, `(4, msgId)`; 11 = read flag, 0/1 push/compare). Semantics are not decoded yet (interpreter lives in ShadowFlare.exe).
+
+**Scenario.Mct** ("MCED DATA v0000"): editor dump containing uninitialised memory (stack pointers) after the three path strings, then the map path ("Map\f00_01.map"), a zero-padded 256-byte scenario name ("Remote Town") and per-character records (names: Ostare, Malse, Syria, Kerberos, Gravity, Dune, Harley...). Not decoded yet.
