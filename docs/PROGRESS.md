@@ -349,3 +349,9 @@ Mechanical check, not a hand playthrough: fire every handler in every scenario o
 
 ## Pages root now opens the game
 `public/index.html` was the sprite/animation viewer, so the GitHub Pages root (https://beefbeefs.github.io/remake/) opened a model viewer instead of the main menu. `index.html` is now the game page (same as `play.html`, which stays for the playtests and old links) and the viewer lives at `viewer.html`.
+
+## Touch controls and fullscreen (Android)
+- `src/touch.ts`: DOM overlay shown on touch devices (coarse pointer or first touch; `?touch=1` forces it, `?touch=0` hides it). Left: virtual stick (drives WASD, 18 px dead zone). Right: ATK (hold = Shift + left button aimed by `GameScene.touchAim`: nearest living enemy within 450 px, else 70 px in front of the hero), MAGIC (right button at the same aim, casts the spell selected in the HUD bar), RUN (R), DOG (Space), belt 1-4. Top: ITEM / STAT (C) / MAGIC (M) / MAP / QUEST / HELP / MENU (Esc) and FULL (fullscreen toggle; tries a landscape orientation lock, which Chrome only allows in fullscreen).
+- Touching the game screen itself acts as the mouse (`App`: touchstart = press + click, drag moves the pointer, release lets go), so hold-to-walk, tap-to-attack, tapping NPCs / items / windows / the HUD spell bar and dialog advance work as with a mouse. Multi-touch: stick, buttons and the screen use separate pointers.
+- `index.html` / `play.html` got a viewport meta (no zoom). Test: `touch.mjs` (emulated touch: stick moves the hero, ATK holds Shift+button, ITEM toggles the window, tap maps to the canvas, fullscreen on / off).
+- Not covered: right-click-only extras (Tab + right click dog dash), two-finger gestures, text entry for the character name uses the on-screen keyboard only if the browser raises it for the canvas (untested on a real phone).

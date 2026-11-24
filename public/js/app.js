@@ -35,6 +35,21 @@ export class App {
         else if (e.button === 2)
             this.rawRight = true; cv.focus(); });
         cv.addEventListener('contextmenu', e => e.preventDefault());
+        // touch on the game screen = the mouse: touch and hold walks / attacks, a tap clicks (the control overlay of touch.ts sits above the canvas and takes its own touches)
+        const at = (t) => { const r = cv.getBoundingClientRect(); i.x = (t.clientX - r.left) * SCREEN_W / r.width; i.y = (t.clientY - r.top) * SCREEN_H / r.height; };
+        let touchId = -1;
+        cv.addEventListener('touchstart', e => { e.preventDefault(); if (touchId >= 0)
+            return; const t = e.changedTouches[0]; touchId = t.identifier; at(t); i.down = true; this.rawClick = true; cv.focus(); }, { passive: false });
+        cv.addEventListener('touchmove', e => { e.preventDefault(); for (const t of Array.from(e.changedTouches))
+            if (t.identifier === touchId)
+                at(t); }, { passive: false });
+        const tend = (e) => { for (const t of Array.from(e.changedTouches))
+            if (t.identifier === touchId) {
+                touchId = -1;
+                i.down = false;
+            } };
+        cv.addEventListener('touchend', tend);
+        cv.addEventListener('touchcancel', tend);
         addEventListener('mouseup', () => i.down = false);
         addEventListener('keydown', e => {
             const k = e.key.toLowerCase();
@@ -55,6 +70,8 @@ export class App {
     gui(name) { return this.set(Data.url(`gui/${name}`)); }
     set(base) { if (!this.sets.has(base))
         this.sets.set(base, SpriteSet.load(base)); return this.sets.get(base); }
+    /** Right button click at screen point (x, y), for the touch overlay. */
+    rightClickAt(x, y) { this.input.x = x; this.input.y = y; this.rawRight = true; }
     go(s) { this.scene = s; }
     run() {
         let last = performance.now();

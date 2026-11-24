@@ -1159,6 +1159,19 @@ export class GameScene {
             this.toggleQuestLog();
     }
     /** Right mouse button: cast the selected magic, or attack (F9 / empty slot) the enemy under the pointer. */
+    /** Touch controls (touch.ts): the screen point attacks and spells are aimed at: the nearest living enemy within reach of the screen, else 70 px in front of the hero. */
+    touchAim() {
+        const p = this.player, sx = p.x - this.camX, sy = p.y - this.camY;
+        const near = this.actors.filter(a => a.enemy && a.alive).map(a => [a, Math.hypot(a.x - p.x, (a.y - p.y) * 1.6)]).filter(([, d]) => d < 450).sort((a, b) => a[1] - b[1])[0];
+        if (near)
+            return [Math.max(0, Math.min(639, near[0].x - this.camX)), Math.max(0, Math.min(HUD_Y - 1, near[0].y - this.camY - 20))];
+        for (let k = 0; k < 32; k++) {
+            const ang = k * Math.PI / 16, vx = Math.cos(ang), vy = Math.sin(ang);
+            if (actorDir(vx, vy) === p.dir)
+                return [Math.max(0, Math.min(639, sx + vx * 70)), Math.max(0, Math.min(HUD_Y - 1, sy + vy * 70))];
+        }
+        return [sx, sy + 70];
+    }
     rightAction() {
         const inp = this.app.input, m = this.magic, wx = inp.x + this.camX, wy = inp.y + this.camY, sp = m.selected();
         const hov = this.actors.find(a => a.enemy && a.alive && a.hit(wx, wy));

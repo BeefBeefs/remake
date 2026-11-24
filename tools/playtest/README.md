@@ -44,3 +44,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `giveitem.mjs` - sentence 75 (reward item) puts quest items into the bag.
 - `blackjack.mjs` - Tower of Ordeal Black Jack: hand values, win/lose spread, and the script round trip in 99000023 (pay, hand, result block, win counter).
 - `questsent.mjs` - sentences 67-71: quest spell grant, exp percentage, offered profession read/write.
+- `touch.mjs` - touch controls with emulated touch (stick, ATK, menu buttons, canvas tap, fullscreen toggle).

@@ -5,6 +5,8 @@ import { SCREEN_W, SCREEN_H } from './gui.js';
 export interface Scene {
   update(dt: number): void;
   draw(ctx: CanvasRenderingContext2D): void;
+  /** Touch controls: screen point to aim attacks / spells at (nearest enemy, else in front of the hero). */
+  touchAim?(): [number, number] | null;
 }
 
 /** Shared input state; `clicked` is true for exactly one frame after a left button press. */
@@ -26,6 +28,13 @@ export class App {
     cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(); i.x = (e.clientX - r.left) * SCREEN_W / r.width; i.y = (e.clientY - r.top) * SCREEN_H / r.height; });
     cv.addEventListener('mousedown', e => { if (e.button === 0) { i.down = true; this.rawClick = true; } else if (e.button === 2) this.rawRight = true; cv.focus(); });
     cv.addEventListener('contextmenu', e => e.preventDefault());
+    // touch on the game screen = the mouse: touch and hold walks / attacks, a tap clicks (the control overlay of touch.ts sits above the canvas and takes its own touches)
+    const at = (t: Touch) => { const r = cv.getBoundingClientRect(); i.x = (t.clientX - r.left) * SCREEN_W / r.width; i.y = (t.clientY - r.top) * SCREEN_H / r.height; };
+    let touchId = -1;
+    cv.addEventListener('touchstart', e => { e.preventDefault(); if (touchId >= 0) return; const t = e.changedTouches[0]; touchId = t.identifier; at(t); i.down = true; this.rawClick = true; cv.focus(); }, { passive: false });
+    cv.addEventListener('touchmove', e => { e.preventDefault(); for (const t of Array.from(e.changedTouches)) if (t.identifier === touchId) at(t); }, { passive: false });
+    const tend = (e: TouchEvent) => { for (const t of Array.from(e.changedTouches)) if (t.identifier === touchId) { touchId = -1; i.down = false; } };
+    cv.addEventListener('touchend', tend); cv.addEventListener('touchcancel', tend);
     addEventListener('mouseup', () => i.down = false);
     addEventListener('keydown', e => {
       const k = e.key.toLowerCase(); if (!i.keys.has(k)) i.pressed.add(k);
@@ -39,6 +48,8 @@ export class App {
   /** Memoised sprite-set loader: gui('Game_Bar') -> data/ep1/gui/Game_Bar */
   gui(name: string) { return this.set(Data.url(`gui/${name}`)); }
   set(base: string) { if (!this.sets.has(base)) this.sets.set(base, SpriteSet.load(base)); return this.sets.get(base)!; }
+  /** Right button click at screen point (x, y), for the touch overlay. */
+  rightClickAt(x: number, y: number) { this.input.x = x; this.input.y = y; this.rawRight = true; }
   go(s: Scene) { this.scene = s; }
   run() {
     let last = performance.now();
