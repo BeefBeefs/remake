@@ -1,13 +1,12 @@
 import { loadCaf } from './caf.js';
 import { GameMap, worldToReal } from './map.js';
-import { loadActors } from './actors.js';
+import { loadScenarioActors } from './actors.js';
 import { ScriptVM } from './script.js';
 import { Gui, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
 import { Text } from './app.js';
 import { Windows } from './windows.js';
 import { TitleScene } from './title.js';
 const q = new URLSearchParams(location.search);
-const MAP = q.get('map') ?? 'f00_01';
 const SCENARIO = q.get('scenario') ?? '00000000';
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
@@ -140,8 +139,9 @@ export class GameScene {
             };
     }
     static async create(app, gender, name) {
-        const [map, set, caf, gui, win, text, tables, actors, vm] = await Promise.all([GameMap.load(MAP), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), loadActors(app, SCENARIO).catch(() => []), ScriptVM.load(SCENARIO).catch(() => null)]);
-        const g = new GameScene(app, name, map, set, caf, gui, win, text, actors, vm);
+        const sc = await loadScenarioActors(app, SCENARIO).catch(() => ({ map: null, actors: [] }));
+        const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(SCENARIO).catch(() => null)]);
+        const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm);
         g.expTable = tables['13'].v;
         g.syncExp();
         return g;

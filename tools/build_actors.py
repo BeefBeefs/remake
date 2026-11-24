@@ -20,4 +20,4 @@ if __name__ == '__main__':
         recs = mct.parse(os.path.join(src, 'Scenario', sc, 'Scenario.Mct'))
         recs = [r for r in recs if convert_actor(r['kind'], r['model']) or print('skip (no model):', r['name'], r['kind'], r['model'])]
         os.makedirs(os.path.join(out, 'scenario'), exist_ok=True)
-        json.dump(recs, open(os.path.join(out, 'scenario', sc + '.actors.json'), 'w'))
+        json.dump(dict(map=mct.map_name(os.path.join(src, 'Scenario', sc, 'Scenario.Mct')), actors=recs), open(os.path.join(out, 'scenario', sc + '.actors.json'), 'w'))

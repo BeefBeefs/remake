@@ -42,8 +42,8 @@ export class Actor {
     }
     hit(px, py) { return Math.abs(px - this.x) < 20 && py < this.y + 6 && py > this.y - 70; }
 }
-export async function loadActors(app, scenario) {
-    const recs = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
-    return Promise.all(recs.map(r => Actor.load(app, r)));
+export async function loadScenarioActors(app, scenario) {
+    const d = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
+    return { map: d.map, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))) };
 }
 //# sourceMappingURL=actors.js.map

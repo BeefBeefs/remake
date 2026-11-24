@@ -34,7 +34,7 @@ export class Actor implements Drawable {
   }
   hit(px: number, py: number) { return Math.abs(px - this.x) < 20 && py < this.y + 6 && py > this.y - 70; }
 }
-export async function loadActors(app: App, scenario: string): Promise<Actor[]> {
-  const recs: ActorRec[] = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
-  return Promise.all(recs.map(r => Actor.load(app, r)));
+export async function loadScenarioActors(app: App, scenario: string): Promise<{ map: string | null; actors: Actor[] }> {
+  const d: { map: string | null; actors: ActorRec[] } = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
+  return { map: d.map, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))) };
 }
