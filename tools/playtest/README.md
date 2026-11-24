@@ -37,3 +37,5 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `spelltables.mjs` — real spell data: MP cost (Table 16), Heal % (17), exp per level (27, +1 exp per cast, cap 20), cast-time multiplier (20).
 - `epscripts.mjs` — fires every script handler (talk chains, kills, zones, polls) of every scenario of Episodes 2-4 and reports unimplemented sentence types / page errors (none found).
 - `epexits.mjs` — every map exit (sentence 17) and warp-gate row of an episode leads to a scenario of its data chain.
+- `epbind.mjs` — every script handler's character number (zone 10xxxxxx, NPC 12xxxxxx, monster kill 14xxxxxx) is matched against the scenario's zones / actors; lists handlers without a counterpart.
+- `epquests.mjs` — carries the script state through all scenarios of an episode with a level-40 hero and answers every dialog with options 0, 1, 2; reports how many quests got started / completed by the scripts alone (needs items and drops for the rest, so it is a lower bound).

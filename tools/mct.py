@@ -7,11 +7,11 @@ def parse(path):
     d = open(path, 'rb').read(); out = []
     for i in range(0x300, len(d) - 60):
         L, = struct.unpack_from('<I', d, i)
-        if not 3 <= L <= 24 or not re.fullmatch(rb"[A-Za-z][A-Za-z '\-]*", d[i+4:i+4+L]): continue
+        if not 2 <= L <= 24 or not re.fullmatch(rb"[A-Za-z][A-Za-z '\-.]*", d[i+4:i+4+L]): continue
         j = i + 4 + L
         pre = struct.unpack_from('<4i', d, i - 16); w = struct.unpack_from('<9i', d, j + 4)
         # hit rect: (-80,-80,79,79) for goblin-sized monsters; bats use +-40, golems/gargoyles/giants +-160, Enemy Hole generators a bigger one
-        if not (w[3] == w[4] < 0 and w[5] == w[6] and abs(w[5] + w[3]) <= 1) and d[i+4:i+4+L] != b'Enemy Hole': continue
+        if not ((w[3] == w[4] < 0 and w[5] == w[6] and abs(w[5] + w[3]) <= 1) or (-200 <= w[3] < 0 and -200 <= w[4] < 0 and 0 < w[5] <= 200 and 0 < w[6] <= 200 and pre[1] == -65 and pre[0] in (0, 1) and w[8] == 3)) and d[i+4:i+4+L] != b'Enemy Hole': continue   # people: (flag 0/1, -65, id, model); some NPCs have an off-centre hit rect (Munza, Borunza) and 2-letter names (Po)
         ident = pre[2]
         head = struct.unpack_from('<8i', d, i - 32)
         kind, model = ('partner', ident - 10000) if ident >= 10000 else ('people', pre[3])
