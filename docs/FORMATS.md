@@ -41,14 +41,23 @@ u32, u32 trailer
 The 9 groups are directions (8 + 1 spare); the player has 23 layers per direction (body, equipment variants, weapon...) whose
 pattern indices point into the matching `Animation00.Njp`. Equipment-to-layer mapping is still TODO.
 
-## Maps (work in progress)
-- `Map/Ground/<n>.Gnd` (`RPGSCRN_GNDv000`): `u32 W, H, chipW(64), chipH(48), 160, 160`, then `u8 compressed` + RCLIB-L block of `W*H` cells x 6 bytes
-  (three i16 per cell, values 0..31, all three fields share the same value set), then a second `u8 + RCLIB-L` block (646384 bytes in 3rd_2-1: mostly 0/1/3 as u16 pairs; probably the walkability/"area judge" grid).
-- `Map/Pattern/<n>.Lst`: 64 lines, one `.njp`/`.sdw` filename per upd slot (unused slots are `?`). Ground tile sets are `3rdmap_*.njp` (64x48 tiles; 00 = base types in groups of 4 variants: grass, dirt, sand, grass2, dark, water; 01/03 = transitions; 04/05 = dirt/sand variants).
-- `Map/<n>.Map` (`MAPED_FILE v000`): 36 bytes: four u32 (1,1,1,1) + a short name.
-- `Map/Object/<n>.Obl` (`RPGSCRN_OBJv001`): not decoded yet.
-- **Open question:** how a cell's three values map to (upd slot, pattern). The renderer (`GROUNDBLOCK::SetPacket`) passes cell fields 2 and 3 to the UPDIB packet call, but treating them as (Lst slot, pattern) does not yield sensible slots (values exceed the 18 filled slots).
-  Rendering the first field as an index into the concatenation of the first ground sets gives a plausible terrain, but transitions don't line up, so that is not confirmed.
+## Maps
+
+A map `NAME` consists of three files: `Ground/NAME.Gnd`, `Object/NAME.Obl`, `Pattern/NAME.Lst`.
+
+**Lst** – 64 text lines (cp932); line index = *slot*. `?` = unused slot. Each used line names an `.njp` sprite set (or `.sdw` shadow set) in `Pattern/`. The leading slots whose first image is a full 64x48 chip are *ground sets* (6 for 3rd_2-1). A `.sdw` entry directly after an object set (slot+1) holds that set's shadow masks (same pattern indices).
+
+**Gnd** – 16-byte magic header, then `w,h,chipW,chipH` (u32 x4, 200x200 cells of 64x48), a flag byte and an RCLIB-L block holding `w*h` cells of 3 x i16 `(base, slot, pattern)`:
+- `base`: index into the *concatenated* patterns of the ground sets (slot 0 first). 0 with slot 0/pattern 0 = empty.
+- `slot, pattern`: overlay. Slots < groundSlots are ground overlays drawn on the cell; higher slots are decor objects anchored at cell centre x, cell top + 40.
+A second RCLIB-L block follows (walkability/area info; not decoded yet, exported as `judge`).
+
+**Obl** – header (16 bytes), u32 count, then 42-byte records: `i32 x, i32 y` (world coords), 9 x i16 (slot, pattern, -1, 1000, flags, 0, 1000, 1000, 1000), 4 x i32 judgement rect.
+
+**World -> real pixels** (RKC_RPGSCRN::CalcRealPos, default params 15/10, confirmed visually against the ground):
+`rx = (wx - wy) * 15 / 100`, `ry = (wx + wy) * 10 / 100`. Objects are depth sorted by `ry`; `ry` is also the sprite's foot position.
+
+`tools/convert_map.py NAME` exports `public/data/ep1/maps/NAME.json` plus the used sprite sets; `src/map.ts` renders it and `public/play.html` (`src/game.ts`) lets the player walk (WASD/arrows, Shift = run). Player layers 1,0,3 are drawn (shadow, body, one equipment variant) -- the layer-to-equipment mapping and the direction order are still guesses.
 
 ## Other formats (headers seen, not yet decoded)
 | ext | magic | role (guess) |

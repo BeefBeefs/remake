@@ -4,6 +4,7 @@ export class SpriteSet {
         this.sheetData = [];
         this.palettes = [];
         this.cache = new Map();
+        this.isShadow = meta.magic.startsWith('ShadowLow');
         this.palettes = meta.palettes.map(hex => {
             const p = new Uint8Array(256 * 3);
             for (let i = 0; i < 256; i++)
@@ -68,10 +69,15 @@ export class SpriteSet {
                         continue;
                     const v = src.data[si];
                     const di = ((q[2] - y0 + y) * c.width + (q[1] - x0 + x)) * 4;
-                    out.data[di] = palette[v * 3];
-                    out.data[di + 1] = palette[v * 3 + 1];
-                    out.data[di + 2] = palette[v * 3 + 2];
-                    out.data[di + 3] = 255;
+                    if (this.isShadow) {
+                        out.data[di] = out.data[di + 1] = out.data[di + 2] = 0;
+                    }
+                    else {
+                        out.data[di] = palette[v * 3];
+                        out.data[di + 1] = palette[v * 3 + 1];
+                        out.data[di + 2] = palette[v * 3 + 2];
+                    }
+                    out.data[di + 3] = this.isShadow ? 90 : 255;
                 }
         }
         ctx.putImageData(out, 0, 0);

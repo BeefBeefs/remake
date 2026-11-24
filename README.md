@@ -14,3 +14,7 @@ See `docs/FORMATS.md` for what is understood so far and the roadmap.
 
 ## Viewer
 `python3 tools/build_assets.py && npm install && npm run build && npm run serve` then open `index.html`: plays the player's animations (toggle equipment layers).
+
+## Play (work in progress)
+
+`npm run build && npm run serve`, then open `http://localhost:8000/play.html` to walk around the first map of Episode 1 (WASD/arrows, Shift to run). Convert other maps with `python3 -I tools/convert_map.py <name>`.

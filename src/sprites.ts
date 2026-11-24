@@ -12,7 +12,9 @@ export class SpriteSet {
   private sheetData: ImageData[] = [];
   private palettes: Uint8Array[] = [];
   private cache = new Map<number, Frame | null>();
+  readonly isShadow: boolean;
   constructor(public meta: SpriteMeta) {
+    this.isShadow = meta.magic.startsWith('ShadowLow');
     this.palettes = meta.palettes.map(hex => {
       const p = new Uint8Array(256 * 3);
       for (let i = 0; i < 256; i++) for (let k = 0; k < 3; k++) p[i * 3 + k] = parseInt(hex.substr(i * 6 + k * 2, 2), 16);
@@ -55,7 +57,7 @@ export class SpriteSet {
         const si = ((sy + y) * src.width + sx + x) * 4;
         if (src.data[si + 3] === 0) continue;
         const v = src.data[si]; const di = ((q[2] - y0 + y) * c.width + (q[1] - x0 + x)) * 4;
-        out.data[di] = palette[v * 3]; out.data[di + 1] = palette[v * 3 + 1]; out.data[di + 2] = palette[v * 3 + 2]; out.data[di + 3] = 255;
+        if (this.isShadow) { out.data[di] = out.data[di + 1] = out.data[di + 2] = 0; } else { out.data[di] = palette[v * 3]; out.data[di + 1] = palette[v * 3 + 1]; out.data[di + 2] = palette[v * 3 + 2]; } out.data[di + 3] = this.isShadow ? 90 : 255;
       }
     }
     ctx.putImageData(out, 0, 0);
