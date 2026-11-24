@@ -26,3 +26,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `triple.mjs` — Warrior Triple Attack.
 - `spells.mjs` — profession spell learning.
 - `attrs.mjs` — attribute medicines and status values.
+- `itembonus.mjs` — variant item bonuses (attack %, speed %, attribute levels) and tooltips.

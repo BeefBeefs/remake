@@ -41,6 +41,13 @@ export class ItemDb {
   static speed(it: ItemDef) { return it.f['27'] ?? 100; }
   /** Armor defense = field 28 (6 boots ... 170 Knight Plate; field 25 is durability, 36/37 the drop rank). */
   static defense(it: ItemDef) { return it.f['28'] ?? 0; }
+  /**
+   * Variant / special-item bonuses are (min, max, chance %) field triplets at fixed slots. Decoded by comparing item names (Power/Strength/Devil's, Speed/Gale/Divine Wind, Fire Gem ...):
+   * weapons: 60 attack %, 66 hit rate %, 84 attack speed %, 177 + 3k attribute k; armor: 53 defense %, 59 evasion %, 65 magic defense %, 71 magic evasion %, 167 + 3k attribute k;
+   * accessories: 144 + 3k attribute k (k = Fire, Water, Earth, Thunder, Holy, Dark, Gel, Metal). GUESS: the value is the middle of min..max and the chance is ignored (always applies).
+   */
+  static bonus(it: ItemDef, slot: number): number { const a = it.f[String(slot)]; if (a === undefined) return 0; const b = it.f[String(slot + 1)] ?? a; return (a + b) / 2; }
+  static attrBonus(it: ItemDef): number[] { const base = it.sec === 0 ? 177 : it.sec === 1 ? 167 : it.sec === 2 ? 144 : -1; return Array.from({ length: 8 }, (_, k) => base < 0 ? 0 : ItemDb.bonus(it, base + 3 * k)); }
 }
 
 export const INV_COLS = 9, INV_ROWS = 10;

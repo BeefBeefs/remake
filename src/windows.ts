@@ -14,6 +14,7 @@ export const CAREER_BTN = { x: 20, y: 388, w: 160, h: 18 };
 export const SET_BTN = [{ x: 540, y: 394, w: 22, h: 16 }, { x: 566, y: 394, w: 26, h: 16 }];
 
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
+const ATTR_NAMES = ['Fire', 'Water', 'Earth', 'Thunder', 'Holy', 'Dark', 'Gel', 'Metal'];
 export class Windows {
   /** Career change: current profession, options available now, and whether the choice list is open. */
   career = 0; careerOpts: number[] = []; careerMenu = false;
@@ -24,7 +25,20 @@ export class Windows {
   /** Basic attribute levels -10..10 in the status window's order: Fire, Water, Earth, Thunder, Holy, Dark, Gel, Metal (changed by the elemental medicines). */
   attr: number[] = Array(8).fill(0);
   /** Multiplier of the status parameter an attribute drives (manual: Fire attack, Water defense, Earth hit, Thunder evasion, Holy magic attack, Dark magic defense, Gel magic hit, Metal magic evasion). GUESS: 5 % per level. */
-  attrMul(i: number) { return 1 + 0.05 * this.attr[i]; }
+  attrMul(i: number) { return 1 + 0.05 * this.attrLv(i); }
+  /** Worn, identified, working items whose bonuses count (a worn shield next to a two-handed arm does not). */
+  gear(): InvEntry[] { return this.inv.equipped().filter(e => !e.unid && !Inventory.broken(e) && !this.shieldOff(e)); }
+  /** Total attribute level = basic level (medicines) + equipment, limited to -10..10. */
+  attrLv(i: number) { return Math.max(-10, Math.min(10, this.attr[i] + this.gear().reduce((a, e) => a + ItemDb.attrBonus(e.item)[i], 0))); }
+  /** Tooltip lines for the decoded bonuses of an identified item. */
+  bonusLines(it: ItemDef): string[] {
+    const out: string[] = [], P: [number, number, string][] = it.sec === 0 ? [[0, 60, 'Attack'], [0, 66, 'Hit Rate'], [0, 84, 'Attack Speed']] : it.sec === 1 ? [[1, 53, 'Defense'], [1, 59, 'Evasion'], [1, 71, 'M.Evasion']] : [];
+    for (const [, k, n] of P) { const v = ItemDb.bonus(it, k); if (v) out.push(`${n} ${v > 0 ? '+' : ''}${Math.round(v)}%`); }
+    ItemDb.attrBonus(it).forEach((v, i) => { if (v) out.push(`${ATTR_NAMES[i]} ${v > 0 ? '+' : ''}${Math.round(v)}`); });
+    return out;
+  }
+  /** Summed percentage bonus of one slot over the worn gear of a section. */
+  pct(sec: number, slot: number) { return this.gear().reduce((a, e) => a + (e.item.sec === sec ? ItemDb.bonus(e.item, slot) : 0), 0); }
   /** Town warehouse (Warehouse Transfer Box). */
   wh = new Inventory();
   /** Tooltip hint for clicking an inventory item while a side panel (shop / warehouse) is open; overrides the sell price. */
@@ -42,7 +56,7 @@ export class Windows {
     const [atkMin, atkMax] = w ? ItemDb.attack(eff(w)) : [0, 0];
     const twoH = !!w && ItemDb.twoHanded(eff(w));
     const fire = this.attrMul(0), water = this.attrMul(1);
-    return { atkMin: Math.round(atkMin * fire), atkMax: Math.round(atkMax * fire), defense: Math.round(water * this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) && !(twoH && ItemDb.slot(e.item) === 'shield') ? ItemDb.defense(eff(e)) : 0), 0)), speed: w ? ItemDb.speed(eff(w)) : 100 };
+    return { atkMin: Math.round(atkMin * fire * (1 + this.pct(0, 60) / 100)), atkMax: Math.round(atkMax * fire * (1 + this.pct(0, 60) / 100)), defense: Math.round(water * (1 + this.pct(1, 53) / 100) * this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) && !(twoH && ItemDb.slot(e.item) === 'shield') ? ItemDb.defense(eff(e)) : 0), 0)), speed: (w ? ItemDb.speed(eff(w)) : 100) + this.pct(0, 84) };
   }
   /** Durability wear (GUESS: 1 point per weapon hit dealt; 1 point on one random worn armor piece per hit taken). */
   wearWeapon() { const w = this.inv.equipped('weapon')[0]; if (w && ItemDb.maxDur(w.item) > 0) w.dur = Math.max(0, Inventory.dur(w) - 1); }
@@ -83,12 +97,12 @@ export class Windows {
       const cs = this.stats(); const rng = cs.atkMax ? (cs.atkMin === cs.atkMax ? `${cs.atkMax}` : `${cs.atkMin}-${cs.atkMax}`) : '0';
       const ps = this.ps, n = (x?: number) => x === undefined ? '--' : x;
       v(n(ps?.strength), 66, 115); v(rng, 152, 115); v(cs.defense, 262, 115);
-      const sc = (x: number | undefined, i: number) => x === undefined ? undefined : Math.round(x * this.attrMul(i));
+      const sc = (x: number | undefined, i: number) => x === undefined ? undefined : Math.round(x * this.attrMul(i) * (1 + [0, 0, this.pct(0, 66), this.pct(1, 59), 0, 0, 0, this.pct(1, 71)][i] / 100));
       v(n(sc(ps?.hit, 2)), 68, 139); v(n(sc(ps?.eva, 3)), 252, 139);
       v('--', 96, 163); v(`${cs.speed}%`, 252, 163);
       v(`${h.mp}/${h.mpMax}`, 60, 194);
       v('--', 70, 218); v('--', 240, 218); v(n(sc(ps?.mhit, 6)), 80, 242); v(n(sc(ps?.meva, 7)), 270, 242);
-      for (let i = 0; i < 8; i++) v(this.attr[i], 262, 267 + i * 16);
+      for (let i = 0; i < 8; i++) v(this.attrLv(i), 262, 267 + i * 16);
       if (this.careerOpts.length) { const hot = mx >= CAREER_BTN.x && mx < CAREER_BTN.x + CAREER_BTN.w && my >= CAREER_BTN.y && my < CAREER_BTN.y + CAREER_BTN.h; ctx.fillStyle = hot ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.55)'; ctx.fillRect(CAREER_BTN.x, CAREER_BTN.y, CAREER_BTN.w, CAREER_BTN.h); ctx.strokeStyle = '#e0c860'; ctx.strokeRect(CAREER_BTN.x + .5, CAREER_BTN.y + .5, CAREER_BTN.w, CAREER_BTN.h); v('Change Career', CAREER_BTN.x + 28, CAREER_BTN.y + 4); }
       if (this.careerMenu) { const n = this.careerOpts.length, y0 = CAREER_BTN.y - 18 - n * 18; ctx.fillStyle = 'rgba(8,8,24,0.95)'; ctx.fillRect(CAREER_BTN.x, y0, CAREER_BTN.w, n * 18 + 18); ctx.strokeStyle = '#e0c860'; ctx.strokeRect(CAREER_BTN.x + .5, y0 + .5, CAREER_BTN.w, n * 18 + 18); v('Change profession to:', CAREER_BTN.x + 6, y0 + 4); this.careerOpts.forEach((c, i) => { if (my >= y0 + 18 + i * 18 && my < y0 + 36 + i * 18 && mx >= CAREER_BTN.x && mx < CAREER_BTN.x + CAREER_BTN.w) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(CAREER_BTN.x, y0 + 18 + i * 18, CAREER_BTN.w, 18); } v(CAREERS[c], CAREER_BTN.x + 20, y0 + 22 + i * 18); }); }
     }
@@ -112,6 +126,7 @@ export class Windows {
         if (it.sec === 0) { const [a, b] = ItemDb.attack(it); lines.push(`Attack: ${a === b ? a : `${a}-${b}`}  Speed: ${ItemDb.speed(it)}%`); }
         else if (it.sec === 1) lines.push(`Defense: ${ItemDb.defense(it)}`);
         if (it.sec === 0 && ItemDb.twoHanded(it)) lines.push('Two-handed: no shield');
+        if (!hover.unid) lines.push(...this.bonusLines(it));
         if (ItemDb.maxDur(it) > 0) lines.push(`Durability: ${Inventory.dur(hover)}/${ItemDb.maxDur(hover.item)}${Inventory.broken(hover) ? ' (broken)' : ''}`);
         lines.push(`Price: ${ItemDb.price(it)}`); if (this.panelHint) lines.push(this.panelHint); else if (this.sellValue) lines.push(`Click to sell for ${this.sellValue(it)}`); else if (ItemDb.slot(it)) lines.push(hover.unid ? 'Cannot be used until identified' : hover.eq ? '[Equipped] click to remove' : hover.alt ? '[Set ' + (this.inv.set ? 'I' : 'II') + '] click to equip here' : 'Click to equip');
         drawTooltip(ctx, this.text, lines, mx + 12, my + 12);

@@ -844,7 +844,7 @@ export class GameScene {
     hitPlayer(d, magic) {
         if (this.dead)
             return;
-        const h = this.hud, ev = Math.max(0, this.win.attr[magic ? 7 : 3]) * 0.05;
+        const h = this.hud, ev = Math.max(0, this.win.attrLv(magic ? 7 : 3)) * 0.05 + (magic ? this.win.pct(1, 71) : this.win.pct(1, 59)) / 100;
         if (Math.random() < ev) {
             this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: 'Miss' });
             return;
@@ -870,7 +870,7 @@ export class GameScene {
         // power = weapon attack (item field 26; fists = 10) * strength% (stat table row 4: 140 at level 1, +10 per fighter level). The real player attack builder was not found, so using strength as a multiplier is a GUESS.
         // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
         const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
-        if (Math.random() < Math.max(0, -this.win.attr[2]) * 0.05) {
+        if (Math.random() < Math.max(0, -this.win.attrLv(2)) * 0.05) {
             this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: 'Miss' });
             return;
         } // negative Earth level = lower hit rate
