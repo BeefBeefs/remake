@@ -2,19 +2,24 @@
 export const CAREERS = ['Mercenary', 'Warrior', 'Wizard', 'Hunter'];
 /** Growth table family per profession (Table.Tbd 902/904/906). GUESS: warrior = fighter table (also the mercenary start), wizard = mage, hunter = hybrid. */
 export const CLASS_OF = ['fighter', 'fighter', 'mage', 'hybrid'];
+export const newUsage = () => ({ n: Array(9).fill(0), total: 0 });
 /**
- * Table.Tbd 100-103 (4 x 1 each) are per-profession weights of the three skill kinds: Warrior (melee 10, magic 2, ranged 4), Wizard (2, 10, 4), Hunter (5, 2, 10), i.e. what each
- * profession is good at. The real requirement (tables 104-107, 22 categories of arms/magic, 99999 = n/a) is not decoded, so the rule here is a GUESS: level >= 5 and enough use of the matching skill.
+ * Career choice, decoded from the exe's level-up routine (0x41333b-0x413438): at every level-up from level 5 on, with p[k] = 100 * counter[k] / total (integer %):
+ * Wizard is offered when p[8] >= 20 (and the hero is not one), else Hunter when p[5] >= 30 (arms class 5 = bow guns), else Warrior when p[0] + p[1] + p[3] >= 50; otherwise nothing changes.
+ * The offer (player+0x30) is what the Status screen's "Change Profession to ..." button shows ("It is possible to change your occupation to [..]" when it changes).
+ * Reaching level 5 turns the Mercenary into a Warrior unconditionally (the routine sets both +0x2c and +0x30 to 6).
  */
-export const REQUIRE = { level: 5, uses: [0, 60, 30, 60] };
-const KEY = [null, 'melee', 'magic', 'ranged'];
-/** Professions the hero may change to now (never Mercenary, never the current one). */
-export function careerOptions(current, level, u) {
-    const out = [];
-    for (let c = 1; c < 4; c++)
-        if (c !== current && level >= REQUIRE.level && u[KEY[c]] >= REQUIRE.uses[c])
-            out.push(c);
-    return out;
+export function careerTarget(current, level, u) {
+    if (level < 5)
+        return current;
+    const p = u.n.map(c => (u.total > 0 ? Math.trunc(c * 100 / u.total) : 0));
+    if (current !== 2 && p[8] >= 20)
+        return 2;
+    if (current !== 3 && p[5] >= 30)
+        return 3;
+    if (current !== 1 && p[0] + p[1] + p[3] >= 50)
+        return 1;
+    return current;
 }
 /**
  * Spell learning, decoded from the exe's level-up routine (0x412fb0): every level-up appends the hero's current class id to a history (one byte per level). Class ids: 16 Mercenary, 6 Warrior, 9 Wizard, 5 Hunter.

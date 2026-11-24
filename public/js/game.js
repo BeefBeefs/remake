@@ -17,7 +17,7 @@ import { Gui, SCREEN_W, SCREEN_H, HUD_Y, BELT, MINE_BTN, POWER_BTN, PET_GAUGE, i
 import { Text } from './app.js';
 import { Windows, SET_BTN, CAREER_BTN } from './windows.js';
 import { SPELL_FX } from './spellfx.js';
-import { CLASS_OF, CLASS_ID, careerOptions, spellsFrom } from './career.js';
+import { CLASS_OF, CLASS_ID, careerTarget, newUsage, spellsFrom } from './career.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 import { writeSlot, firstFree } from './saves.js';
@@ -63,7 +63,7 @@ export class GameScene {
         this.stash();
         const d = {
             v: 1, ep: Data.ep, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-            career: this.win.career, attr: this.win.attr, usage: this.usage, hist: this.hist, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
+            career: this.win.career, attr: this.win.attr, usage: this.usage, ct: this.careerTarget, hist: this.hist, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
             inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, (e.eq ? 1 : 0) | (e.alt ? 2 : 0), e.unid ? 1 : 0, e.dur ?? -1]),
             vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
             magic: this.magic.save(), explored: this.mapwin.encode(), pet: this.pet?.save(this.petKills),
@@ -291,8 +291,23 @@ export class GameScene {
                 this.magic.learn(id);
             this.banner = { text: nw.length === 1 ? `Learned ${this.magic.spell(nw[0]).name}` : `Learned ${nw.length} new spells`, t: 0 };
         }
-    } this.win.careerOpts = careerOptions(this.win.career, this.hud.level, this.usage); if (!this.win.careerOpts.length)
+    } this.win.careerOpts = this.careerTarget !== this.win.career ? [this.careerTarget] : []; if (!this.win.careerOpts.length)
         this.win.careerMenu = false; }
+    /** Exe level-up routine: from level 5 on, offer a profession from the hits since the last level; level 5 itself turns the Mercenary into a Warrior; the counters restart. */
+    careerLevelUp() {
+        const h = this.hud, was = this.careerTarget;
+        this.careerTarget = careerTarget(this.win.career, h.level, this.usage);
+        if (h.level === 5) {
+            this.win.career = this.careerTarget = 1;
+            this.banner = { text: 'Changed your occupation to [Warrior]', t: 0 };
+        }
+        else if (this.careerTarget !== this.win.career && this.careerTarget !== was)
+            this.banner = { text: `It is possible to change your occupation to [${['Mercenary', 'Warrior', 'Wizard', 'Hunter'][this.careerTarget]}]`, t: 0 };
+        this.usage = newUsage();
+    }
+    /** One damaging hit of the hero (exe 0x4135a3): arms = class of the wielded weapon, -1 bare-handed, 8 = spell. */
+    countHit(arms) { this.usage.total++; if (arms >= 0)
+        this.usage.n[Math.min(8, arms)]++; }
     openWarehouse() {
         this.qlog = null;
         this.shop = new Warehouse();
@@ -454,7 +469,8 @@ export class GameScene {
         this.fxSets = new Map();
         this.fxList = [];
         /** Career change bookkeeping: how often melee / magic / ranged attacks were used (saved). */
-        this.usage = { melee: 0, magic: 0, ranged: 0 };
+        this.usage = newUsage();
+        this.careerTarget = 0; // careerTarget = the profession offered on the Status screen (player+0x30)
         /** Class id of the hero at each level-up (exe: byte history, drives the spell learning; see career.ts). */
         this.hist = [];
         /** Triple Attack (manual): "only warriors that have reached a certain level" with a melee weapon. GUESS: Warrior, level >= TRIPLE_LEVEL, three strikes at +40 % damage, 2.5 s cooldown. */
@@ -634,8 +650,11 @@ export class GameScene {
             g.win.career = ld.career ?? 0;
             if (ld.attr?.length === 8)
                 g.win.attr = [...ld.attr];
-            g.usage = ld.usage ?? g.usage;
+            g.usage = ld.usage && Array.isArray(ld.usage.n) ? ld.usage : newUsage();
+            g.careerTarget = ld.ct ?? g.win.career;
             g.hist = ld.hist ? [...ld.hist] : Array(Math.max(0, ld.hud.level - 1)).fill(CLASS_ID[g.win.career]); // old saves: every level counts for the current profession
+            if (ld.ct === undefined && g.hud.level >= 5 && g.win.career === 0)
+                g.win.career = g.careerTarget = 1; // saves of earlier builds: reaching level 5 makes a Warrior of the Mercenary (exe rule)
             for (const [sec, idx, x, y, , unid, dur] of ld.wh ?? []) {
                 const item = win.db.get(sec, idx);
                 if (item) {
@@ -660,6 +679,7 @@ export class GameScene {
             g.win.career = cr.win.career;
             g.win.attr = cr.win.attr;
             g.usage = cr.usage ?? g.usage;
+            g.careerTarget = cr.careerTarget;
             g.hist = cr.hist;
             g.win.gold = cr.win.gold;
         }
@@ -837,6 +857,7 @@ export class GameScene {
         while (h.level < 100 && this.totalExp >= t[h.level - 1]) {
             h.level++;
             this.hist.push(CLASS_ID[this.win.career]);
+            this.careerLevelUp();
         }
         this.applyStats(h.level > before);
         const lo = h.level > 1 ? t[h.level - 2] : 0;
@@ -922,7 +943,7 @@ export class GameScene {
         this.win.wearWeapon();
         {
             const w = this.win.inv.equipped('weapon')[0];
-            this.usage[w && ItemDb.isRanged(w.item) ? 'ranged' : 'melee']++;
+            this.countHit(w ? ItemDb.arms(w.item) : -1);
         }
         const dealt = Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0))));
         this.damage(a, dealt);
@@ -1222,7 +1243,6 @@ export class GameScene {
             bullet(0, base * mult);
         }
         h.mp -= cost;
-        this.usage.magic++;
         this.castT = 400 * m.castMul(sp.id) * 100 / Math.max(20, 100 + this.win.fx('chant')); // Table 20 = cast time per mille (Earth Spears 0.6, Medusa 1.5) audio.sfx(SFX.hit, 0.5);
         if (m.use(sp.id))
             this.banner = { text: `${sp.name} reached magic level ${m.level(sp.id)}`, t: 0 };
@@ -1235,7 +1255,7 @@ export class GameScene {
     /** Elemental effect on a monster: the attribute opposite to the monster's is strong (x1.3), its own attribute weak (x0.7). GUESS. */
     elemMul(a, elem) { if (elem < 0)
         return 1; const m = a.stats.attr ?? 0; return elem === (m ^ 1) ? 1.3 : elem === m ? 0.7 : 1; }
-    spellHit(a, sp, dmg) { this.damage(a, Math.max(1, Math.round(dmg * this.elemMul(a, SPELL_FX[sp.id]?.elem ?? -1) * (9 + Math.floor(Math.random() * 3)) / 10))); }
+    spellHit(a, sp, dmg) { this.countHit(8); this.damage(a, Math.max(1, Math.round(dmg * this.elemMul(a, SPELL_FX[sp.id]?.elem ?? -1) * (9 + Math.floor(Math.random() * 3)) / 10))); }
     /** Both attributes of an opposite pair at the maximum trigger a special effect (manual: 'special effects can be triggered'; the effects themselves are not documented, so these are GUESSES). */
     harmony() {
         const w = this.win, on = [0, 2, 4, 6].map(i => w.attrLv(i) >= 10 && w.attrLv(i + 1) >= 10);

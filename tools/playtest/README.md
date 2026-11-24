@@ -18,7 +18,7 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `equipsets.mjs` — I/II equipment sets, unidentified equip block.
 - `shaman.mjs` — shaman bolts + stagger.
 - `warehouse.mjs` — store/take items in the town warehouse chest.
-- `career.mjs` — Change Career menu and class pick.
+- `career.mjs` — class change as decoded from the exe: level 5 makes the Mercenary a Warrior; each later level-up offers Wizard (>= 20 % spell hits), Hunter (>= 30 % bow-gun hits) or Warrior (>= 50 % classes 0/1/3) from the hits since the last level; counters reset.
 - `twohand.mjs` — two-handed weapons disable the shield; bow attacks.
 - `special.mjs` — gargoyle bolt and golem slam.
 - `fx.mjs` — script effect sprite spawning.
