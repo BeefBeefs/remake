@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "assets": "python3 tools/build_assets.py",
+    "assets": "python3 tools/build_assets.py && python3 tools/build_gui.py && python3 tools/convert_map.py 3rd_2-1",
     "build": "tsc -p .",
     "serve": "npx http-server public -c-1"
   },

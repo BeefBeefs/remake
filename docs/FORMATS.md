@@ -76,3 +76,15 @@ A second RCLIB-L block follows: the **judge grid**, 568 x 569 u16 cells (row-maj
 ## Roadmap
 1. Njp/Caf -> PNG atlas + JSON converter  2. Gnd/Obl/Map renderer (isometric/oblique tiles)  3. Player movement + animation
 4. Scs script VM + scenario flow  5. Items/Tbd/Aid: combat, enemies, skills  6. Audio (.voc)  7. UI, save/load  8. Episode 1 playthrough
+
+## GUI / HUD (System/**.njp)
+
+All UI sprite sets are ordinary `.njp` files whose pattern rects hold **absolute positions in the 640x480 screen**, so a screen is just "draw pattern N (palette P) at its own position". `tools/build_gui.py` converts them to `public/data/ep1/gui/<Dir>_<Name>`, `tools/sheet.py in.njp out.png [first count cols]` makes contact sheets.
+
+- **Game/Bar** (HUD): 8 = bottom panel (0,412, 640x68), 7 = edge strip above it (0,400), HP bar 2 (backing) + 0 (fill, 206x12 at 81,426), MP bar 5 + 3 (106,453), EXP frame 15 + fill 14, RUN/WALK highlights 11/10, 19..28 = 6x9 digits (level at ~52,465). 17/16/18 are white hit masks for MENU / ITEM / STATUS.
+- **Game/Status**: 5 = STATUS/MAGIC window left half (0,0 320x416, value fields at fixed spots, see `src/windows.ts`), 7+8 = item grid window (320x200 + 320x216; drawn at x=320 in-game), 2/3 = magic window (x=320), 10/58/59 = shop/trade frames, 60+ small icons and bars.
+- **Common/Font00**: pattern 0 = 6x12 half-width bitmap font, 16x16 cells indexed by byte value (index 1 = white). Patterns 2.. = 12x12 full-width glyph sheets (16x16 cells each, JIS-ordered, not mapped yet). Font01 = second style.
+- **Title/Title**: 0 = backdrop, 1/2/3 = NEW GAME / LOAD GAME / EXIT (palette 1 normal, 3 bright), 4 = copyright, 5 = ornate frame used by the select screens.
+- **Select/Select**: 36 = CREATE NEW CHARACTER header, 7/8 male portrait (dark/lit), 9/10 female, 4/5 OK, 2/3 BACK, 34 NAME label, 38/39 dialog frames.
+- **System** (Common/Game): 0/1 = mouse cursor (normal/pressed).
+- Other sets seen: Game/Card (69 cards), Game/Item00xx (inventory icons), MagicIcon/MagicBarIcon/JobIcon/StatusIcon/MapIcon, Hukidasi (+ .sdw) speech balloons, Dark (darkness overlay), Common/Visual0x (full-screen cut-ins), Waiting.

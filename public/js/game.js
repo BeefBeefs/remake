@@ -1,66 +1,91 @@
-import { SpriteSet } from './sprites.js';
 import { loadCaf } from './caf.js';
 import { GameMap } from './map.js';
 import { Gui, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
+import { Text } from './app.js';
+import { Windows } from './windows.js';
+import { TitleScene } from './title.js';
 const q = new URLSearchParams(location.search);
 const MAP = q.get('map') ?? '3rd_2-1';
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
 const FRAME_MS = 60;
-// 8 facing directions in CAF order (guessed; tweak after visual check) -> unit vectors on screen
-const DIRS = [[0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1]];
 const ANIM_IDLE = 0, ANIM_WALK = 1, ANIM_RUN = 2;
-async function main() {
-    const cv = document.getElementById('cv');
-    const ctx = cv.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-    const st = document.getElementById('status');
-    st.textContent = 'loading…';
-    const [map, set, caf, gui] = await Promise.all([GameMap.load(MAP), SpriteSet.load('data/ep1/male'), loadCaf('data/ep1/male.caf.json'), Gui.load()]);
-    const hud = { hp: 100, hpMax: 100, mp: 60, mpMax: 60, level: 1, exp: 0, expMax: 100, running: false };
-    const mouse = { x: 320, y: 200, down: false };
-    cv.width = SCREEN_W;
-    cv.height = SCREEN_H;
-    st.textContent = `${MAP} ${map.m.w}x${map.m.h}, ${map.m.objects.length} objects — WASD/arrows to walk, Shift to run`;
-    const mk = map.markerReal();
-    const player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
-    let debug = false;
-    const keys = new Set();
-    addEventListener('keydown', e => { keys.add(e.key.toLowerCase()); if (e.key === 'F1' || e.key === 'g') {
-        debug = !debug;
-        e.preventDefault();
-    } if (e.key.toLowerCase() === 'r')
-        hud.running = !hud.running; if (e.key.startsWith('Arrow'))
-        e.preventDefault(); });
-    addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
-    cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(); mouse.x = (e.clientX - r.left) * SCREEN_W / r.width; mouse.y = (e.clientY - r.top) * SCREEN_H / r.height; });
-    cv.addEventListener('mousedown', e => { if (e.button === 0)
-        mouse.down = true; cv.focus(); });
-    addEventListener('mouseup', () => mouse.down = false);
-    window.game = { player, keys, map, hud, mouse };
-    const drawPlayer = {
-        get y() { return player.y; },
-        draw(c, camX, camY) {
-            const a = caf.anims[player.anim];
-            const d = a.dirs[player.dir];
-            const fi = d.frames ? Math.max(0, Math.floor(player.t / FRAME_MS)) % d.frames : 0;
-            for (const l of LAYERS) {
-                const seq = d.layers[l];
-                if (!seq || !seq.length)
-                    continue;
-                const f = set.pattern(seq[Math.min(fi, seq.length - 1)][1]);
-                if (!f)
-                    continue;
-                c.drawImage(f.canvas, Math.round(player.x - camX + f.ox), Math.round(player.y - camY + f.oy));
+/** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
+const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
+const dirIndex = (vx, vy) => FACING[(Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 8];
+export class GameScene {
+    constructor(app, name, map, set, caf, gui, win, text) {
+        this.app = app;
+        this.name = name;
+        this.map = map;
+        this.set = set;
+        this.caf = caf;
+        this.gui = gui;
+        this.win = win;
+        this.text = text;
+        this.hud = { hp: 100, hpMax: 100, mp: 60, mpMax: 60, level: 1, exp: 0, expMax: 100, running: false };
+        this.debug = false;
+        this.paused = false;
+        this.camX = 0;
+        this.camY = 0;
+        const mk = map.markerReal();
+        this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
+        const p = this.player;
+        this.drawPlayer = {
+            get y() { return p.y; },
+            draw: (c, camX, camY) => {
+                const d = this.caf.anims[p.anim].dirs[p.dir];
+                const fi = d.frames ? Math.max(0, Math.floor(p.t / FRAME_MS)) % d.frames : 0;
+                for (const l of LAYERS) {
+                    const seq = d.layers[l];
+                    if (!seq || !seq.length)
+                        continue;
+                    const f = this.set.pattern(seq[Math.min(fi, seq.length - 1)][1]);
+                    if (!f)
+                        continue;
+                    c.drawImage(f.canvas, Math.round(p.x - camX + f.ox), Math.round(p.y - camY + f.oy));
+                }
+            },
+        };
+        window.game = this;
+    }
+    static async create(app, gender, name) {
+        const [map, set, caf, gui, win, text] = await Promise.all([GameMap.load(MAP), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app)]);
+        return new GameScene(app, name, map, set, caf, gui, win, text);
+    }
+    update(dt) {
+        const inp = this.app.input, keys = inp.keys, p = this.player, hud = this.hud;
+        if (inp.pressed.has('g') || inp.pressed.has('f1'))
+            this.debug = !this.debug;
+        if (inp.pressed.has('r'))
+            hud.running = !hud.running;
+        if (inp.pressed.has('c'))
+            this.win.status = !this.win.status;
+        if (inp.pressed.has('i'))
+            this.win.item = !this.win.item;
+        if (inp.pressed.has('escape')) {
+            if (this.win.status || this.win.item)
+                this.win.status = this.win.item = false;
+            else
+                this.paused = !this.paused;
+        }
+        if (inp.clicked) {
+            const b = this.gui.button(inp.x, inp.y);
+            if (this.paused) {
+                if (inp.y > 215 && inp.y < 235)
+                    TitleScene.create(this.app).then(t => this.app.go(t));
+                else
+                    this.paused = false;
             }
-        },
-    };
-    let camX0 = 0, camY0 = 0;
-    const dirIndex = (vx, vy) => { const ang = Math.atan2(vy, vx); /* 0 = right */ /* 0 = right */ const order = [6, 7, 0, 1, 2, 3, 4, 5]; return order[(Math.round(ang / (Math.PI / 4)) + 8) % 8]; };
-    let last = performance.now();
-    const frame = (now) => {
-        const dt = Math.max(0, Math.min(50, now - last));
-        last = now;
+            else if (b === 'status')
+                this.win.status = !this.win.status;
+            else if (b === 'item')
+                this.win.item = !this.win.item;
+            else if (b === 'menu')
+                this.paused = true;
+        }
+        if (this.paused)
+            return;
         let dx = 0, dy = 0;
         if (keys.has('a') || keys.has('arrowleft'))
             dx--;
@@ -70,58 +95,61 @@ async function main() {
             dy--;
         if (keys.has('s') || keys.has('arrowdown'))
             dy++;
-        let fdx = dx, fdy = dy;
-        if (!dx && !dy && mouse.down && mouse.y < HUD_Y) {
+        let vx = dx, vy = dy;
+        if (!dx && !dy && inp.down && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y)) {
             // walk towards the mouse pointer (screen space, relative to the player)
-            const px = player.x - camX0, py = player.y - camY0;
-            const vx = mouse.x - px, vy = mouse.y - py, d = Math.hypot(vx, vy);
+            const mx = inp.x - (p.x - this.camX), my = inp.y - (p.y - this.camY), d = Math.hypot(mx, my);
             if (d > 6) {
-                fdx = vx / d;
-                fdy = vy / d;
-                dx = Math.round(fdx * 1.2);
-                dy = Math.round(fdy * 1.2);
-                if (!dx && !dy)
-                    dx = 1;
+                vx = mx / d;
+                vy = my / d;
             }
         }
-        if (dx || dy) {
-            const run = keys.has('shift') || hud.running;
-            player.dir = dirIndex(fdx || dx, fdy || dy);
-            const sp = (run ? 0.30 : 0.16) * dt, n = Math.hypot(fdx || dx, fdy || dy);
-            const nx = player.x + (fdx || dx) / n * sp, ny = player.y + (fdy || dy) / n * sp;
+        if (vx || vy) {
+            const run = keys.has('shift') || hud.running, n = Math.hypot(vx, vy), sp = (run ? 0.30 : 0.16) * dt;
+            p.dir = dirIndex(vx, vy);
+            const nx = p.x + vx / n * sp, ny = p.y + vy / n * sp;
             // slide along obstacles: try both axes, then each alone
-            if (!map.blockedReal(nx, ny)) {
-                player.x = nx;
-                player.y = ny;
+            if (!this.map.blockedReal(nx, ny)) {
+                p.x = nx;
+                p.y = ny;
             }
-            else if (!map.blockedReal(nx, player.y))
-                player.x = nx;
-            else if (!map.blockedReal(player.x, ny))
-                player.y = ny;
+            else if (!this.map.blockedReal(nx, p.y))
+                p.x = nx;
+            else if (!this.map.blockedReal(p.x, ny))
+                p.y = ny;
             const na = run ? ANIM_RUN : ANIM_WALK;
-            if (na !== player.anim) {
-                player.anim = na;
-                player.t = 0;
+            if (na !== p.anim) {
+                p.anim = na;
+                p.t = 0;
             }
         }
-        else if (player.anim !== ANIM_IDLE) {
-            player.anim = ANIM_IDLE;
-            player.t = 0;
+        else if (p.anim !== ANIM_IDLE) {
+            p.anim = ANIM_IDLE;
+            p.t = 0;
         }
-        player.t += dt;
-        camX0 = Math.round(Math.max(0, Math.min(map.realW - SCREEN_W, player.x - SCREEN_W / 2)));
-        camY0 = Math.round(Math.max(0, Math.min(map.realH - HUD_Y, player.y - HUD_Y / 2)));
-        map.draw(ctx, camX0, camY0, SCREEN_W, HUD_Y, [drawPlayer]);
-        if (debug)
-            map.drawJudge(ctx, camX0, camY0, SCREEN_W, HUD_Y);
+        p.t += dt;
+    }
+    draw(ctx) {
+        const p = this.player, map = this.map, inp = this.app.input;
+        this.camX = Math.round(Math.max(0, Math.min(map.realW - SCREEN_W, p.x - SCREEN_W / 2)));
+        this.camY = Math.round(Math.max(0, Math.min(map.realH - HUD_Y, p.y - HUD_Y / 2)));
+        map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer]);
+        if (this.debug) {
+            map.drawJudge(ctx, this.camX, this.camY, SCREEN_W, HUD_Y);
+            this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2);
+        }
         ctx.fillStyle = '#000';
         ctx.fillRect(0, HUD_Y, SCREEN_W, SCREEN_H - HUD_Y);
-        gui.draw(ctx, hud);
-        gui.text(ctx, `${Math.round(player.x)},${Math.round(player.y)}`, 4, 2);
-        gui.cursor(ctx, mouse.x, mouse.y, mouse.down);
-        requestAnimationFrame(frame);
-    };
-    requestAnimationFrame(frame);
+        this.win.draw(ctx, this.hud, this.name);
+        this.gui.draw(ctx, this.hud);
+        if (this.paused) {
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(0, 0, SCREEN_W, HUD_Y);
+            this.text.drawCenter(ctx, 'PAUSED', 320, 190);
+            this.text.drawCenter(ctx, 'Exit to title', 320, 220);
+            this.text.drawCenter(ctx, '(click elsewhere to resume)', 320, 245);
+        }
+        this.gui.cursor(ctx, inp.x, inp.y, inp.down);
+    }
 }
-main().catch(e => { document.getElementById('status').textContent = String(e); console.error(e); });
 //# sourceMappingURL=game.js.map

@@ -47,6 +47,12 @@ export class Gui {
     this.put(ctx, this.bar.pattern(h.running ? 11 : 10)); // RUN / WALK highlight
     this.digits(ctx, h.level, 52, 465);
   }
+  /** Which HUD button is under (x,y): Bar patterns 17/16/18 are the white hit masks for MENU/ITEM/STATUS. */
+  button(x: number, y: number): 'menu' | 'item' | 'status' | null {
+    const test = (p: number) => { const f = this.bar.pattern(p); if (!f || x < f.ox || y < f.oy || x >= f.ox + f.canvas.width || y >= f.oy + f.canvas.height) return false;
+      return f.canvas.getContext('2d')!.getImageData(Math.floor(x - f.ox), Math.floor(y - f.oy), 1, 1).data[3] > 0; };
+    return test(17) ? 'menu' : test(16) ? 'item' : test(18) ? 'status' : null;
+  }
   cursor(ctx: CanvasRenderingContext2D, x: number, y: number, pressed = false) {
     const f = this.sys.pattern(pressed ? 1 : 0); if (f) ctx.drawImage(f.canvas, x + f.ox, y + f.oy);
   }
