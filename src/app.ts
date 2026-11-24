@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { SpriteSet, Frame } from './sprites.js';
 import { SCREEN_W, SCREEN_H } from './gui.js';
 
@@ -36,7 +37,7 @@ export class App {
     (window as any).app = this;
   }
   /** Memoised sprite-set loader: gui('Game_Bar') -> data/ep1/gui/Game_Bar */
-  gui(name: string) { return this.set(`data/ep1/gui/${name}`); }
+  gui(name: string) { return this.set(Data.url(`gui/${name}`)); }
   set(base: string) { if (!this.sets.has(base)) this.sets.set(base, SpriteSet.load(base)); return this.sets.get(base)!; }
   go(s: Scene) { this.scene = s; }
   run() {

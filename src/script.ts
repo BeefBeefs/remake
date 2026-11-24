@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 // Interpreter for Scenario.Scs sentence blocks. Semantics taken from the executor in ShadowFlare.exe (0x430ab0/0x430f80):
 //  sentence type 0 = `if (a OP b) call block N` (OP 0 ==, 1 !=, 2 >, 3 <), 1 = assign, 2 = queue a message window (script keeps running),
 //  18/21 = talk begin/face, 19 = end talk. Operand kinds: 0-2 constant, 3/4/5 flag tables, 8 = game mode (always 0 offline; quest states set by sentence 62 are kept separately: 1 accepted, 2 completed), 9 = pointer state of an object (reads 0), 10/11/12 global arrays; others read as 0.
@@ -79,7 +80,7 @@ export class ScriptVM {
   talking = false; private ended = false;
   hooks: ScriptHooks | null = null;
   constructor(public data: ScriptData) { for (const [id, v] of data.flags) this.vars.set(`4:${id}`, v); }
-  static async load(scenario: string) { return new ScriptVM(await (await fetch(`data/ep1/scenario/${scenario}.script.json`)).json()); }
+  static async load(scenario: string) { return new ScriptVM(await (await fetch(Data.url(`scenario/${scenario}.script.json`))).json()); }
 
   get(kind: number, val: number): number {
     if (kind <= 2) return val;

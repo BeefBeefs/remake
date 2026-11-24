@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { loadCaf } from './caf.js';
 import { worldToReal } from './map.js';
 import { loadZones } from './zones.js';
@@ -75,7 +76,7 @@ export class Actor {
     static async load(app, r) {
         if (r.model < 0)
             return new Actor(r, null, null, null);
-        const base = `data/ep1/actors/${r.kind}/${r.model}`;
+        const base = Data.url(`actors/${r.kind}/${r.model}`);
         const [set, sdw, caf] = await Promise.all([app.set(base), app.set(base + '_sdw'), loadCaf(base + '.caf.json')]);
         return new Actor(r, set, sdw, caf);
     }
@@ -257,7 +258,7 @@ export class Actor {
         return this.alive && Math.abs(px - this.x) < 55 && Math.abs(py - this.y) < 40; const k = this.scale; return this.alive && Math.abs(px - this.x) < 20 * k && py < this.y + 6 && py > this.y - 70 * k; }
 }
 export async function loadScenarioActors(app, scenario) {
-    const d = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
+    const d = await (await fetch(Data.url(`scenario/${scenario}.actors.json`))).json();
     return { map: d.map, music: d.music, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))), zones: await loadZones(app, d.objects ?? []) };
 }
 //# sourceMappingURL=actors.js.map

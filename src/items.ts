@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { Text } from './app.js';
 
 /** One record of Item.Ibn (see docs/FORMATS.md). `f` holds the non-zero 32-bit fields by index. */
@@ -9,7 +10,7 @@ export class ItemDb {
   private constructor(raw: { name: string; type: string; f: Record<string, number> }[][]) {
     this.sections = raw.map((s, sec) => s.map((it, idx) => ({ ...it, sec, idx })));
   }
-  static async load() { return new ItemDb(await (await fetch('data/ep1/items.json')).json()); }
+  static async load() { return new ItemDb(await (await fetch(Data.url('items.json'))).json()); }
   /** Script item reference: category = section, id = field 1 (0 when absent). */
   find(cat: number, id: number) { return this.sections[cat]?.find(it => (it.f['1'] ?? 0) === id); }
   get(sec: number, idx: number) { return this.sections[sec]?.[idx]; }

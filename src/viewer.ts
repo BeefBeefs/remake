@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
 
@@ -6,7 +7,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 async function main() {
   const status = $('status');
   status.textContent = 'loading…';
-  const [set, caf] = await Promise.all([SpriteSet.load('data/ep1/male'), loadCaf('data/ep1/male.caf.json')]);
+  const [set, caf] = await Promise.all([SpriteSet.load(Data.url('male')), loadCaf(Data.url('male.caf.json'))]);
   status.textContent = `${set.patternCount} patterns, ${caf.anims.length} animations`;
   const animSel = $<HTMLSelectElement>('anim'), dirSel = $<HTMLSelectElement>('dir'), layerBox = $('layers');
   caf.anims.forEach((_, i) => animSel.add(new Option(`animation ${i}`, String(i))));

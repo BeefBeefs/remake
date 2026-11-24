@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { SpriteSet } from './sprites.js';
 /** World (iso) -> real pixel conversion used by RKC_RPGSCRN (defaults 15 / 10). */
 export const worldToReal = (wx, wy) => [Math.trunc((wx - wy) * 15 / 100), Math.trunc((wx + wy) * 10 / 100)];
@@ -20,14 +21,14 @@ export class GameMap {
         this.objs.sort((a, b) => a.ry - b.ry);
     }
     static async load(name) {
-        const m = await (await fetch(`data/ep1/maps/${name}.json`)).json();
+        const m = await (await fetch(Data.url(`maps/${name}.json`))).json();
         const map = new GameMap(m);
         const cache = new Map();
         map.sets = await Promise.all(m.lst.map(f => {
             if (!f)
                 return Promise.resolve(null);
             if (!cache.has(f))
-                cache.set(f, SpriteSet.load(`data/ep1/pat/${f}`));
+                cache.set(f, SpriteSet.load(Data.url(`pat/${f}`)));
             return cache.get(f);
         }));
         let n = 0;

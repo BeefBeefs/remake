@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { worldToReal } from './map.js';
 /** A scripted map object: chests/barrels come as a closed + open pair at the same spot (script sentences 22/23 show/hide them); other types are invisible trigger zones. */
 export class Zone {
@@ -33,7 +34,7 @@ export async function loadZones(app, recs) {
     const types = [...new Set(recs.filter(r => r.pat >= 0 && r.type >= 0 && r.type < 10000).map(r => r.type))];
     const sets = new Map();
     await Promise.all(types.map(async (t) => {
-        const get = (n) => app.set(`data/ep1/objects/${n}`).catch(() => null);
+        const get = (n) => app.set(Data.url(`objects/${n}`)).catch(() => null);
         sets.set(t, [await get(String(t)), await get(`${t}_sdw`)]);
     }));
     return recs.map(r => { const [a, b] = sets.get(r.type) ?? [null, null]; return new Zone(r, a, b); });

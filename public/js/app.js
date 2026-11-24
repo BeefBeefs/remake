@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { SpriteSet } from './sprites.js';
 import { SCREEN_W, SCREEN_H } from './gui.js';
 /** Shared input state; `clicked` is true for exactly one frame after a left button press. */
@@ -51,7 +52,7 @@ export class App {
         window.app = this;
     }
     /** Memoised sprite-set loader: gui('Game_Bar') -> data/ep1/gui/Game_Bar */
-    gui(name) { return this.set(`data/ep1/gui/${name}`); }
+    gui(name) { return this.set(Data.url(`gui/${name}`)); }
     set(base) { if (!this.sets.has(base))
         this.sets.set(base, SpriteSet.load(base)); return this.sets.get(base); }
     go(s) { this.scene = s; }

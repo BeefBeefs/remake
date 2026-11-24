@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
 import { Drawable, worldToReal } from './map.js';
@@ -63,7 +64,7 @@ export class Actor implements Drawable {
   get radius() { return 22 * this.scale; }
   static async load(app: App, r: ActorRec) {
     if (r.model < 0) return new Actor(r, null as unknown as SpriteSet, null as unknown as SpriteSet, null as unknown as Caf);
-    const base = `data/ep1/actors/${r.kind}/${r.model}`;
+    const base = Data.url(`actors/${r.kind}/${r.model}`);
     const [set, sdw, caf] = await Promise.all([app.set(base), app.set(base + '_sdw'), loadCaf(base + '.caf.json')]);
     return new Actor(r, set, sdw, caf);
   }
@@ -138,6 +139,6 @@ export class Actor implements Drawable {
   hit(px: number, py: number) { if (this.gen) return this.alive && Math.abs(px - this.x) < 55 && Math.abs(py - this.y) < 40; const k = this.scale; return this.alive && Math.abs(px - this.x) < 20 * k && py < this.y + 6 && py > this.y - 70 * k; }
 }
 export async function loadScenarioActors(app: App, scenario: string): Promise<{ map: string | null; music?: number; actors: Actor[]; zones: Zone[] }> {
-  const d: { map: string | null; music?: number; actors: ActorRec[]; objects?: ZoneRec[] } = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
+  const d: { map: string | null; music?: number; actors: ActorRec[]; objects?: ZoneRec[] } = await (await fetch(Data.url(`scenario/${scenario}.actors.json`))).json();
   return { map: d.map, music: d.music, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))), zones: await loadZones(app, d.objects ?? []) };
 }

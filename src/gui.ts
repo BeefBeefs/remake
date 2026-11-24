@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { SpriteSet, Frame } from './sprites.js';
 
 /** Native screen size of the original game (the HUD patterns hold absolute 640x480 positions). */
@@ -22,7 +23,7 @@ export class Gui {
   private constructor(private bar: SpriteSet, private font: SpriteSet, private sys: SpriteSet) {}
   static async load(): Promise<Gui> {
     const [bar, font, sys] = await Promise.all([
-      SpriteSet.load('data/ep1/gui/Game_Bar'), SpriteSet.load('data/ep1/gui/Common_Font00'), SpriteSet.load('data/ep1/gui/Game_System'),
+      SpriteSet.load(Data.url('gui/Game_Bar')), SpriteSet.load(Data.url('gui/Common_Font00')), SpriteSet.load(Data.url('gui/Game_System')),
     ]);
     return new Gui(bar, font, sys);
   }

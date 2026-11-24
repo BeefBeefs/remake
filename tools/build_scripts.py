@@ -2,9 +2,8 @@
 """Scenario.Scs -> public/data/ep1/scenario/<id>.script.json {flags, messages, status:[[net,status,char,block]], blocks:[[[type,[[kind,val]..]]..]..]}"""
 import os, sys, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import scs
-root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'public')
-src, out = os.path.join(root, 'assets', 'ep1', 'Scenario'), os.path.join(root, 'data', 'ep1', 'scenario')
+import scs, epaths
+src, out = os.path.join(epaths.assets(), 'Scenario'), os.path.join(epaths.data(), 'scenario')
 os.makedirs(out, exist_ok=True)
 ok = 0
 for sc in sorted(os.listdir(src)):

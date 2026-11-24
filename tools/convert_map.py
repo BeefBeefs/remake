@@ -9,11 +9,10 @@ World -> real pixels: rx = (wx - wy) * 15 / 100, ry = (wx + wy) * 10 / 100  (RKC
 """
 import sys, os, json, base64, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import rclib, njp, convert
+import rclib, njp, convert, epaths
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'public')
-SRC = os.path.join(ROOT, 'assets', 'ep1', 'Map')
-OUT = os.path.join(ROOT, 'data', 'ep1')
+SRC = os.path.join(epaths.assets(1), 'Map')   # the Map folder of the base install holds the maps of every episode
+OUT = epaths.data()
 
 def find(dirname, name, exts):
     for f in os.listdir(os.path.join(SRC, dirname)):
@@ -61,7 +60,9 @@ def convert_map(name):
     for i, f in enumerate(lst):
         if not f: continue
         if f not in sets:
-            sets[f] = convert.convert_njp(os.path.join(SRC, 'Pattern', f), os.path.join(OUT, 'pat'), outname(f))
+            if epaths.lower_data(os.path.join('pat', outname(f) + '.json')):   # converted by this or a lower episode
+                sets[f] = json.load(open(epaths.lower_data(os.path.join('pat', outname(f) + '.json'))))
+            else: sets[f] = convert.convert_njp(os.path.join(SRC, 'Pattern', f), os.path.join(OUT, 'pat'), outname(f))
     for i, f in enumerate(lst):
         if not f: break
         m = sets[f]

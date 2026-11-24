@@ -6,7 +6,7 @@ async function main() {
     app.run();
     const q = new URLSearchParams(location.search);
     if (q.has('skip'))
-        app.go(await GameScene.create(app, q.get('skip') === 'female' ? 'female' : 'male', 'SHADOW')); // dev shortcut
+        app.go(await GameScene.create(app, q.get('skip') === 'female' ? 'female' : 'male', 'SHADOW', { ep: +(q.get('ep') ?? 1) })); // dev shortcut
     else
         app.go(await TitleScene.create(app));
 }

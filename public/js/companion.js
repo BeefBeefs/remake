@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { loadCaf } from './caf.js';
 import { dirIndex } from './actors.js';
 /**
@@ -39,7 +40,7 @@ export class Pet {
     }
     static async load(app, tables, idx, x, y) {
         const t = tables['60'], row = t ? t.v.slice(idx * t.cols, idx * t.cols + t.cols) : [0, 0, 1000, 1000, 1000], name = t?.s?.[idx * t.cols] || `Dog ${idx}`;
-        const model = idx < MODEL_OF.length ? MODEL_OF[idx] : row[1] ?? 0, base = `data/ep1/actors/partner/${model}`;
+        const model = idx < MODEL_OF.length ? MODEL_OF[idx] : row[1] ?? 0, base = Data.url(`actors/partner/${model}`);
         const [set, sdw, caf] = await Promise.all([app.set(base), app.set(base + '_sdw'), loadCaf(base + '.caf.json')]);
         return new Pet(idx, name, [row[2] ?? 1000, row[3] ?? 1000, row[4] ?? 1000], set, sdw, caf, x, y);
     }

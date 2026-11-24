@@ -1,10 +1,11 @@
+import { Data } from './data.js';
 import { loadCaf } from './caf.js';
 const FRAME_MS = 80;
 /** Effect id used by script sentence 36 -> sprite set folder. GUESS: 20000 + k is the k-th folder of Character\Option (the exe enumerates that directory; see tools/build_fx.py). */
 export const fxFolder = (index, id) => index[id - 20000];
 export async function loadFxSet(app, folder) {
     try {
-        const [set, caf] = await Promise.all([app.set(`data/ep1/fx/${folder}`), loadCaf(`data/ep1/fx/${folder}.caf.json`)]);
+        const [set, caf] = await Promise.all([app.set(Data.url(`fx/${folder}`)), loadCaf(Data.url(`fx/${folder}.caf.json`))]);
         return { set, caf };
     }
     catch {

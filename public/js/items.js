@@ -1,9 +1,10 @@
+import { Data } from './data.js';
 export const SECTION_NAMES = ['Weapon', 'Armor', 'Accessory', 'Consumable', 'Misc'];
 export class ItemDb {
     constructor(raw) {
         this.sections = raw.map((s, sec) => s.map((it, idx) => ({ ...it, sec, idx })));
     }
-    static async load() { return new ItemDb(await (await fetch('data/ep1/items.json')).json()); }
+    static async load() { return new ItemDb(await (await fetch(Data.url('items.json'))).json()); }
     /** Script item reference: category = section, id = field 1 (0 when absent). */
     find(cat, id) { return this.sections[cat]?.find(it => (it.f['1'] ?? 0) === id); }
     get(sec, idx) { return this.sections[sec]?.[idx]; }

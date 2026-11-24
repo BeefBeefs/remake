@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 /** WebAudio wrapper: looping background music (data/ep1/audio/bgmN.ogg, title.ogg) and one-shot sound effects (sfxN.ogg = Voice00.Voc entry N). */
 class AudioEngine {
     constructor() {
@@ -24,7 +25,7 @@ class AudioEngine {
         if (!p) {
             p = (async () => { const c = this.ensure(); if (!c)
                 return null; try {
-                return await c.decodeAudioData(await (await fetch(`data/ep1/audio/${name}.ogg`)).arrayBuffer());
+                return await c.decodeAudioData(await (await fetch(Data.url(`audio/${name}.ogg`))).arrayBuffer());
             }
             catch {
                 return null;

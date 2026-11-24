@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { SpriteSet, Frame } from './sprites.js';
 
 export interface MapJson {
@@ -29,12 +30,12 @@ export class GameMap {
     this.objs.sort((a, b) => a.ry - b.ry);
   }
   static async load(name: string): Promise<GameMap> {
-    const m: MapJson = await (await fetch(`data/ep1/maps/${name}.json`)).json();
+    const m: MapJson = await (await fetch(Data.url(`maps/${name}.json`))).json();
     const map = new GameMap(m);
     const cache = new Map<string, Promise<SpriteSet>>();
     map.sets = await Promise.all(m.lst.map(f => {
       if (!f) return Promise.resolve(null);
-      if (!cache.has(f)) cache.set(f, SpriteSet.load(`data/ep1/pat/${f}`));
+      if (!cache.has(f)) cache.set(f, SpriteSet.load(Data.url(`pat/${f}`)));
       return cache.get(f)!;
     }));
     let n = 0;

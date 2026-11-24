@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { App } from './app.js';
 import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
@@ -32,7 +33,7 @@ export class Pet implements Drawable {
   private constructor(public idx: number, public name: string, private mult: [number, number, number], private set_: SpriteSet, private sdw: SpriteSet, private caf: Caf, x: number, y: number) { this.x = x; this.y = y; this.hp = this.maxHp; }
   static async load(app: App, tables: TableDb, idx: number, x: number, y: number) {
     const t = tables['60'], row = t ? t.v.slice(idx * t.cols, idx * t.cols + t.cols) : [0, 0, 1000, 1000, 1000], name = t?.s?.[idx * t.cols] || `Dog ${idx}`;
-    const model = idx < MODEL_OF.length ? MODEL_OF[idx] : row[1] ?? 0, base = `data/ep1/actors/partner/${model}`;
+    const model = idx < MODEL_OF.length ? MODEL_OF[idx] : row[1] ?? 0, base = Data.url(`actors/partner/${model}`);
     const [set, sdw, caf] = await Promise.all([app.set(base), app.set(base + '_sdw'), loadCaf(base + '.caf.json')]);
     return new Pet(idx, name, [row[2] ?? 1000, row[3] ?? 1000, row[4] ?? 1000], set, sdw, caf, x, y);
   }

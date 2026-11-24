@@ -140,3 +140,7 @@ Kill exp (exe 0x4134a0): `monster[+0x17c] * share% / 100`, share from Table.Tbd 
 
 ## Drop tables
 Table.Tbd 30 (343 x 22) = per drop level `[tries, chance%, 10 x (table-31 row, grade code)]`; table 31 (524 x 5) = `(category, -, -, id, mask)` fixed item or `(-1, max, min, -1, mask)` equipment power window; weights = Item.Ibn field 4. Details in docs/PROGRESS.md ("Item generator decoded").
+
+## Episode 2-4 patches (Data.scm)
+The patch installers are LHA self-extractors (`tools/lhx`). `Data.scm` = `"SCRFile\0"` + u32 version, then a normal `.sma` archive (tools/sma.py) scrambled per block of B bytes: for a block of n bytes, `out[i] = in[n-1-i] ^ (B & 0xff)` and `out[n-1-i] = in[i]` for i < n/2 (the last block is shorter and uses its own n). B comes from the serial key (Ep2 19872, Ep3 34384, Ep4 24784; `tools/unscm.py` finds it by checking that the plaintext starts with `"SMAFile\0"`). The unpacked patch holds Scenario/, Character/ENEMY/, System/Game/Parameter/Item.Ibn (Ep2, Ep4) or Table.Tbd (Ep3); all maps of every episode already live in the Episode 1 Map folder.
+Overlay layout in the web build: `data/epN/` holds only what Episode N added or changed plus `manifest.json` (list of its files); see `src/data.ts`.

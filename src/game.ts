@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
 import { GameMap, Drawable, worldToReal, realToWorld } from './map.js';
@@ -42,7 +43,7 @@ const ATTRS = ['Fire', 'Water', 'Earth', 'Thunder', 'Holy', 'Dark', 'Gel', 'Meta
 const SFX = { hit: 1, hurt: 2, kill: 10, heavyHit: 2, swingLight: 48, swingHeavy: 47, swingBow: 93 };
 const savedZones = new Map<string, Record<number, boolean>>();
 export interface SaveData {
-  v: 1; slot?: number; at?: number; area?: string; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
+  v: 1; ep?: number; slot?: number; at?: number; area?: string; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
   inv: [number, number, number, number, number?, number?, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>; zones?: Record<string, Record<number, boolean>>;
   magic?: MagicSave; explored?: ExploredSave; pet?: PetSave; invSet?: number; career?: number; attr?: number[]; usage?: Usage; wh?: [number, number, number, number, number?, number?, number?][];
 }
@@ -91,7 +92,7 @@ export class GameScene implements Scene {
   save() {
     this.stash();
     const d: SaveData = {
-      v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
+      v: 1, ep: Data.ep, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
       career: this.win.career, attr: this.win.attr, usage: this.usage, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
       inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, (e.eq ? 1 : 0) | (e.alt ? 2 : 0), e.unid ? 1 : 0, e.dur ?? -1]),
       vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
@@ -131,7 +132,7 @@ export class GameScene implements Scene {
   private async exit(idx: number, entry: number) {
     if (this.leaving) return;
     const id = String(idx).padStart(8, '0');
-    const ok = await fetch(`data/ep1/scenario/${id}.script.json`, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+    const ok = await fetch(Data.url(`scenario/${id}.script.json`), { method: 'HEAD' }).then(r => r.ok).catch(() => false);
     if (!ok) { this.banner = { text: 'This area is not available', t: 0 }; return; }
     this.target = null; this.travel(id, entry);
   }
@@ -368,13 +369,14 @@ export class GameScene implements Scene {
       },
     };
   }
-  static async create(app: App, gender: Gender, name: string, opts?: { scenario?: string; carry?: GameScene; load?: SaveData; entry?: number; slot?: number }) {
+  static async create(app: App, gender: Gender, name: string, opts?: { scenario?: string; carry?: GameScene; load?: SaveData; entry?: number; slot?: number; ep?: number }) {
     const ld = opts?.load;
+    await Data.init(ld ? ld.ep ?? 1 : opts?.ep ?? Data.ep);   // which episodes' data overlays are installed (saves remember theirs; a character carried between scenarios keeps it)
     if (!ld && !opts?.carry) { savedVars.clear(); savedGround.clear(); savedZones.clear(); savedGlobals = new Map(); }   // a new game must not inherit the previous character's world state
     if (ld) { savedGlobals = new Map(ld.globals); savedVars.clear(); for (const [k, v] of Object.entries(ld.vars)) savedVars.set(k, new Map(v)); savedGround.clear(); for (const [k, v] of Object.entries(ld.ground)) savedGround.set(k, v); savedZones.clear(); for (const [k, v] of Object.entries(ld.zones ?? {})) savedZones.set(k, v); }
     const scenario = opts?.scenario ?? SCENARIO;
     const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null as string | null, music: undefined as number | undefined, actors: [] as Actor[], zones: [] as Zone[] }));
-    const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
+    const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(Data.url(`${gender}`)), loadCaf(Data.url(`${gender}.caf.json`)), Gui.load(), Windows.load(app), Text.load(app), fetch(Data.url('tables.json')).then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
     const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm, scenario, gender);
     if (vm) { vm.globals = savedGlobals; const sv = savedVars.get(scenario); if (sv) vm.vars = sv; }
     const sz = savedZones.get(scenario); if (sz) for (const z of sc.zones) if (z.rec.id in sz) z.visible = sz[z.rec.id];
@@ -399,7 +401,7 @@ export class GameScene implements Scene {
     g.zones = sc.zones; g.musicIdx = sc.music;
     if (vm) {   // effect sprite sets named by sentence 36 of this scenario
       const ids = new Set<number>(); for (const bl of vm.data.blocks) for (const [sid, ops] of bl) if (sid === 36 && ops[0]?.[0] === 1) ids.add(ops[0][1]);
-      if (ids.size) { const index: string[] = await (await fetch('data/ep1/fx/index.json')).json().catch(() => []); await Promise.all([...ids].map(async id => { const f = fxFolder(index, id), set = f ? await loadFxSet(app, f) : null; if (set) g.fxSets.set(id, set); })); }
+      if (ids.size) { const index: string[] = await (await fetch(Data.url('fx/index.json'))).json().catch(() => []); await Promise.all([...ids].map(async id => { const f = fxFolder(index, id), set = f ? await loadFxSet(app, f) : null; if (set) g.fxSets.set(id, set); })); }
     }
     // the scripts of the three towns answer a click on object 10000300 (the warehouse, not an Mct record) with sentence 41; draw a chest near the arrival point (PLACEHOLDER position and sprite: the exe's own placement is not decoded)
     if (vm?.data.status.some(([, st, c]) => st === 0 && c === WAREHOUSE_OBJECT)) {

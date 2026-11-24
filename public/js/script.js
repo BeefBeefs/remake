@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 const warned = new Set();
 export class ScriptVM {
     get pending() { return this.queue[0] ?? null; }
@@ -16,7 +17,7 @@ export class ScriptVM {
         for (const [id, v] of data.flags)
             this.vars.set(`4:${id}`, v);
     }
-    static async load(scenario) { return new ScriptVM(await (await fetch(`data/ep1/scenario/${scenario}.script.json`)).json()); }
+    static async load(scenario) { return new ScriptVM(await (await fetch(Data.url(`scenario/${scenario}.script.json`))).json()); }
     get(kind, val) {
         if (kind <= 2)
             return val;

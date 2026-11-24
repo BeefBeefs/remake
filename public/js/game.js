@@ -1,3 +1,4 @@
+import { Data } from './data.js';
 import { loadCaf } from './caf.js';
 import { GameMap, worldToReal, realToWorld } from './map.js';
 import { Inventory } from './items.js';
@@ -60,7 +61,7 @@ export class GameScene {
     save() {
         this.stash();
         const d = {
-            v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
+            v: 1, ep: Data.ep, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
             career: this.win.career, attr: this.win.attr, usage: this.usage, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
             inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, (e.eq ? 1 : 0) | (e.alt ? 2 : 0), e.unid ? 1 : 0, e.dur ?? -1]),
             vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
@@ -121,7 +122,7 @@ export class GameScene {
         if (this.leaving)
             return;
         const id = String(idx).padStart(8, '0');
-        const ok = await fetch(`data/ep1/scenario/${id}.script.json`, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+        const ok = await fetch(Data.url(`scenario/${id}.script.json`), { method: 'HEAD' }).then(r => r.ok).catch(() => false);
         if (!ok) {
             this.banner = { text: 'This area is not available', t: 0 };
             return;
@@ -564,6 +565,7 @@ export class GameScene {
     }
     static async create(app, gender, name, opts) {
         const ld = opts?.load;
+        await Data.init(ld ? ld.ep ?? 1 : opts?.ep ?? Data.ep); // which episodes' data overlays are installed (saves remember theirs; a character carried between scenarios keeps it)
         if (!ld && !opts?.carry) {
             savedVars.clear();
             savedGround.clear();
@@ -584,7 +586,7 @@ export class GameScene {
         }
         const scenario = opts?.scenario ?? SCENARIO;
         const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null, music: undefined, actors: [], zones: [] }));
-        const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
+        const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(Data.url(`${gender}`)), loadCaf(Data.url(`${gender}.caf.json`)), Gui.load(), Windows.load(app), Text.load(app), fetch(Data.url('tables.json')).then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
         const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm, scenario, gender);
         if (vm) {
             vm.globals = savedGlobals;
@@ -677,7 +679,7 @@ export class GameScene {
                     if (sid === 36 && ops[0]?.[0] === 1)
                         ids.add(ops[0][1]);
             if (ids.size) {
-                const index = await (await fetch('data/ep1/fx/index.json')).json().catch(() => []);
+                const index = await (await fetch(Data.url('fx/index.json'))).json().catch(() => []);
                 await Promise.all([...ids].map(async (id) => { const f = fxFolder(index, id), set = f ? await loadFxSet(app, f) : null; if (set)
                     g.fxSets.set(id, set); }));
             }

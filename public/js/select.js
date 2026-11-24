@@ -11,6 +11,7 @@ export class SelectScene {
         this.text = text;
         this.gender = 'male';
         this.name = 'SHADOW';
+        this.ep = 4;
         this.busy = false;
         this.mode = null;
     }
@@ -24,7 +25,7 @@ export class SelectScene {
             else if (r === 'single') {
                 this.busy = true;
                 this.mode = null;
-                GameScene.create(this.app, this.gender, this.name.trim()).then(g => this.app.go(g));
+                GameScene.create(this.app, this.gender, this.name.trim(), { ep: this.ep }).then(g => this.app.go(g));
             }
             return;
         }
@@ -40,6 +41,8 @@ export class SelectScene {
             this.gender = 'male';
         else if (inRect(this.s.pattern(9), i.x, i.y))
             this.gender = 'female';
+        else if (i.x >= 400 && i.x < 620 && i.y >= 404 && i.y < 432)
+            this.ep = this.ep % 4 + 1; // episode (data overlay) switch
         else if (inRect(this.s.pattern(4), i.x, i.y) && this.name.trim()) {
             this.mode = new ModeWindow(this.app, this.s, this.text);
         }
@@ -59,6 +62,7 @@ export class SelectScene {
         put(ctx, s, hov(2) ? 3 : 2);
         put(ctx, s, 34);
         this.text.draw(ctx, this.name + (Math.floor(performance.now() / 500) % 2 ? '_' : ''), 190, 412);
+        this.text.draw(ctx, `Episode ${this.ep} >`, 410, 412);
         this.mode?.draw(ctx);
         if (this.busy)
             this.text.drawCenter(ctx, 'Loading...', 320, 440);
