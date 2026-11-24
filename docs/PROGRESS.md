@@ -103,3 +103,9 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 
 ## Warp arrival (checked)
 - Table 40 column 2 (50 for most towns, 2/3/4/6 for Episode 1 dungeons) is not a zone id in any Episode 1 scenario (`10000000+entry` is absent in all four reachable targets); the only gate-like object in each is zone 200. Remake keeps arriving at zone 200, which is what the gate window uses in practice. Column 2 is probably an index into the gate list of that map; revisit if Episode 2+ scenarios are added.
+
+## Sound playback in the exe (partial)
+- Sentence 16 handler (0x432500) and all in-game sounds go through `0x417260(this=0x482df4, a1, soundId, ownerFilter, ...)` (60 call sites; arg2 = index into Voice00.Voc, arg3 = owner/player index or -1 for everyone).
+- Constant sound ids at the monster behaviour functions (0x42a000-0x430000, one function per monster model: swing/cast/projectile spawn): 19 (0x13), 21, 22 (most common, 6 sites), 23, 29, 51, 54, 79, 94; 0x41/0x42 (65/66) near 0x433fea/0x41903a. Ids 20000+ (0x4e2d, 0x5208, 0x5217) seen in the damage code are effect/animation ids passed to the effect spawner (0x466420), not Voc entries; sentence 40 operand 20010 is the same kind.
+- Not mapped yet: the player's swing/hit sounds (calls at 0x44xxxx use a computed id, probably from the weapon type) and the impact/hurt sounds. The remake keeps placeholder ids hit 1 / hurt 2 / kill 10 until the weapon-type table is found.
+- Music: Game/Music BGM00-06 are all converted (bgm0-6); the scripts contain no music sentence, so the exe picks music from the map; the remake's mapping (town 0, dungeon 4, field 1) is still a guess.
