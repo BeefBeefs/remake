@@ -668,7 +668,7 @@ export class GameScene implements Scene {
     }
     if (inp.pressed.has('escape') && this.qlog) this.toggleQuestLog();
     else if (inp.pressed.has('escape')) { if (this.win.status || this.win.item || this.win.magic || this.mapwin.open) this.win.status = this.win.item = this.win.magic = this.mapwin.open = this.win.mapOpen = false; else { this.menu.open('main'); this.paused = true; return; } }
-    if (inp.pressed.has('shift+capslock')) this.win.inv.switchSet();
+    if (inp.pressed.has('shift+capslock') || inp.pressed.has('capslock')) this.win.inv.switchSet();   // manual: CapsLock swaps the two equipment sets
     if (inp.clicked) {
       const b = this.gui.button(inp.x, inp.y);
       const bk = this.magic.barHit(inp.x, inp.y);
@@ -712,6 +712,12 @@ export class GameScene implements Scene {
     else if (inp.clicked && hov) this.talkTo(hov); else if (inp.clicked && gh) this.pickUp(gh);
     else if (inp.clicked && zov) this.useZone(zov);
     else if (inp.clicked) this.target = null;
+    // Shift + mouse button = attack in place (manual): no walking, swing at the nearest enemy in reach or at thin air
+    const standing = keys.has('shift') && inp.down && !tab && !this.dead && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y);
+    if (standing) {
+      const rr = this.rangedWeapon() ? 420 : 58, near = hov?.enemy ? hov : this.actors.filter(a => a.enemy && a.alive).sort((a, b) => Math.hypot(a.x - p.x, (a.y - p.y) * 1.6) - Math.hypot(b.x - p.x, (b.y - p.y) * 1.6))[0];
+      this.target = near && Math.hypot(near.x - p.x, (near.y - p.y) * 1.6) <= rr * near.scale ? near : null;
+    }
     if (this.target && !this.target.alive) this.target = null;
     let dx = 0, dy = 0;
     const ar = !this.mapwin.open;   // with the map open the arrow keys scroll it
@@ -720,7 +726,7 @@ export class GameScene implements Scene {
     if (keys.has('w') || (ar && keys.has('arrowup'))) dy--;
     if (keys.has('s') || (ar && keys.has('arrowdown'))) dy++;
     let vx = dx, vy = dy;
-    if (!dx && !dy && inp.down && !tab && !hov && !gh && !gz && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y)) {
+    if (!dx && !dy && inp.down && !standing && !tab && !hov && !gh && !gz && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y)) {
       // walk towards the mouse pointer (screen space, relative to the player)
       const mx = inp.x - (p.x - this.camX), my = inp.y - (p.y - this.camY), d = Math.hypot(mx, my);
       if (d > 6) { vx = mx / d; vy = my / d; }
@@ -731,10 +737,12 @@ export class GameScene implements Scene {
       if (!atk) p.dir = actorDir(tx, ty);
       const reach = this.rangedWeapon() ? 420 : 58 * (this.target?.scale ?? 1);   // bow guns / slings shoot from a distance (manual: keep the button pressed to keep shooting)
       if (td > reach && !atk) { vx = tx / tl; vy = ty / tl; } else { vx = vy = 0; if (!atk) { this.atkT = 0; this.atkHit = false; p.anim = 3; p.t = 0; } }
+    } else if (standing && !dx && !dy) {
+      if (!atk) { p.dir = actorDir(inp.x - (p.x - this.camX), inp.y - (p.y - this.camY)); this.atkT = 0; this.atkHit = false; p.anim = 3; p.t = 0; }
     } else if (dx || dy) this.target = null;
     if (this.atkT >= 0) { vx = vy = 0; }
     if (vx || vy) {
-      const run = keys.has('shift') || hud.running, n = Math.hypot(vx, vy), sp = (run ? 0.30 : 0.16) * dt * (this.powerT > 0 ? 1.25 : 1);
+      const run = keys.has('shift') || keys.has('control') || hud.running, n = Math.hypot(vx, vy), sp = (run ? 0.30 : 0.16) * dt * (this.powerT > 0 ? 1.25 : 1);
       p.dir = dirIndex(vx, vy);
       const nx = p.x + vx / n * sp, ny = p.y + vy / n * sp;
       // slide along obstacles: try both axes, then each alone
