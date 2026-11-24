@@ -27,6 +27,13 @@ export class Windows {
             out.push(`${ATTR_NAMES[i]} ${v > 0 ? '+' : ''}${Math.round(v)}`); });
         return out;
     }
+    /** M.Defense: summed magic defense % of the worn armor (slot 65). */
+    mdef() { return Math.round(this.pct(1, 65)); }
+    /** Max HP / MP added by gear (armor slots 80 / 83, accessories 57 / 60). */
+    itemHp() { return Math.round(this.pct(1, 80) + this.pct(2, 57)); }
+    itemMp() { return Math.round(this.pct(1, 83) + this.pct(2, 60)); }
+    /** Walking speed bonus % of accessories (slot 54, GUESS). */
+    walkBonus() { return this.pct(2, 54); }
     /** Summed percentage bonus of one slot over the worn gear of a section. */
     pct(sec, slot) { return this.gear().reduce((a, e) => a + (e.item.sec === sec ? ItemDb.bonus(e.item, slot) : 0), 0); }
     constructor(st, icons, text, db) {
@@ -71,7 +78,7 @@ export class Windows {
         const [atkMin, atkMax] = w ? ItemDb.attack(eff(w)) : [0, 0];
         const twoH = !!w && ItemDb.twoHanded(eff(w));
         const fire = this.attrMul(0), water = this.attrMul(1);
-        return { atkMin: Math.round(atkMin * fire * (1 + this.pct(0, 60) / 100)), atkMax: Math.round(atkMax * fire * (1 + this.pct(0, 60) / 100)), defense: Math.round(water * (1 + this.pct(1, 53) / 100) * this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) && !(twoH && ItemDb.slot(e.item) === 'shield') ? ItemDb.defense(eff(e)) : 0), 0)), speed: (w ? ItemDb.speed(eff(w)) : 100) + this.pct(0, 84) };
+        return { atkMin: Math.round(atkMin * fire * (1 + (this.pct(0, 60) + this.pct(2, 63)) / 100)), atkMax: Math.round(atkMax * fire * (1 + (this.pct(0, 60) + this.pct(2, 63)) / 100)), defense: Math.round(water * (1 + this.pct(1, 53) / 100) * this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) && !(twoH && ItemDb.slot(e.item) === 'shield') ? ItemDb.defense(eff(e)) : 0), 0)), speed: (w ? ItemDb.speed(eff(w)) : 100) + this.pct(0, 84) + this.pct(2, 51) };
     }
     /** Durability wear (GUESS: 1 point per weapon hit dealt; 1 point on one random worn armor piece per hit taken). */
     wearWeapon() { const w = this.inv.equipped('weapon')[0]; if (w && ItemDb.maxDur(w.item) > 0)
@@ -126,11 +133,11 @@ export class Windows {
             const sc = (x, i) => x === undefined ? undefined : Math.round(x * this.attrMul(i) * (1 + [0, 0, this.pct(0, 66), this.pct(1, 59), 0, 0, 0, this.pct(1, 71)][i] / 100));
             v(n(sc(ps?.hit, 2)), 68, 139);
             v(n(sc(ps?.eva, 3)), 252, 139);
-            v('--', 96, 163);
+            v(ps ? `${Math.round(ps.walk + this.walkBonus())}%` : '--', 96, 163);
             v(`${cs.speed}%`, 252, 163);
             v(`${h.mp}/${h.mpMax}`, 60, 194);
-            v('--', 70, 218);
-            v('--', 240, 218);
+            v(Math.round((24 + 3 * (h.level - 1)) * this.attrMul(4) * (1 + this.pct(0, 78) / 100)), 70, 218);
+            v(this.mdef(), 240, 218);
             v(n(sc(ps?.mhit, 6)), 80, 242);
             v(n(sc(ps?.meva, 7)), 270, 242);
             for (let i = 0; i < 8; i++)

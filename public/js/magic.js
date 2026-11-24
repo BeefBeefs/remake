@@ -4,13 +4,13 @@ import { drawTooltip } from './items.js';
  * Spell list. Names and descriptions are the exe's own strings (Table.Tbd 601-621). Everything else is a GUESS:
  *  - icon: index into Game/MagicIcon (the bar uses the same icon + 2); matched by looking at the pictures and the description,
  *  - mp: only Heal (40 MP at magic level 1) is documented, in the manual's magic window screenshot,
- *  - kind: the spells that have a working effect in this remake (Heal + three bolts); the others show a notice when cast.
+ *  - kind: how the spell works in this remake (see SPELL_FX in spellfx.ts); every spell of the list now has an effect.
  */
 const DEF = [
-    [601, 3, 20, 'bolt', '#ff8a28'], [602, 4, 20, 'bolt', '#7ad0ff'], [603, 5, 25, 'bolt', '#ffe860'], [604, 18, 60, 'none', ''], [605, 14, 50, 'none', ''],
-    [606, 8, 40, 'heal', ''], [607, 9, 80, 'none', ''], [608, 10, 30, 'none', ''], [609, 11, 30, 'none', ''], [610, 12, 30, 'none', ''],
-    [611, 6, 40, 'none', ''], [612, 7, 40, 'none', ''], [613, 15, 50, 'none', ''], [614, 16, 40, 'none', ''], [615, 0, 20, 'none', ''],
-    [616, 13, 40, 'none', ''], [617, 20, 10, 'none', ''], [618, 2, 30, 'none', ''], [619, 19, 30, 'none', ''], [620, 17, 60, 'none', ''], [621, 23, 80, 'none', ''],
+    [601, 3, 20, 'bolt', '#ff8a28'], [602, 4, 20, 'bolt', '#7ad0ff'], [603, 5, 25, 'bolt', '#ffe860'], [604, 18, 60, 'nova', '#ff5a20'], [605, 14, 50, 'nova', '#9fe4ff'],
+    [606, 8, 40, 'heal', ''], [607, 9, 80, 'moon', ''], [608, 10, 30, 'buff', ''], [609, 11, 30, 'buff', ''], [610, 12, 30, 'pierce', '#b08850'],
+    [611, 6, 40, 'fan', '#ff7a30'], [612, 7, 40, 'pierce', '#8ad8ff'], [613, 15, 50, 'storm', '#fff070'], [614, 16, 40, 'bolt', '#a0e070'], [615, 0, 20, 'blade', '#e8e8ff'],
+    [616, 13, 40, 'bolt', '#a08050'], [617, 20, 10, 'identify', ''], [618, 2, 30, 'buff', ''], [619, 19, 30, 'buff', ''], [620, 17, 60, 'petnova', ''], [621, 23, 80, 'strike', '#ffffff'],
 ];
 /** Spells known by a new hero. The learning rules (profession / attributes / level) are not decoded; Heal is the one the manual shows at magic level 1. */
 const START = [606, 601];

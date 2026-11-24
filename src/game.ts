@@ -16,6 +16,7 @@ import { MapWindow, ExploredSave } from './mapwin.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y, BELT, MINE_BTN, POWER_BTN, PET_GAUGE, inBox } from './gui.js';
 import { App, Scene, Text } from './app.js';
 import { Windows, SET_BTN, CAREER_BTN } from './windows.js';
+import { SPELL_FX } from './spellfx.js';
 import { CLASS_OF, careerOptions, spellsFor, Usage } from './career.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
@@ -56,7 +57,10 @@ const dirIndex = (vx: number, vy: number) => FACING[(Math.round(Math.atan2(vy, v
 export class GameScene implements Scene {
   player: { x: number; y: number; dir: number; t: number; anim: number };
   hud: HudState = { hp: 100, hpMax: 100, mp: 60, mpMax: 60, level: 1, exp: 0, expMax: 100, running: false };
-  magic!: Magic; mapwin!: MapWindow; private shots: { x: number; y: number; vx: number; vy: number; t: number; spell: Spell; dmg: number }[] = []; private castT = 0; private bullets: { x: number; y: number; vx: number; vy: number; t: number; dmg: number }[] = [];
+  magic!: Magic; mapwin!: MapWindow; private shots: { x: number; y: number; vx: number; vy: number; t: number; spell: Spell; dmg: number; hit?: Set<Actor>; phys?: boolean }[] = [];
+  /** Spell visuals: expanding rings (novas, explosions) and lightning strikes; timed buffs (ms left). */
+  private rings: { x: number; y: number; t: number; r: number; color: string }[] = []; private strikes: { x: number; y: number; t: number }[] = [];
+  private buffs = { berserk: 0, eshield: 0, mshield: 0, counter: 0 }; private castT = 0; private bullets: { x: number; y: number; vx: number; vy: number; t: number; dmg: number }[] = [];
   debug = false; paused = false; menu!: GameMenu; dark: DarkLayer | null = null;
   private camX = 0; private camY = 0;
   /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
@@ -298,7 +302,7 @@ export class GameScene implements Scene {
     this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
     const p = this.player; this.spawnPos = { x: p.x, y: p.y };
     const self = this;
-    this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: (d, attr) => this.hitPlayer(d, false, attr), sfx: id => audio.sfx(id, 0.7), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
+    this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: (d, attr, from) => this.hitPlayer(d, false, attr, from), sfx: id => audio.sfx(id, 0.7), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
     this.petCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), enemies: () => this.actors.filter(a => a.enemy && !a.gen && a.alive), hit: (a, d) => this.damage(a, d) };
     this.drawPlayer = {
       get y() { return p.y; },
@@ -451,7 +455,7 @@ export class GameScene implements Scene {
   private applyStats(refill: boolean) {
     if (!this.tables['900']) return;
     const h = this.hud, ps = playerStats(this.tables as unknown as TableDb, this.gender, h.level, CLASS_OF[this.win.career]), full = h.hp >= h.hpMax && h.mp >= h.mpMax;
-    h.hpMax = ps.hp + (h.hpBonus ?? 0); h.mpMax = ps.mp + (h.mpBonus ?? 0); this.win.ps = ps;
+    h.hpMax = ps.hp + (h.hpBonus ?? 0) + this.win.itemHp(); h.mpMax = ps.mp + (h.mpBonus ?? 0) + this.win.itemMp(); this.win.ps = ps;
     if (refill || full) { h.hp = h.hpMax; h.mp = h.mpMax; } else { h.hp = Math.min(h.hp, h.hpMax); h.mp = Math.min(h.mp, h.mpMax); }
   }
   /** Table.Tbd table 13: cumulative EXP needed to leave level n (1-based). */
@@ -474,12 +478,16 @@ export class GameScene implements Scene {
     }
   }
   /** Monster hit on the hero. Negative Thunder / Metal levels do nothing; positive ones dodge (melee / magic). Magic damage is scaled by the Dark level. */
-  private hitPlayer(d: number, magic: boolean, attr?: number) {
-    if (this.dead) return; const h = this.hud, ev = Math.max(0, this.win.attrLv(magic ? 7 : 3)) * 0.05 + (magic ? this.win.pct(1, 71) : this.win.pct(1, 59)) / 100;
+  private hitPlayer(d: number, magic: boolean, attr?: number, from?: Actor) {
+    const hm = this.harmony();
+    if (this.dead) return; const h = this.hud, ev = Math.max(0, this.win.attrLv(magic ? 7 : 3)) * 0.05 + (magic ? this.win.pct(1, 71) : this.win.pct(1, 59)) / 100 + hm.dodge;
     if (Math.random() < ev) { this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: 'Miss' }); return; }
-    if (magic) d = Math.max(1, Math.round(d / this.win.attrMul(5)));
-    if (attr !== undefined) d = Math.max(1, Math.round(d / this.wheel(attr))); d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
-    // exe 0x412a40 monster->player: power*(9+rand%3)/10 - defence*Table11[neutral=10]/10, minimum 1
+    if (magic) d = Math.max(1, Math.round(d / this.win.attrMul(5) * (1 - Math.min(0.8, this.win.mdef() / 100)) * hm.magicTaken * (this.buffs.mshield > 0 ? 0.4 : 1)));
+    if (attr !== undefined) d = Math.max(1, Math.round(d / this.wheel(attr)));
+    d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
+    if (hm.taken < 1 && !magic) d = Math.max(1, Math.round(d * hm.taken));
+    if (this.buffs.counter > 0 && from && !magic && from.alive) { this.damage(from, Math.max(1, Math.round(d * 0.5))); this.rings.push({ x: from.x, y: from.y, t: 0, r: 40, color: '#ffc040' }); }
+    if (this.buffs.eshield > 0) { const ab = Math.min(h.mp, d); h.mp -= ab; d -= ab; if (d <= 0) { this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${ab} MP` }); return; } }
     h.hp = Math.max(0, h.hp - d); this.win.wearArmor();
     this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` }); audio.sfx(SFX.hurt, 0.8);
     if (h.hp <= 0) { this.dead = true; this.target = null; this.atkT = -1; this.player.anim = 23; this.player.t = 0; }
@@ -492,7 +500,7 @@ export class GameScene implements Scene {
     // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
     const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
     if (Math.random() < Math.max(0, -this.win.attrLv(2)) * 0.05) { this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: 'Miss' }); return; }   // negative Earth level = lower hit rate
-    const raw = power * this.wheel(a.stats.attr ?? 0) * (this.powerT > 0 ? 1.5 : 1) * (this.tripleLeft > 0 ? 1.4 : 1) * (9 + Math.floor(Math.random() * 3)) / 10; this.win.wearWeapon(); { const w = this.win.inv.equipped('weapon')[0]; this.usage[w && ItemDb.isRanged(w.item) ? 'ranged' : 'melee']++; }
+    const raw = power * this.wheel(a.stats.attr ?? 0) * (this.powerT > 0 ? 1.5 : 1) * (this.tripleLeft > 0 ? 1.4 : 1) * (this.buffs.berserk > 0 ? 1.4 : 1) * this.harmony().dmg * (9 + Math.floor(Math.random() * 3)) / 10; this.win.wearWeapon(); { const w = this.win.inv.equipped('weapon')[0]; this.usage[w && ItemDb.isRanged(w.item) ? 'ranged' : 'melee']++; }
     this.damage(a, Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0)))));
   }
   /** Apply final damage to a monster: floater, sound, and the death rewards (experience, gold, item drop, kill script event). */
@@ -591,24 +599,62 @@ export class GameScene implements Scene {
     }
     if (!sp) { if (hov) this.target = hov; else if (m.sel < 8) this.banner = { text: 'No magic set for this slot', t: 0 }; return; }
     if (this.castT > 0) return;
-    if (sp.kind === 'none') { this.banner = { text: `${sp.name} cannot be cast yet`, t: 0 }; return; }
-    const h = this.hud, p = this.player;
-    if (h.mp < sp.mp) { this.banner = { text: 'Not enough MP', t: 0 }; return; }
+    if (sp.kind === 'none') { this.banner = { text: `${sp.name} cannot be cast`, t: 0 }; return; }
+    const h = this.hud, p = this.player, fx = SPELL_FX[sp.id], hm = this.harmony(), cost = Math.max(1, Math.round(sp.mp * hm.mpCost));
+    if (h.mp < cost) { this.banner = { text: 'Not enough MP', t: 0 }; return; }
+    const tx = hov ? hov.x : wx, ty = hov ? hov.y : wy + 30, dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
+    const base = this.spellPower(sp);
+    const bullet = (ang: number, mult: number, extra: Partial<{ phys: boolean }> = {}) => { const c = Math.cos(ang), sn = Math.sin(ang), vx = (dx / d) * c - (dy / d) * sn, vy = (dx / d) * sn + (dy / d) * c; this.shots.push({ x: p.x, y: p.y, vx, vy, t: 0, spell: sp, dmg: mult, hit: sp.kind === 'bolt' || sp.kind === 'fan' || sp.kind === 'strike' ? undefined : new Set(), ...extra }); };
     if (sp.kind === 'heal') {
       if (h.hp >= h.hpMax) { this.banner = { text: 'HP is already full', t: 0 }; return; }
       const g = Math.min(h.hpMax - h.hp, Math.max(1, Math.round(h.hpMax * m.healPct(sp.id) * (this.powerT > 0 ? 1.5 : 1) / 100)));
       h.hp += g; this.floaters.push({ x: p.x, y: p.y - 90, t: 0, s: `+${g}` });
-    } else {
-      // bolt (guess: 24 + 3 per hero level, times the magic level bonus, +-10 % spread, ignores defence)
-      const tx = hov ? hov.x : wx, ty = hov ? hov.y : wy + 30, dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
+    } else if (sp.kind === 'identify') {
+      if (!this.win.needsIdentify()) { this.banner = { text: 'Nothing to identify', t: 0 }; return; }
+      this.win.identifyAll(); this.banner = { text: 'All items identified', t: 0 };
+    } else if (sp.kind === 'moon') {
+      if (!this.pet) { this.banner = { text: 'You have no companion', t: 0 }; return; }
+      if (!this.pet.dead && this.pet.hp >= this.pet.maxHp) { this.banner = { text: `${this.pet.name} is already fine`, t: 0 }; return; }
+      this.pet.feed(this.pet.maxHp); this.rings.push({ x: this.pet.x, y: this.pet.y, t: 0, r: 90, color: '#d8e8ff' });
+    } else if (sp.kind === 'buff') {
+      const k = fx.buff!; this.buffs[k] = fx.dur ?? 30000; this.rings.push({ x: p.x, y: p.y, t: 0, r: 70, color: k === 'berserk' ? '#ff4030' : k === 'counter' ? '#ffc040' : '#60a0ff' });
+      this.banner = { text: `${sp.name} is active`, t: 0 };
+    } else if (sp.kind === 'nova' || sp.kind === 'petnova') {
+      const cx = sp.kind === 'petnova' ? this.pet?.x : p.x, cy = sp.kind === 'petnova' ? this.pet?.y : p.y;
+      if (cx === undefined || cy === undefined || (sp.kind === 'petnova' && (!this.pet || this.pet.dead))) { this.banner = { text: this.pet ? `${this.pet.name} cannot fight now` : 'You have no companion', t: 0 }; return; }
+      this.rings.push({ x: cx, y: cy, t: 0, r: fx.radius!, color: sp.color || '#ff8040' });
+      for (const a of this.actors) if (a.enemy && a.alive && Math.hypot(a.x - cx, (a.y - cy) * 1.6) < fx.radius! * a.scale) { this.spellHit(a, sp, base * fx.mult); if (fx.stun) a.stun = Math.max(a.stun, fx.stun); }
+    } else if (sp.kind === 'storm') {
+      const near = this.actors.filter(a => a.enemy && a.alive && Math.hypot(a.x - p.x, (a.y - p.y) * 1.6) < fx.radius!);
+      for (let i = 0; i < fx.count!; i++) {
+        const a = near.length ? near[i % near.length] : undefined, x = a ? a.x : p.x + (Math.random() - 0.5) * 360, y = a ? a.y : p.y + (Math.random() - 0.5) * 220;
+        this.strikes.push({ x, y, t: -i * 90 }); if (a) this.spellHit(a, sp, base * fx.mult);
+      }
+    } else if (sp.kind === 'blade') {
       if (this.atkT < 0) p.dir = dirIndex(dx, dy);
-      this.shots.push({ x: p.x, y: p.y, vx: dx / d, vy: dy / d, t: 0, spell: sp, dmg: (24 + 3 * (h.level - 1)) * m.power(sp.id) * this.win.attrMul(4) * (this.powerT > 0 ? 1.3 : 1) });
+      bullet(0, Math.max(1, (this.win.stats().atkMax || 10) * (this.win.ps?.strength ?? 100) / 100 * fx.mult * hm.dmg), { phys: true });
+    } else if (sp.kind === 'fan') {
+      if (this.atkT < 0) p.dir = dirIndex(dx, dy);
+      for (let i = 0; i < fx.count!; i++) bullet((i - (fx.count! - 1) / 2) * fx.spread! / (fx.count! - 1), base * fx.mult);
+    } else {   // bolt / pierce / strike: one projectile
+      if (this.atkT < 0) p.dir = dirIndex(dx, dy);
+      bullet(0, base * (fx?.mult ?? 1));
     }
-    h.mp -= sp.mp; this.usage.magic++; this.castT = 400; audio.sfx(SFX.hit, 0.5);
+    h.mp -= cost; this.usage.magic++; this.castT = 400; audio.sfx(SFX.hit, 0.5);
     if (m.use(sp.id)) this.banner = { text: `${sp.name} reached magic level ${m.level(sp.id)}`, t: 0 };
   }
+  /** Base spell power: 24 + 3 per hero level (GUESS) x magic level bonus x Holy attribute x weapon magic attack % x power mode x harmony. */
+  private spellPower(sp: Spell) { return (24 + 3 * (this.hud.level - 1)) * this.magic.power(sp.id) * this.win.attrMul(4) * (1 + this.win.pct(0, 78) / 100) * (this.powerT > 0 ? 1.3 : 1) * this.harmony().magic; }
+  /** Elemental effect on a monster: the attribute opposite to the monster's is strong (x1.3), its own attribute weak (x0.7). GUESS. */
+  private elemMul(a: Actor, elem: number) { if (elem < 0) return 1; const m = a.stats.attr ?? 0; return elem === (m ^ 1) ? 1.3 : elem === m ? 0.7 : 1; }
+  private spellHit(a: Actor, sp: Spell, dmg: number) { this.damage(a, Math.max(1, Math.round(dmg * this.elemMul(a, SPELL_FX[sp.id]?.elem ?? -1) * (9 + Math.floor(Math.random() * 3)) / 10))); }
+  /** Both attributes of an opposite pair at the maximum trigger a special effect (manual: 'special effects can be triggered'; the effects themselves are not documented, so these are GUESSES). */
+  harmony() {
+    const w = this.win, on = [0, 2, 4, 6].map(i => w.attrLv(i) >= 10 && w.attrLv(i + 1) >= 10);
+    return { dmg: on[0] ? 1.2 : 1, taken: on[0] ? 0.8 : 1, dodge: on[1] ? 0.1 : 0, magic: on[2] ? 1.2 : 1, magicTaken: on[2] ? 0.8 : 1, mpCost: on[3] ? 0.75 : 1, on };
+  }
   /** Triple Attack (manual): "only warriors that have reached a certain level" with a melee weapon. GUESS: Warrior, level >= TRIPLE_LEVEL, three strikes at +40 % damage, 2.5 s cooldown. */
-  private tripleLeft = 0; private tripleCd = 0;
+  private tripleLeft = 0; private tripleCd = 0; private gearKey = ''; private harmonyKey = ''; private regenT = 0;
   private tripleOk() { return this.win.career === 1 && this.hud.level >= TRIPLE_LEVEL && !this.rangedWeapon() && this.win.inv.equipped('weapon').length > 0; }
   /** Arrows / shot pellets of the hero's ranged arms (GUESS: 0.7 px/ms, damage on arrival). */
   private arrows: { x: number; y: number; target: Actor }[] = [];
@@ -631,11 +677,24 @@ export class GameScene implements Scene {
   private updateShots(dt: number) {
     if (this.castT > 0) this.castT -= dt;
     if (this.tripleCd > 0) this.tripleCd -= dt;
+    { const gk = this.win.gear().map(e => e.item.name).join('|'); if (gk !== this.gearKey) { this.gearKey = gk; this.applyStats(false); } }   // gear with HP/MP bonuses
+    { const hk = this.harmony().on.join(); if (hk !== this.harmonyKey) { if (this.harmonyKey && this.harmony().on.some(Boolean)) this.banner = { text: 'Attribute harmony!', t: 0 }; this.harmonyKey = hk; } }
+    if ((this.regenT += dt) >= 5000 && !this.dead) { this.regenT = 0; const hp = this.win.pct(1, 101), mp = this.win.pct(1, 104); if (hp) this.hud.hp = Math.min(this.hud.hpMax, this.hud.hp + hp); if (mp) this.hud.mp = Math.min(this.hud.mpMax, this.hud.mp + mp); }   // armor 101 / 104 = HP / MP recovery per 5 s (GUESS)
+    for (const k of ['berserk', 'eshield', 'mshield', 'counter'] as const) if (this.buffs[k] > 0 && (this.buffs[k] -= dt) <= 0) { this.buffs[k] = 0; this.banner = { text: `${{ berserk: 'Berserker', eshield: 'Energy Shield', mshield: 'Magic Shield', counter: 'Counter Burst' }[k]} wore off`, t: 0 }; }
+    for (const r of this.rings) r.t += dt; this.rings = this.rings.filter(r => r.t < 500);
+    for (const st of this.strikes) st.t += dt; this.strikes = this.strikes.filter(st => st.t < 260);
     for (const s of this.shots) {
       s.t += dt; s.x += s.vx * 0.5 * dt; s.y += s.vy * 0.5 * dt;
-      const hit = this.actors.find(a => a.enemy && a.alive && Math.hypot(a.x - s.x, (a.y - s.y) * 1.6) < 36);
-      if (hit) { s.t = 9999; this.damage(hit, Math.max(1, Math.round(s.dmg * (9 + Math.floor(Math.random() * 3)) / 10))); }
-      else if (this.map.blockedReal(s.x, s.y)) s.t = 9999;
+      const fx = SPELL_FX[s.spell.id];
+      for (const a of this.actors) {
+        if (!a.enemy || !a.alive || s.t >= 9999 || Math.hypot(a.x - s.x, (a.y - s.y) * 1.6) >= 36 * a.scale || s.hit?.has(a)) continue;
+        s.hit?.add(a);
+        if (s.phys) this.damage(a, Math.max(1, Math.round(s.dmg * (9 + Math.floor(Math.random() * 3)) / 10))); else this.spellHit(a, s.spell, s.dmg);
+        if (fx?.stun && a.alive) a.stun = Math.max(a.stun, fx.stun);
+        if (fx?.boom) { this.rings.push({ x: a.x, y: a.y, t: 0, r: fx.radius!, color: '#ffffff' }); for (const o of this.actors) if (o !== a && o.enemy && o.alive && Math.hypot(o.x - a.x, (o.y - a.y) * 1.6) < fx.radius! * o.scale) this.damage(o, Math.max(1, Math.round(s.dmg * fx.boom * (9 + Math.floor(Math.random() * 3)) / 10))); }
+        if (!s.hit) s.t = 9999;
+      }
+      if (this.map.blockedReal(s.x, s.y)) s.t = 9999;
     }
     this.shots = this.shots.filter(s => s.t < 1100);
   }
@@ -765,7 +824,7 @@ export class GameScene implements Scene {
     } else if (dx || dy) this.target = null;
     if (this.atkT >= 0) { vx = vy = 0; }
     if (vx || vy) {
-      const run = keys.has('shift') || keys.has('control') || hud.running, n = Math.hypot(vx, vy), sp = (run ? 0.30 : 0.16) * dt * (this.powerT > 0 ? 1.25 : 1);
+      const run = keys.has('shift') || keys.has('control') || hud.running, n = Math.hypot(vx, vy), sp = (run ? 0.30 : 0.16) * dt * (this.powerT > 0 ? 1.25 : 1) * (1 + this.win.walkBonus() / 100);
       p.dir = dirIndex(vx, vy);
       const nx = p.x + vx / n * sp, ny = p.y + vy / n * sp;
       // slide along obstacles: try both axes, then each alone
@@ -776,7 +835,7 @@ export class GameScene implements Scene {
     } else if (this.atkT < 0 && p.anim !== ANIM_IDLE) { p.anim = ANIM_IDLE; p.t = 0; }
     p.t += dt;
     if (this.atkT >= 0) {
-      const fr = this.caf.anims[3].dirs[p.dir].frames || 11, dur = fr * FRAME_MS * 100 / Math.max(30, this.win.stats().speed);
+      const fr = this.caf.anims[3].dirs[p.dir].frames || 11, dur = fr * FRAME_MS * 100 / Math.max(30, this.win.stats().speed * (this.buffs.berserk > 0 ? 1.2 : 1));
       if (!this.atkHit && p.t >= dur * 0.45) { this.atkHit = true; if (this.target?.alive) { { const w = this.win.inv.equipped('weapon')[0], ar = w ? ItemDb.arms(w.item) : 0; audio.sfx(this.rangedWeapon() ? SFX.swingBow : ar === 1 || ar === 3 ? SFX.swingHeavy : SFX.swingLight, 0.6); } if (this.rangedWeapon()) this.arrows.push({ x: p.x, y: p.y - 4, target: this.target }); else this.hurtEnemy(this.target); } }
       if (p.t >= dur) { if (this.tripleLeft > 0 && --this.tripleLeft > 0 && this.target?.alive) { this.atkHit = false; p.t = 0; } else { this.tripleLeft = 0; this.atkT = -1; p.anim = ANIM_IDLE; p.t = 0; } }
     }
@@ -818,10 +877,19 @@ export class GameScene implements Scene {
       }
       ctx.globalAlpha = 1;
     }
+    for (const r of this.rings) {   // spell rings: an expanding translucent ellipse
+      const k = Math.min(1, r.t / 350), x = r.x - this.camX, y = r.y - this.camY - 10, rr = r.r * (0.25 + 0.75 * k);
+      ctx.globalAlpha = 0.7 * (1 - r.t / 500); ctx.strokeStyle = r.color; ctx.lineWidth = 4; ctx.fillStyle = r.color; ctx.beginPath(); ctx.ellipse(x, y, rr, rr * 0.62, 0, 0, 7); ctx.globalAlpha *= 0.35; ctx.fill(); ctx.globalAlpha = 0.7 * (1 - r.t / 500); ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 1;
+    }
+    for (const st of this.strikes) {   // lightning: a jagged bolt from the sky
+      if (st.t < 0) continue; const x = st.x - this.camX, y = st.y - this.camY; ctx.strokeStyle = st.t < 130 ? '#ffffff' : '#fff070'; ctx.lineWidth = 3; ctx.globalAlpha = 1 - st.t / 260; ctx.beginPath(); ctx.moveTo(x, y - 300);
+      for (let k = 1; k <= 6; k++) ctx.lineTo(x + (((k * 37 + Math.round(st.x)) % 23) - 11) * (k < 6 ? 1 : 0), y - 300 + k * 50); ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 1;
+    }
     for (const e of this.fxList) drawFx(ctx, e, this.camX, this.camY);
     for (const a of this.arrows) { ctx.strokeStyle = '#f0e0a0'; ctx.lineWidth = 2; ctx.beginPath(); const ax = a.x - this.camX, ay = a.y - this.camY - 36, vx = a.target.x - a.x, vy = a.target.y - a.y, n = Math.hypot(vx, vy) || 1; ctx.moveTo(ax - vx / n * 10, ay - vy / n * 6); ctx.lineTo(ax, ay); ctx.stroke(); }
     if (this.holdZone) { const left = Math.max(0, Math.ceil((90 - this.holdT * 0.03) / 30)); this.text.drawCenter(ctx, String(left), Math.round(this.holdZone.x - this.camX), Math.round(this.holdZone.y - this.camY - 110)); }   // Brain Globe countdown (90 script polls = 3 s)
     for (const f of this.floaters) this.text.drawCenter(ctx, f.s, Math.round(f.x - this.camX), Math.round(f.y - this.camY - f.t / 25));
+    { let by = 52; for (const [k, n] of [['berserk', 'Berserker'], ['eshield', 'Energy Shield'], ['mshield', 'Magic Shield'], ['counter', 'Counter Burst']] as const) if (this.buffs[k] > 0) { this.text.drawCenter(ctx, `${n} ${Math.ceil(this.buffs[k] / 1000)}s`, 320, by); by += 14; } }
     if (this.banner) { const w = this.banner.text.length * 6 + 24; ctx.fillStyle = 'rgba(8,8,24,0.85)'; ctx.fillRect(320 - w / 2, 20, w, 24); ctx.strokeStyle = '#a89868'; ctx.strokeRect(320 - w / 2 + 0.5, 20.5, w - 1, 23); this.text.drawCenter(ctx, this.banner.text, 320, 26); }
     if (this.debug) { map.drawJudge(ctx, this.camX, this.camY, SCREEN_W, HUD_Y); this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2); }
     const hov = inp.y < HUD_Y ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;

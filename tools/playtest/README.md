@@ -28,3 +28,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `attrs.mjs` — attribute medicines and status values.
 - `itembonus.mjs` — variant item bonuses (attack %, speed %, attribute levels) and tooltips.
 - `wheel.mjs` — monster attributes and the weakness wheel multiplier.
+- `allspells.mjs` — casts every spell, reports damage / stun / buffs; `spellpet.mjs` — Moon, Explosion, Identify, shields and Counter Burst; `gearslots.mjs` — HP/MP gear slots, M.Defense, harmony.

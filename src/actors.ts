@@ -15,7 +15,7 @@ export const ENEMY_STATS: Record<number, { hp: number; dmg: [number, number]; ex
   2: { hp: 45, dmg: [4, 9], exp: 12, gold: [8, 30], speed: 0.075 },
   5: { hp: 200, dmg: [8, 16], exp: 120, gold: [200, 400], speed: 0.09 },
 };
-export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number, attr?: number): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; /** Ranged attack: a bolt from the monster's ground position toward (tx, ty). */ shoot?(x: number, y: number, tx: number, ty: number, dmg: number): void; /** Play Voice00.Voc entry `id` (monster attack sounds, exe 0x42a000-0x430000). */ sfx?(id: number): void; }
+export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number, attr?: number, from?: Actor): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; /** Ranged attack: a bolt from the monster's ground position toward (tx, ty). */ shoot?(x: number, y: number, tx: number, ty: number, dmg: number): void; /** Play Voice00.Voc entry `id` (monster attack sounds, exe 0x42a000-0x430000). */ sfx?(id: number): void; }
 type State = 'idle' | 'walk' | 'attack' | 'die';
 const ANIM: Record<State, number> = { idle: 0, walk: 1, attack: 2, die: 3 };
 /** Draw order of CAF layers (1 and 0 are the body for the player; higher ones are optional equipment/overlay variants). */
@@ -89,11 +89,11 @@ export class Actor implements Drawable {
     const frames = this.caf.anims[this.animOv ?? ANIM.attack]?.dirs[this.dir]?.frames || 10;
     if (this.state === 'attack') {
       if (this.slam) {   // golem slam: heavy blow with an area around the monster
-        if (!this.hitDone && this.t >= frames * FRAME_MS * 0.6) { this.hitDone = true; const dm = Math.round(this.stats.dmg[1] * 1.6); if (Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) < 150 * this.scale) c.hitPlayer(dm, this.stats.attr); if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < 150 * this.scale) c.hitPet?.(dm); }
+        if (!this.hitDone && this.t >= frames * FRAME_MS * 0.6) { this.hitDone = true; const dm = Math.round(this.stats.dmg[1] * 1.6); if (Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) < 150 * this.scale) c.hitPlayer(dm, this.stats.attr, this); if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < 150 * this.scale) c.hitPet?.(dm); }
         if (this.t >= frames * FRAME_MS) this.set('idle'); return;
       }
       if (this.shot) { if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); c.shoot?.(this.x, this.y, tx, ty, dm); c.sfx?.(21); } if (this.t >= frames * FRAME_MS) { this.shot = false; this.set('idle'); } return; }
-      if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70 * this.scale) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm, this.stats.attr); } }
+      if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70 * this.scale) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm, this.stats.attr, this); } }
       if (this.t >= frames * FRAME_MS) this.set('idle');
       return;
     }

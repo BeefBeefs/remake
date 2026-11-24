@@ -126,7 +126,7 @@ export class Actor {
                     this.hitDone = true;
                     const dm = Math.round(this.stats.dmg[1] * 1.6);
                     if (Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) < 150 * this.scale)
-                        c.hitPlayer(dm, this.stats.attr);
+                        c.hitPlayer(dm, this.stats.attr, this);
                     if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < 150 * this.scale)
                         c.hitPet?.(dm);
                 }
@@ -154,7 +154,7 @@ export class Actor {
                     if (onPet)
                         c.hitPet?.(dm);
                     else
-                        c.hitPlayer(dm, this.stats.attr);
+                        c.hitPlayer(dm, this.stats.attr, this);
                 }
             }
             if (this.t >= frames * FRAME_MS)
