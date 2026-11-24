@@ -8,6 +8,8 @@ export interface ScriptHooks {
   /** Operand kind 3: state of a spawn-numbered monster record (1 alive, 0 dead); undefined when the scenario has no such record. */
   entity?(spawn: number): number | undefined;
   charPos(char: number): [number, number] | null;
+  /** Operand kind 9: 1 while scripted object `id` has just been struck or clicked. */
+  pressed?(id: number): number;
   /** Sentence 10: create an item (cat 0 weapon, 1 armor, 2 accessory, 3 consumable, 4 misc; cat 4 id 0 = gold with amount) on the ground. */
   drop(cat: number, id: number, a: number, b: number, min: number, max: number): void;
   /** Sentences 22 (show) / 23 (hide): object/zone `id` (10000000 + Mct object id). */
@@ -63,6 +65,7 @@ export class ScriptVM {
 
   get(kind: number, val: number): number {
     if (kind <= 2) return val;
+    if (kind === 9) return this.hooks?.pressed?.(val) ?? 0;   // operand 9 = object `val` was struck / clicked just now (a pulse, see Game.zonePulse)
     if (kind === 8) return 0;   // operand 8 = game mode of the exe (0x482db0): 0 offline; scripts only compare it with 0/2 (always [8,0])
     if (kind >= 10 && kind <= 12) return this.globals.get(`${kind}:${val}`) ?? 0;
     if (kind === 3) { const e = this.hooks?.entity?.(val); if (e !== undefined) return e; }
@@ -109,7 +112,8 @@ export class ScriptVM {
       case 34: this.set(o[1][0], o[1][1], -1); return true;   // zone/player interaction state: -1 = not applicable (the town gate is hard-wired in game.ts)
       // Decoded but not simulated yet: 27 named warp zone, 46/56 object state fields, 36/30/33 spawn hazard/effect objects, 65 ambient colour.
       case 35: this.set(o[2][0], o[2][1], 0); return true;   // (x, y, var): terrain/judge value at a position, not modelled
-      case 28: case 29: case 27: case 46: case 56: case 36: case 30: case 33: case 65: return true;
+      case 28: { const c = this.char, e = this.ended; this.char = ev(0); this.runStatus(6, ev(0)); this.char = c; this.ended = e; return true; }
+      case 29: case 27: case 46: case 56: case 36: case 30: case 33: case 65: return true;
       case 31: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1); return true;
       case 32: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), false) ?? -1); return true;
       case 25: this.hooks?.spawnSlot(ev(0), ev(1), ev(2)); return true;   // (slot, x, y, effect type)

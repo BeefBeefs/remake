@@ -20,6 +20,8 @@ export class ScriptVM {
     get(kind, val) {
         if (kind <= 2)
             return val;
+        if (kind === 9)
+            return this.hooks?.pressed?.(val) ?? 0; // operand 9 = object `val` was struck / clicked just now (a pulse, see Game.zonePulse)
         if (kind === 8)
             return 0; // operand 8 = game mode of the exe (0x482db0): 0 offline; scripts only compare it with 0/2 (always [8,0])
         if (kind >= 10 && kind <= 12)
@@ -130,7 +132,14 @@ export class ScriptVM {
             case 35:
                 this.set(o[2][0], o[2][1], 0);
                 return true; // (x, y, var): terrain/judge value at a position, not modelled
-            case 28:
+            case 28: {
+                const c = this.char, e = this.ended;
+                this.char = ev(0);
+                this.runStatus(6, ev(0));
+                this.char = c;
+                this.ended = e;
+                return true;
+            }
             case 29:
             case 27:
             case 46:

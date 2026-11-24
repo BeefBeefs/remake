@@ -426,6 +426,14 @@ export class GameScene {
         window.game = this;
         if (this.vm)
             this.vm.hooks = {
+                // operand 9: 1 while the hero or the dog stands inside the object's rect (the pressure-plate statues count 90 polls of this before they trigger)
+                pressed: id => {
+                    const z = this.zones.find(q => q.rec.id === id);
+                    if (!z)
+                        return 0;
+                    const r = z.rec.rect, m = 200, at = (e) => { const [wa, wb] = realToWorld(e.x, e.y); return wa >= z.rec.a + r[0] - m && wa <= z.rec.a + r[2] + m && wb >= z.rec.b + r[1] - m && wb <= z.rec.b + r[3] + m; }; // rect inflated by 200 world units (GUESS: the record's rect is only the statue's footprint)
+                    return at(this.player) || (this.pet && !this.pet.dead && at(this.pet)) ? 1 : 0;
+                },
                 charPos: char => { const r = this.actors.find(a => a.rec.kind === 'people' && 12000000 + a.rec.id === char); if (r)
                     return [r.rec.a, r.rec.b]; const z = this.zones.find(z => z.rec.id === char); return z ? [z.rec.a, z.rec.b] : null; },
                 level: () => this.hud.level,
