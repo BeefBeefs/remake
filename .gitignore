@@ -1,6 +1,4 @@
-# Original game data is NOT redistributed from this repo.
-game-data/
-public/assets/
+# Original game data is bundled in public/assets/ep1 (make repo private if needed).
 *.zip
 *.sma
 node_modules/
