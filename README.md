@@ -13,11 +13,11 @@ Episode 1 game data (extracted, minus Windows binaries and the manual) is bundle
 See `docs/FORMATS.md` for what is understood so far and the roadmap.
 
 ## Viewer
-`python3 tools/build_assets.py && npm install && npm run build && npm run serve` then open `index.html`: plays the player's animations (toggle equipment layers).
+`python3 tools/build_assets.py && npm install && npm run build && npm run serve` then open `viewer.html`: plays the player's animations (toggle equipment layers).
 
 ## Play (work in progress)
 
-`npm run build && npm run serve`, then open `http://localhost:8000/play.html`: title screen -> new character (male/female, name) -> the first map of Episode 1. WASD/arrows or hold the left mouse button to walk, Shift or `R` to run, `C` status window, `I` item window, `G` shows the walkability grid, Esc pauses. Dev keys: `X` +30 EXP, `F2` adds an item from Item.Ibn to the inventory. (`?skip=male` jumps straight into the map.) Convert other maps with `python3 -I tools/convert_map.py <name>`.
+`npm run build && npm run serve`, then open `http://localhost:8000/` (or `play.html`, the same page): title screen -> new character (male/female, name) -> the first map of Episode 1. WASD/arrows or hold the left mouse button to walk, Shift or `R` to run, `C` status window, `I` item window, `G` shows the walkability grid, Esc pauses. Dev keys: `X` +30 EXP, `F2` adds an item from Item.Ibn to the inventory. (`?skip=male` jumps straight into the map.) Convert other maps with `python3 -I tools/convert_map.py <name>`.
 
 ## Saving
 The game autosaves to your browser (localStorage) every 10 seconds, when changing maps and when you exit to the title; use *Load game* on the title screen to continue.

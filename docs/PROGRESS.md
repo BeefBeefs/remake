@@ -91,7 +91,7 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 - Smoke test: all 36 scenarios load; remaining console warnings are 404s for optional `_sdw` shadow sprites.
 
 ## Deployment
-- `.github/workflows/pages.yml`: on push to main (or manual run) builds with tsc and deploys `public/` to GitHub Pages (Settings > Pages > Source = GitHub Actions). Play at `https://beefbeefs.github.io/remake/play.html?skip=male`.
+- `.github/workflows/pages.yml`: on push to main (or manual run) builds with tsc and deploys `public/` to GitHub Pages (Settings > Pages > Source = GitHub Actions). Play at `https://beefbeefs.github.io/remake/` (title screen; `?skip=male` jumps into a new game). The sprite viewer moved to `viewer.html` (the root used to show it, which confused phone testing).
 - Workflow is split into build + deploy jobs (a single job raced: deploy-pages saw 0 artifacts). Files with non-ASCII names (`Map/Pattern/wooｄs_gate.njp`, unreferenced) are removed from the deployed copy because Pages rejected the deployment with them. Deploy succeeded on run 45389309412.
 
 ## Player -> monster damage (exe 0x412a40, key 0x20000 branch at 0x412cc5)
@@ -346,3 +346,6 @@ Mechanical check, not a hand playthrough: fire every handler in every scenario o
 - **67 (n)** at 0x4340e7: sets the quest spell flag of spell row n (player +0x1440 + 4n = 3); **69 (n, out)** at 0x43412b: out = 1 when that flag is 3. The remake maps row n to spell id 600 + n (`magic.learn`; quest 44 in 04100000 teaches row 17). Spell ids that have no entry in Magic stay unlearned.
 - **71 (out)** at 0x434186 reads the offered profession (+0x30) as an index: 16 -> 0 (Mercenary), 6 -> 1 (Warrior), 5 -> 2 (Hunter), 9 -> 3 (Wizard); **70 (idx)** at 0x4341da writes it (1..3 only). The remake's own career index is 0 Mercenary, 1 Warrior, 2 Wizard, 3 Hunter, so the hooks convert. A profession NPC in 03900003 can therefore put an offer on the Status screen.
 - Test: `questsent.mjs`.
+
+## Pages root now opens the game
+`public/index.html` was the sprite/animation viewer, so the GitHub Pages root (https://beefbeefs.github.io/remake/) opened a model viewer instead of the main menu. `index.html` is now the game page (same as `play.html`, which stays for the playtests and old links) and the viewer lives at `viewer.html`.
