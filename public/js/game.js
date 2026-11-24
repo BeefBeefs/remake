@@ -34,6 +34,8 @@ const savedGround = new Map();
 /** PLACEHOLDER combat sound ids (indices into Voice00.Voc; script-driven sounds use the real ids, e.g. chest 77/78, Black Hammer's taunts 40-43). */
 /** GUESS: share of dropped magical variants that are still unidentified (the original rate is not decoded). */
 const UNID_CHANCE = 0.6;
+/** GUESS: phantom floor scenario -> [dlv of its final monster, drop level of the card it rolls] (Jack, Queen, King, Joker = Table 30 rows 162-165). */
+const PHANTOM_FLOORS = { '99000019': [265, 162], '99000020': [268, 163], '99000021': [271, 164], '99000022': [276, 165] };
 /** Voice00.Voc ids. From the exe: the item method 0x466110 returns the weapon sounds (kind 0/1 swing 47 or 48 [light weapon 48], bow/gun class 93, kind 4 impact 1 = light / 2 = heavy); monster behaviour functions use constants 22 (melee, most common), 21 (cast release), 94 (cast start), 29/23 (bats), 19. Which weapon counts as 'light' (item+0x28 < 60) is not mapped to an Item.Ibn field, so the arms class stands in (GUESS); hurt / kill keep placeholders. */
 const TRIPLE_LEVEL = 10;
 const ATTRS = ['Fire', 'Water', 'Earth', 'Thunder', 'Holy', 'Dark', 'Gel', 'Metal'];
@@ -990,6 +992,10 @@ export class GameScene {
             if (st && st.dlv >= 0) {
                 const [wa, wb] = realToWorld(a.x, a.y);
                 this.randomDrop(st.dlv, wa, wb);
+                // GUESS: no monster carries drop levels 162-165 (Jack, Queen, King, Joker, wanted by the card quest in 99000018); the final monster of each phantom floor 99000019..22 rolls its card
+                const fl = PHANTOM_FLOORS[this.scenario];
+                if (fl && st.dlv === fl[0])
+                    this.randomDrop(fl[1], wa, wb);
             }
         }
     }

@@ -39,3 +39,5 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `epexits.mjs` — every map exit (sentence 17) and warp-gate row of an episode leads to a scenario of its data chain.
 - `epbind.mjs` — every script handler's character number (zone 10xxxxxx, NPC 12xxxxxx, monster kill 14xxxxxx) is matched against the scenario's zones / actors; lists handlers without a counterpart.
 - `epquests.mjs` — carries the script state through all scenarios of an episode with a level-40 hero and answers every dialog with options 0, 1, 2; reports how many quests got started / completed by the scripts alone (needs items and drops for the rest, so it is a lower bound).
+
+- `epitems.mjs ep [out.json]` - fires every handler of an episode's scenarios and records the quest items the scripts ask for and the chest drop levels used; compare with Tables 30/31 (see PROGRESS "Quest item sources"). Needs the server on :8123.
