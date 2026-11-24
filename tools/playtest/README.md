@@ -24,7 +24,6 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `fx.mjs` — script effect sprite spawning.
 - `shiftclick.mjs` — Shift+click attack in place, Ctrl run, CapsLock set swap.
 - `triple.mjs` — Warrior Triple Attack.
-- `spells.mjs` — profession spell learning.
 - `attrs.mjs` — attribute medicines and status values.
 - `itembonus.mjs` — variant item bonuses (attack %, speed %, attribute levels) and tooltips.
 - `wheel.mjs` — monster attributes and the weakness wheel multiplier.
@@ -32,3 +31,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 
 - `episodes.mjs [eps] [limit]` loads every scenario of Episode N's patch with `?ep=N` (fresh page each) and reports 404s / page errors; all of Ep1-4 pass.
 - `fxslots.mjs` checks the full item bonus block (tooltip lines of Recovery / Gamble / Power Bracelet / Gilgamesh / Wildcat Bow ..., life and mental recovery per second, gold, strength).
+- `learn.mjs` walks the spell learning rule (class history x Table.Tbd 100-107): Plasma at 5 Mercenary levels, Wizard spells after the change, etc.

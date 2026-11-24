@@ -12,8 +12,8 @@ const DEF = [
     [611, 6, 40, 'fan', '#ff7a30'], [612, 7, 40, 'pierce', '#8ad8ff'], [613, 15, 50, 'storm', '#fff070'], [614, 16, 40, 'bolt', '#a0e070'], [615, 0, 20, 'blade', '#e8e8ff'],
     [616, 13, 40, 'bolt', '#a08050'], [617, 20, 10, 'identify', ''], [618, 2, 30, 'buff', ''], [619, 19, 30, 'buff', ''], [620, 17, 60, 'petnova', ''], [621, 23, 80, 'strike', '#ffffff'],
 ];
-/** Spells known by a new hero. The learning rules (profession / attributes / level) are not decoded; Heal is the one the manual shows at magic level 1. */
-const START = [606, 601];
+/** A new hero knows no spell: they are learned by level history (career.ts, decoded from the exe). Saves of earlier builds keep the Heal / Fire Ball they started with. */
+const START = [];
 const PER_PAGE = 6, ROW_Y = 52, ROW_H = 50, LIST_X = 28;
 /** Slots of the Magic window's own bar (part of the frame art, Game/Status pattern 6) and of the HUD bar. */
 export const WIN_SLOTS = Array.from({ length: 8 }, (_, k) => ({ x: 32 + k * 32, y: 359, w: 26, h: 26 }));
@@ -27,7 +27,7 @@ export class Magic {
         this.mb = mb;
         this.known = [...START];
         /** Spell id per bar slot (0 = empty). */
-        this.bar = [606, 601, 0, 0, 0, 0, 0, 0];
+        this.bar = [0, 0, 0, 0, 0, 0, 0, 0];
         /** Selected bar entry: 0-7 = magic slots (F1-F8), 8 = attack (F9). */
         this.sel = 8;
         this.prog = new Map(); // spell id -> [magic level, exp]

@@ -18,7 +18,7 @@ import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y, BELT, MINE_BTN, POWER_BTN, PE
 import { App, Scene, Text } from './app.js';
 import { Windows, SET_BTN, CAREER_BTN } from './windows.js';
 import { SPELL_FX } from './spellfx.js';
-import { CLASS_OF, careerOptions, spellsFor, Usage } from './career.js';
+import { CLASS_OF, CLASS_ID, careerOptions, spellsFrom, Usage } from './career.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 import { writeSlot, firstFree } from './saves.js';
@@ -43,7 +43,7 @@ const ATTRS = ['Fire', 'Water', 'Earth', 'Thunder', 'Holy', 'Dark', 'Gel', 'Meta
 const SFX = { hit: 1, hurt: 2, kill: 10, heavyHit: 2, swingLight: 48, swingHeavy: 47, swingBow: 93 };
 const savedZones = new Map<string, Record<number, boolean>>();
 export interface SaveData {
-  v: 1; ep?: number; slot?: number; at?: number; area?: string; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
+  v: 1; ep?: number; hist?: number[]; slot?: number; at?: number; area?: string; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
   inv: [number, number, number, number, number?, number?, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>; zones?: Record<string, Record<number, boolean>>;
   magic?: MagicSave; explored?: ExploredSave; pet?: PetSave; invSet?: number; career?: number; attr?: number[]; usage?: Usage; wh?: [number, number, number, number, number?, number?, number?][];
 }
@@ -93,7 +93,7 @@ export class GameScene implements Scene {
     this.stash();
     const d: SaveData = {
       v: 1, ep: Data.ep, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-      career: this.win.career, attr: this.win.attr, usage: this.usage, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
+      career: this.win.career, attr: this.win.attr, usage: this.usage, hist: this.hist, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
       inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, (e.eq ? 1 : 0) | (e.alt ? 2 : 0), e.unid ? 1 : 0, e.dur ?? -1]),
       vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
       magic: this.magic.save(), explored: this.mapwin.encode(), pet: this.pet?.save(this.petKills),
@@ -242,7 +242,10 @@ export class GameScene implements Scene {
   }
   /** Career change bookkeeping: how often melee / magic / ranged attacks were used (saved). */
   usage: Usage = { melee: 0, magic: 0, ranged: 0 };
-  private refreshCareer() { { const nw = spellsFor(this.win.career, this.hud.level).filter(id => !this.magic.known.includes(id)); if (nw.length && !this.dead) { for (const id of nw) this.magic.learn(id); this.banner = { text: nw.length === 1 ? `Learned ${this.magic.spell(nw[0])!.name}` : `Learned ${nw.length} new spells`, t: 0 }; } } this.win.careerOpts = careerOptions(this.win.career, this.hud.level, this.usage); if (!this.win.careerOpts.length) this.win.careerMenu = false; }
+  /** Class id of the hero at each level-up (exe: byte history, drives the spell learning; see career.ts). */
+  hist: number[] = [];
+  // spell id 600 = Transport has no spell entry (the Warp Gate handles it), so it is filtered out below
+  private refreshCareer() { { const nw = spellsFrom(this.tables, this.win.career, this.hist).filter(id => this.magic.spell(id) && !this.magic.known.includes(id));   if (nw.length && !this.dead) { for (const id of nw) this.magic.learn(id); this.banner = { text: nw.length === 1 ? `Learned ${this.magic.spell(nw[0])!.name}` : `Learned ${nw.length} new spells`, t: 0 }; } } this.win.careerOpts = careerOptions(this.win.career, this.hud.level, this.usage); if (!this.win.careerOpts.length) this.win.careerMenu = false; }
   private openWarehouse() {
     this.qlog = null; this.shop = new Warehouse(); this.dlg = null; this.win.item = true; this.win.sellValue = null; this.win.panelHint = 'Click to store in the warehouse';
     this.win.panel = (x, y) => !!this.shop?.over(x, y);
@@ -391,11 +394,11 @@ export class GameScene implements Scene {
     if (ld) {
       Object.assign(g.player, { x: ld.x, y: ld.y }); g.spawnPos = { x: map.markerReal()?.[0] ?? ld.x, y: map.markerReal()?.[1] ?? ld.y };
       g.hud = ld.hud; g.totalExp = ld.totalExp; g.syncExp(); g.win.gold = ld.gold;
-      g.win.inv.set = ld.invSet ?? 0; g.win.career = ld.career ?? 0; if (ld.attr?.length === 8) g.win.attr = [...ld.attr]; g.usage = ld.usage ?? g.usage;
+      g.win.inv.set = ld.invSet ?? 0; g.win.career = ld.career ?? 0; if (ld.attr?.length === 8) g.win.attr = [...ld.attr]; g.usage = ld.usage ?? g.usage; g.hist = ld.hist ? [...ld.hist] : Array(Math.max(0, ld.hud.level - 1)).fill(CLASS_ID[g.win.career]);   // old saves: every level counts for the current profession
       for (const [sec, idx, x, y, , unid, dur] of ld.wh ?? []) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.wh.entries.push({ item, x, y, w, h, unid: !!unid, dur: dur !== undefined && dur >= 0 ? dur : undefined }); } }
       for (const [sec, idx, x, y, eq, unid, dur] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h, eq: !!((eq ?? 0) & 1), alt: !!((eq ?? 0) & 2), unid: !!unid, dur: dur !== undefined && dur >= 0 ? dur : undefined }); } }
     }
-    const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.wh = cr.win.wh; g.win.career = cr.win.career; g.win.attr = cr.win.attr; g.usage = cr.usage ?? g.usage; g.win.gold = cr.win.gold; }
+    const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.wh = cr.win.wh; g.win.career = cr.win.career; g.win.attr = cr.win.attr; g.usage = cr.usage ?? g.usage; g.hist = cr.hist; g.win.gold = cr.win.gold; }
     // monsters addressed by the 'free slot' sentence 32 start dormant: the script summons them (trap rooms, waves). Sentence 31 ranges (alive checks, e.g. 'all monsters of the room are dead') address ordinary monsters
     if (vm) { const ranges: [number, number][] = []; for (const b of vm.data.blocks) for (const [sid, ops] of b) if (sid === 32 && ops[0][0] < 3 && ops[1][0] < 3) ranges.push([ops[0][1], ops[1][1]]); for (const a of g.actors) if (a.enemy && ranges.some(([lo, hi]) => 14000000 + a.rec.id >= lo && 14000000 + a.rec.id <= hi)) { a.slot = true; a.hidden = true; } }
     g.zones = sc.zones; g.musicIdx = sc.music;
@@ -464,7 +467,7 @@ export class GameScene implements Scene {
   private syncExp() {
     const t = this.expTable, h = this.hud;
     const before = h.level;
-    while (h.level < 100 && this.totalExp >= t[h.level - 1]) h.level++;
+    while (h.level < 100 && this.totalExp >= t[h.level - 1]) { h.level++; this.hist.push(CLASS_ID[this.win.career]); }
     this.applyStats(h.level > before);
     const lo = h.level > 1 ? t[h.level - 2] : 0;
     h.exp = this.totalExp - lo; h.expMax = Math.max(1, t[h.level - 1] - lo);

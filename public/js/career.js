@@ -17,16 +17,16 @@ export function careerOptions(current, level, u) {
     return out;
 }
 /**
- * Spell learning (manual: "the types of magic and the order in which spells are learned depend on the player's profession and their basic attributes").
- * The real rules are not decoded (Tables 104-107 / skill data), so this tree is a GUESS: [spell id, professions that may learn it (0 Mercenary 1 Warrior 2 Wizard 3 Hunter), hero level needed].
- * Heal (606) and Fire Ball (601) are known from the start.
+ * Spell learning, decoded from the exe's level-up routine (0x412fb0): every level-up appends the hero's current class id to a history (one byte per level). Class ids: 16 Mercenary, 6 Warrior, 9 Wizard, 5 Hunter.
+ * Score of the current profession p = sum over the history of Table.Tbd (100 + p)[row of the class id] (rows: 0 = Mercenary, 1 = Warrior, 2 = Wizard, 3 = Hunter; Warrior levels count 10 for a Warrior, 2 for a Wizard, 4 for a Hunter ...).
+ * Spell n (id 600 + n, 22 entries incl. Transport) is learned as soon as Table.Tbd (104 + p)[n] <= score (99999 = never). Tables 104-107 are the thresholds of Mercenary / Warrior / Wizard / Hunter.
  */
-export const SPELL_TREE = [
-    [606, [0, 1, 2, 3], 1], [601, [0, 1, 2, 3], 1], [617, [0, 1, 2, 3], 4], [602, [0, 1, 2, 3], 6],
-    [608, [1], 8], [615, [1], 12], [619, [1], 15],
-    [603, [2, 3], 10], [610, [2], 8], [604, [2], 12], [605, [2], 14], [609, [2], 10], [618, [2], 16], [611, [2], 18], [613, [2], 22], [612, [2], 20], [621, [2], 30],
-    [616, [3], 8], [614, [3], 12], [607, [0, 1, 2, 3], 10], [620, [3], 14],
-];
-/** Spells a hero of this profession and level may know. */
-export function spellsFor(career, level) { return SPELL_TREE.filter(([, c, l]) => c.includes(career) && level >= l).map(([id]) => id); }
+export const CLASS_ID = [16, 6, 9, 5];
+const ROW = { 16: 0, 6: 1, 9: 2, 5: 3 };
+export function spellScore(tables, career, hist) { const w = tables[String(100 + career)]?.v ?? []; return hist.reduce((a, c) => a + (w[ROW[c] ?? -1] ?? 0), 0); }
+/** Spell ids (600 = Transport .. 621) a hero of this profession and level history may know. */
+export function spellsFrom(tables, career, hist) {
+    const th = tables[String(104 + career)]?.v ?? [], sc = spellScore(tables, career, hist);
+    return th.map((t, i) => (t <= sc ? 600 + i : 0)).filter(id => id > 0);
+}
 //# sourceMappingURL=career.js.map

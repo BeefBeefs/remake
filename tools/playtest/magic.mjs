@@ -2,6 +2,7 @@ import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 const b = await chromium.launch({args:['--no-sandbox']}); const p = await (await b.newContext({viewport:{width:640,height:480}})).newPage();
 const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('requestfailed',r=>errs.push('fail '+r.url())); p.on('response',r=>{ if(r.status()>=400) errs.push(r.status()+' '+r.url()); });
 await p.goto('http://localhost:8123/play.html?skip=male&scenario=00000001'); await p.waitForFunction(()=>window.app?.scene?.magic,null,{timeout:40000}); await p.waitForTimeout(800);
+await p.evaluate(()=>{ const m=window.app.scene.magic; m.learn(606); m.learn(601); });   // a new hero knows no spell any more (learning rule: career.ts)
 const item=()=>p.evaluate(()=>window.game.win.item);
 console.log('item at start', await item());
 await p.keyboard.press('m'); await p.waitForTimeout(150);

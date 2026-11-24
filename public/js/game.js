@@ -17,7 +17,7 @@ import { Gui, SCREEN_W, SCREEN_H, HUD_Y, BELT, MINE_BTN, POWER_BTN, PET_GAUGE, i
 import { Text } from './app.js';
 import { Windows, SET_BTN, CAREER_BTN } from './windows.js';
 import { SPELL_FX } from './spellfx.js';
-import { CLASS_OF, careerOptions, spellsFor } from './career.js';
+import { CLASS_OF, CLASS_ID, careerOptions, spellsFrom } from './career.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 import { writeSlot, firstFree } from './saves.js';
@@ -62,7 +62,7 @@ export class GameScene {
         this.stash();
         const d = {
             v: 1, ep: Data.ep, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-            career: this.win.career, attr: this.win.attr, usage: this.usage, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
+            career: this.win.career, attr: this.win.attr, usage: this.usage, hist: this.hist, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
             inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, (e.eq ? 1 : 0) | (e.alt ? 2 : 0), e.unid ? 1 : 0, e.dur ?? -1]),
             vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
             magic: this.magic.save(), explored: this.mapwin.encode(), pet: this.pet?.save(this.petKills),
@@ -282,8 +282,9 @@ export class GameScene {
             return; // scripts re-issue some effects every poll
         this.fxList.push({ fx, id, x, y, t: 0 });
     }
+    // spell id 600 = Transport has no spell entry (the Warp Gate handles it), so it is filtered out below
     refreshCareer() { {
-        const nw = spellsFor(this.win.career, this.hud.level).filter(id => !this.magic.known.includes(id));
+        const nw = spellsFrom(this.tables, this.win.career, this.hist).filter(id => this.magic.spell(id) && !this.magic.known.includes(id));
         if (nw.length && !this.dead) {
             for (const id of nw)
                 this.magic.learn(id);
@@ -453,6 +454,8 @@ export class GameScene {
         this.fxList = [];
         /** Career change bookkeeping: how often melee / magic / ranged attacks were used (saved). */
         this.usage = { melee: 0, magic: 0, ranged: 0 };
+        /** Class id of the hero at each level-up (exe: byte history, drives the spell learning; see career.ts). */
+        this.hist = [];
         /** Triple Attack (manual): "only warriors that have reached a certain level" with a melee weapon. GUESS: Warrior, level >= TRIPLE_LEVEL, three strikes at +40 % damage, 2.5 s cooldown. */
         this.tripleLeft = 0;
         this.tripleCd = 0;
@@ -631,6 +634,7 @@ export class GameScene {
             if (ld.attr?.length === 8)
                 g.win.attr = [...ld.attr];
             g.usage = ld.usage ?? g.usage;
+            g.hist = ld.hist ? [...ld.hist] : Array(Math.max(0, ld.hud.level - 1)).fill(CLASS_ID[g.win.career]); // old saves: every level counts for the current profession
             for (const [sec, idx, x, y, , unid, dur] of ld.wh ?? []) {
                 const item = win.db.get(sec, idx);
                 if (item) {
@@ -655,6 +659,7 @@ export class GameScene {
             g.win.career = cr.win.career;
             g.win.attr = cr.win.attr;
             g.usage = cr.usage ?? g.usage;
+            g.hist = cr.hist;
             g.win.gold = cr.win.gold;
         }
         // monsters addressed by the 'free slot' sentence 32 start dormant: the script summons them (trap rooms, waves). Sentence 31 ranges (alive checks, e.g. 'all monsters of the room are dead') address ordinary monsters
@@ -828,8 +833,10 @@ export class GameScene {
     syncExp() {
         const t = this.expTable, h = this.hud;
         const before = h.level;
-        while (h.level < 100 && this.totalExp >= t[h.level - 1])
+        while (h.level < 100 && this.totalExp >= t[h.level - 1]) {
             h.level++;
+            this.hist.push(CLASS_ID[this.win.career]);
+        }
         this.applyStats(h.level > before);
         const lo = h.level > 1 ? t[h.level - 2] : 0;
         h.exp = this.totalExp - lo;
