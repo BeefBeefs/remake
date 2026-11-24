@@ -10,6 +10,10 @@ export class Windows {
         this.db = db;
         this.status = false;
         this.item = false;
+        this.magic = false;
+        this.mapOpen = false;
+        /** HUD elements that sit above the world view (the magic bar) and must swallow clicks. */
+        this.hudOver = null;
         this.inv = new Inventory();
         this.gold = 0;
         /** Set while a shop is open: clicking an inventory item sells it for this price (tooltip hint). */
@@ -31,7 +35,7 @@ export class Windows {
     }
     /** Inventory entry under screen point (x,y) while the item window is open. */
     entryAt(x, y) { return this.item && x >= GRID_X ? this.inv.at(Math.floor((x - GRID_X) / CELL), Math.floor((y - GRID_Y) / CELL)) : undefined; }
-    overUI(x, y) { return (this.panel?.(x, y) ?? false) || (this.status && x < 320 && y < 416) || (this.item && x >= 320 && y < 416); }
+    overUI(x, y) { return (this.panel?.(x, y) ?? false) || (this.hudOver?.(x, y) ?? false) || ((this.status || this.magic || this.mapOpen) && x < 320 && y < 416) || (this.item && x >= 320 && y < 416); }
     draw(ctx, h, name, mx = -1, my = -1) {
         if (this.status) {
             put(ctx, this.st, 5);

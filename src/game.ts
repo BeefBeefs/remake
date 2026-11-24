@@ -8,6 +8,8 @@ import { audio } from './audio.js';
 import { Shop, shopStock, sellPrice, Tbl } from './shop.js';
 import { Actor, ActorCtx, loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
+import { Magic, MagicSave, Spell } from './magic.js';
+import { MapWindow, ExploredSave } from './mapwin.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y, BELT } from './gui.js';
 import { App, Scene, Text } from './app.js';
 import { Windows } from './windows.js';
@@ -32,6 +34,7 @@ const savedZones = new Map<string, Record<number, boolean>>();
 export interface SaveData {
   v: 1; slot?: number; at?: number; area?: string; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
   inv: [number, number, number, number, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>; zones?: Record<string, Record<number, boolean>>;
+  magic?: MagicSave; explored?: ExploredSave;
 }
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
@@ -44,6 +47,7 @@ const dirIndex = (vx: number, vy: number) => FACING[(Math.round(Math.atan2(vy, v
 export class GameScene implements Scene {
   player: { x: number; y: number; dir: number; t: number; anim: number };
   hud: HudState = { hp: 100, hpMax: 100, mp: 60, mpMax: 60, level: 1, exp: 0, expMax: 100, running: false };
+  magic!: Magic; mapwin!: MapWindow; private shots: { x: number; y: number; vx: number; vy: number; t: number; spell: Spell; dmg: number }[] = []; private castT = 0;
   debug = false; paused = false; menu!: GameMenu; dark: DarkLayer | null = null;
   private camX = 0; private camY = 0;
   /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
@@ -72,6 +76,7 @@ export class GameScene implements Scene {
       v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
       inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0]),
       vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
+      magic: this.magic.save(), explored: this.mapwin.encode(),
     };
     if (this.slot >= 0) writeSlot(this.slot, d);
   }
@@ -316,6 +321,9 @@ export class GameScene implements Scene {
     const sg = savedGround.get(scenario);
     if (sg) g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0 }] : []; })());
     g.menu = await GameMenu.load(app);
+    if (opts?.carry) { g.magic = opts.carry.magic; g.mapwin = opts.carry.mapwin; g.mapwin.open = false; }
+    else { [g.magic, g.mapwin] = await Promise.all([Magic.load(app, tables), MapWindow.load(app)]); if (ld) { g.magic.restore(ld.magic); g.mapwin.decode(ld.explored); } }
+    g.win.hudOver = (x, y) => g.magic.barHit(x, y) >= 0;
     if (isDarkMap(map.m.name)) g.dark = await DarkLayer.load(app);
     g.slot = opts?.carry ? opts.carry.slot : ld ? (opts?.slot ?? ld.slot ?? 0) : firstFree();
     if (ld) {
@@ -391,7 +399,10 @@ export class GameScene implements Scene {
     // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
     const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
     const raw = power * (9 + Math.floor(Math.random() * 3)) / 10;
-    const dmg = Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0))));
+    this.damage(a, Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0)))));
+  }
+  /** Apply final damage to a monster: floater, sound, and the death rewards (experience, gold, item drop, kill script event). */
+  private damage(a: Actor, dmg: number) {
     a.hp -= dmg; this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) }); audio.sfx(a.hp <= 0 ? SFX.kill : SFX.hit, 0.8);
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp();
@@ -402,6 +413,45 @@ export class GameScene implements Scene {
       const st = a.rec.st; if (st && st.dlv >= 0) { const [wa, wb] = realToWorld(a.x, a.y); this.randomDrop(st.dlv, wa, wb); }
     }
   }
+  /** The Status / Magic / Map windows share the left half of the screen: opening one closes the others (and the mission list). */
+  private showLeft(w: 'status' | 'magic' | 'map', keep = false) {
+    const cur = this.win.status ? 'status' : this.win.magic ? 'magic' : this.mapwin.open ? 'map' : null, next = w === cur && !keep ? null : w;
+    this.win.status = next === 'status'; this.win.magic = next === 'magic'; this.mapwin.open = this.win.mapOpen = next === 'map';
+    if (next === 'map') this.mapwin.recenter();
+    if (next && this.qlog) this.toggleQuestLog();
+  }
+  /** Right mouse button: cast the selected magic, or attack (F9 / empty slot) the enemy under the pointer. */
+  private rightAction() {
+    const inp = this.app.input, m = this.magic, wx = inp.x + this.camX, wy = inp.y + this.camY, sp = m.selected();
+    const hov = this.actors.find(a => a.enemy && a.alive && a.hit(wx, wy));
+    if (!sp) { if (hov) this.target = hov; else if (m.sel < 8) this.banner = { text: 'No magic set for this slot', t: 0 }; return; }
+    if (this.castT > 0) return;
+    if (sp.kind === 'none') { this.banner = { text: `${sp.name} cannot be cast yet`, t: 0 }; return; }
+    const h = this.hud, p = this.player;
+    if (h.mp < sp.mp) { this.banner = { text: 'Not enough MP', t: 0 }; return; }
+    if (sp.kind === 'heal') {
+      if (h.hp >= h.hpMax) { this.banner = { text: 'HP is already full', t: 0 }; return; }
+      const g = Math.min(h.hpMax - h.hp, Math.max(1, Math.round(h.hpMax * m.healPct(sp.id) / 100)));
+      h.hp += g; this.floaters.push({ x: p.x, y: p.y - 90, t: 0, s: `+${g}` });
+    } else {
+      // bolt (guess: 24 + 3 per hero level, times the magic level bonus, +-10 % spread, ignores defence)
+      const tx = hov ? hov.x : wx, ty = hov ? hov.y : wy + 30, dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
+      if (this.atkT < 0) p.dir = dirIndex(dx, dy);
+      this.shots.push({ x: p.x, y: p.y, vx: dx / d, vy: dy / d, t: 0, spell: sp, dmg: (24 + 3 * (h.level - 1)) * m.power(sp.id) });
+    }
+    h.mp -= sp.mp; this.castT = 400; audio.sfx(SFX.hit, 0.5);
+    if (m.use(sp.id)) this.banner = { text: `${sp.name} reached magic level ${m.level(sp.id)}`, t: 0 };
+  }
+  private updateShots(dt: number) {
+    if (this.castT > 0) this.castT -= dt;
+    for (const s of this.shots) {
+      s.t += dt; s.x += s.vx * 0.5 * dt; s.y += s.vy * 0.5 * dt;
+      const hit = this.actors.find(a => a.enemy && a.alive && Math.hypot(a.x - s.x, (a.y - s.y) * 1.6) < 36);
+      if (hit) { s.t = 9999; this.damage(hit, Math.max(1, Math.round(s.dmg * (9 + Math.floor(Math.random() * 3)) / 10))); }
+      else if (this.map.blockedReal(s.x, s.y)) s.t = 9999;
+    }
+    this.shots = this.shots.filter(s => s.t < 1100);
+  }
   private blocked(x: number, y: number) {
     return this.map.blockedReal(x, y) || this.actors.some(a => a.solid && Math.hypot(a.x - x, (a.y - y) * 1.6) < a.radius);
   }
@@ -411,6 +461,7 @@ export class GameScene implements Scene {
       const act = this.menu.update(dt, this.app.input.x, this.app.input.y, this.app.input.clicked, this.app.input.pressed.has('escape'));
       if (act === 'close') this.paused = false;
       else if (act === 'missions') { this.paused = false; if (!this.qlog) this.toggleQuestLog(); }
+      else if (act === 'map') { this.paused = false; if (!this.mapwin.open) this.showLeft('map'); }
       else if (act === 'title' || act === 'exit') { this.save(); this.leaving = true; TitleScene.create(this.app).then(t => this.app.go(t)); }
       return;
     }
@@ -426,7 +477,11 @@ export class GameScene implements Scene {
     const inp = this.app.input, keys = inp.keys, p = this.player, hud = this.hud;
     if (!this.paused && inp.pressed.has('g')) this.debug = !this.debug;
     if (inp.pressed.has('r')) hud.running = !hud.running;
-    if (inp.pressed.has('s') || inp.pressed.has('c')) this.win.status = !this.win.status;
+    if (inp.pressed.has('s') || inp.pressed.has('c')) this.showLeft('status');
+    if (inp.pressed.has('m')) this.showLeft('magic');
+    if (inp.pressed.has('n')) this.showLeft('map');
+    for (let k = 0; k < 9; k++) if (inp.pressed.has(`f${k + 1}`)) this.magic.sel = k;
+    this.mapwin.reveal(this.scenario, this.map, p.x, p.y); this.mapwin.update(dt, keys, inp.pressed); this.updateShots(dt);
     if (inp.pressed.has('i')) this.win.item = !this.win.item;
     if (inp.pressed.has('q')) this.toggleQuestLog();
     if (inp.pressed.has('h')) { this.menu.open('help'); this.paused = true; return; }
@@ -434,14 +489,19 @@ export class GameScene implements Scene {
     if (inp.rclicked) {   // right click: belt slot, or a consumable in the item window
       const k = BELT.findIndex(r => inp.x >= r.x && inp.x < r.x + r.w && inp.y >= r.y && inp.y < r.y + r.h), e = k >= 0 ? this.belt()[k] : this.win.entryAt(inp.x, inp.y);
       if (e) this.useItem(e);
+      else if (inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.dead && !this.dlg && !this.shop) this.rightAction();
     }
     if (inp.pressed.has('escape') && this.qlog) this.toggleQuestLog();
-    else if (inp.pressed.has('escape')) { if (this.win.status || this.win.item) this.win.status = this.win.item = false; else { this.menu.open('main'); this.paused = true; return; } }
+    else if (inp.pressed.has('escape')) { if (this.win.status || this.win.item || this.win.magic || this.mapwin.open) this.win.status = this.win.item = this.win.magic = this.mapwin.open = this.win.mapOpen = false; else { this.menu.open('main'); this.paused = true; return; } }
     if (inp.clicked) {
       const b = this.gui.button(inp.x, inp.y);
-      if (this.qlog && inp.x < 320 && inp.y < 416) this.qlogClick(inp.x, inp.y);
+      const bk = this.magic.barHit(inp.x, inp.y);
+      if (bk >= 0) this.magic.sel = bk;
+      else if ((this.win.status || this.win.magic) && inp.x < 320 && inp.y >= 4 && inp.y < 36 && inp.x >= 40 && inp.x < 280) this.showLeft(inp.x < 165 ? 'status' : 'magic', true);
+      else if (this.win.magic && inp.x < 320 && inp.y < 416) this.magic.click(inp.x, inp.y);
+      else if (this.qlog && inp.x < 320 && inp.y < 416) this.qlogClick(inp.x, inp.y);
       else if (!this.shop && this.win.entryAt(inp.x, inp.y)) this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y)!);
-      else if (b === 'status') this.win.status = !this.win.status;
+      else if (b === 'status') this.showLeft('status');
       else if (b === 'item') this.win.item = !this.win.item;
       else if (b === 'menu') { this.menu.open('main'); this.paused = true; return; }
     }
@@ -467,10 +527,11 @@ export class GameScene implements Scene {
     else if (inp.clicked) this.target = null;
     if (this.target && !this.target.alive) this.target = null;
     let dx = 0, dy = 0;
-    if (keys.has('a') || keys.has('arrowleft')) dx--;
-    if (keys.has('d') || keys.has('arrowright')) dx++;
-    if (keys.has('w') || keys.has('arrowup')) dy--;
-    if (keys.has('s') || keys.has('arrowdown')) dy++;
+    const ar = !this.mapwin.open;   // with the map open the arrow keys scroll it
+    if (keys.has('a') || (ar && keys.has('arrowleft'))) dx--;
+    if (keys.has('d') || (ar && keys.has('arrowright'))) dx++;
+    if (keys.has('w') || (ar && keys.has('arrowup'))) dy--;
+    if (keys.has('s') || (ar && keys.has('arrowdown'))) dy++;
     let vx = dx, vy = dy;
     if (!dx && !dy && inp.down && !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y)) {
       // walk towards the mouse pointer (screen space, relative to the player)
@@ -512,6 +573,14 @@ export class GameScene implements Scene {
     } }));
     map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...this.zones.filter(z => z.drawn), ...gd]);
     if (this.dark && settings.darkness) this.dark.draw(ctx, p.x - this.camX, p.y - this.camY - 30);
+    for (const s of this.shots) {   // bolts: glowing orb with a short trail
+      for (let k = 3; k >= 0; k--) {
+        const x = s.x - s.vx * k * 9 - this.camX, y = s.y - s.vy * k * 9 - this.camY - 36, r = 8 - k * 1.5, g = ctx.createRadialGradient(x, y, 0, x, y, r + 3);
+        g.addColorStop(0, '#fff'); g.addColorStop(0.45, s.spell.color); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.globalAlpha = 1 - k * 0.22; ctx.beginPath(); ctx.arc(x, y, r + 3, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
     for (const f of this.floaters) this.text.drawCenter(ctx, f.s, Math.round(f.x - this.camX), Math.round(f.y - this.camY - f.t / 25));
     if (this.banner) { const w = this.banner.text.length * 6 + 24; ctx.fillStyle = 'rgba(8,8,24,0.85)'; ctx.fillRect(320 - w / 2, 20, w, 24); ctx.strokeStyle = '#a89868'; ctx.strokeRect(320 - w / 2 + 0.5, 20.5, w - 1, 23); this.text.drawCenter(ctx, this.banner.text, 320, 26); }
     if (this.debug) { map.drawJudge(ctx, this.camX, this.camY, SCREEN_W, HUD_Y); this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2); }
@@ -521,7 +590,10 @@ export class GameScene implements Scene {
     if (hov) this.text.drawCenter(ctx, hov.name, Math.round(hov.x - this.camX), Math.round(hov.y - this.camY - 84));
     ctx.fillStyle = '#000'; ctx.fillRect(0, HUD_Y, SCREEN_W, SCREEN_H - HUD_Y);
     this.win.draw(ctx, this.hud, this.name, inp.x, inp.y);
+    if (this.win.magic) this.magic.draw(ctx, this.text, inp.x, inp.y);
+    if (this.mapwin.open) this.mapwin.draw(ctx, this.text, this.scenario, this.map, this.areaName(), p.x, p.y);
     this.gui.draw(ctx, this.hud);
+    this.magic.drawBar(ctx, this.text, inp.x, inp.y);
     this.belt().forEach((e, k) => this.win.drawIcon(ctx, e.item, BELT[k].x + BELT[k].w / 2, BELT[k].y + BELT[k].h / 2, 0.7));
     this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y);
     if (this.qlog) this.drawQuestLog(ctx);

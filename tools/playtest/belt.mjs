@@ -1,0 +1,14 @@
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+const b = await chromium.launch({args:['--no-sandbox']}); const p = await (await b.newContext({viewport:{width:640,height:480}})).newPage();
+const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+await p.goto('http://localhost:8123/play.html?skip=male&scenario=00000001'); await p.waitForFunction(()=>window.app?.scene?.win,null,{timeout:40000}); await p.waitForTimeout(800);
+await p.evaluate(()=>{ const s=window.app.scene, w=s.win; [[3,0],[3,4],[3,21],[3,23],[3,8],[3,5]].forEach(([sec,idx],i)=>{ const it=w.db.get(sec,idx); w.inv.entries.push({item:it,x:i,y:0,w:1,h:1,eq:false}); }); s.hud.hp=20; s.hud.mp=10; });
+const st=()=>p.evaluate(()=>{const h=window.app.scene.hud; return {hp:h.hp,hpMax:h.hpMax,mp:h.mp,mpMax:h.mpMax,bonus:[h.hpBonus,h.mpBonus],inv:window.app.scene.win.inv.entries.map(e=>e.item.name)}});
+console.log('start',JSON.stringify(await st())); await p.screenshot({path:'/tmp/belt_hud.png',clip:{x:340,y:405,width:300,height:75}});
+await p.keyboard.press('1'); await p.waitForTimeout(150); console.log('after key1 (Tablet)',JSON.stringify(await st()));
+await p.mouse.move(380,430); await p.waitForTimeout(100); await p.mouse.down({button:'right'}); await p.waitForTimeout(60); await p.mouse.up({button:'right'}); await p.waitForTimeout(200);
+console.log('after right-click slot1 (Capsule)',JSON.stringify(await st()));
+await p.keyboard.press('1'); await p.waitForTimeout(150); console.log('after key1 (Vitality Source)',JSON.stringify(await st()));
+await p.keyboard.press('1'); await p.waitForTimeout(150); console.log('after key1 (Apple)',JSON.stringify(await st()));
+await p.keyboard.press('1'); await p.waitForTimeout(150); console.log('after key1 (Meat? not belt)',JSON.stringify(await st()));
+console.log('errors',errs); await b.close();

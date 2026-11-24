@@ -10,7 +10,9 @@ const GRID_X = 335, GRID_Y = 71, CELL = 32;
 
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
 export class Windows {
-  status = false; item = false; ps?: PlayerStats;
+  status = false; item = false; magic = false; mapOpen = false; ps?: PlayerStats;
+  /** HUD elements that sit above the world view (the magic bar) and must swallow clicks. */
+  hudOver: ((x: number, y: number) => boolean) | null = null;
   inv = new Inventory(); gold = 0;
   /** Set while a shop is open: clicking an inventory item sells it for this price (tooltip hint). */
   sellValue: ((it: ItemDef) => number) | null = null;
@@ -28,7 +30,7 @@ export class Windows {
   entryAt(x: number, y: number): InvEntry | undefined { return this.item && x >= GRID_X ? this.inv.at(Math.floor((x - GRID_X) / CELL), Math.floor((y - GRID_Y) / CELL)) : undefined; }
   /** Extra left-hand panel (shop) that also blocks world clicks. */
   panel: ((x: number, y: number) => boolean) | null = null;
-  overUI(x: number, y: number) { return (this.panel?.(x, y) ?? false) || (this.status && x < 320 && y < 416) || (this.item && x >= 320 && y < 416); }
+  overUI(x: number, y: number) { return (this.panel?.(x, y) ?? false) || (this.hudOver?.(x, y) ?? false) || ((this.status || this.magic || this.mapOpen) && x < 320 && y < 416) || (this.item && x >= 320 && y < 416); }
   draw(ctx: CanvasRenderingContext2D, h: HudState, name: string, mx = -1, my = -1) {
     if (this.status) {
       put(ctx, this.st, 5);

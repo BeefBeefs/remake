@@ -5,7 +5,8 @@ const MAIN = [['settings', 'Settings'], ['missions', 'Mission List'], ['map', 'M
 export const HELP = [
     ['Left click', 'Walk / talk / attack / pick up'], ['Ctrl + click', 'Run while Walk is selected'], ['R', 'Switch Walk / Run'],
     ['S or C', 'Status window'], ['I', 'Item window'], ['Q', 'Mission List'], ['H', 'This help'], ['Esc', 'Game menu / close windows'],
-    ['1 - 8', 'Use belt pocket item (or right click)'], ['Right click', 'Use an item in the item window'],
+    ['1 - 8', 'Use belt pocket item (or right click)'], ['M', 'Magic window'], ['N', 'Map'],
+    ['F1 - F8', 'Select a magic for the right mouse button'], ['F9', 'Select attack for right click'], ['Right click', 'Cast / attack (items: use)'],
     ['F12', 'Mute sound'], ['G', 'Debug overlay'],
 ];
 /** Game Menu (MENU button / Esc): frame from Game/Status pattern 119, entries from the manual: Settings, Mission List, Map, Help, Save and Return to Title, Save and Exit. */
@@ -53,12 +54,9 @@ export class GameMenu {
                 this.page = 'main';
                 return null;
             case 'missions':
+            case 'map':
             case 'title':
             case 'exit': return r.id;
-            case 'map':
-                this.note = 'The map is not available yet';
-                this.noteT = 2500;
-                return null;
             case 'music':
                 settings.music = (settings.music + (x > r.x + r.w / 2 ? 1 : 10)) % 11;
                 saveSettings();

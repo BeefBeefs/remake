@@ -6,3 +6,5 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `route.mjs` drives the real game through the Episode 1 exit chain (start -> Garam Goblin room) via `scene.exit()` and kills the boss.
 - `menus.mjs` seeds two saves, loads one through Title -> LOAD DATA -> mode window, checks slot handling and DELETE. `newgame.mjs` checks legacy-save migration and New Game slot assignment.
 - `gamemenu.mjs` opens the Game Menu with Esc in a dungeon, toggles settings, checks darkness and closing.
+- `belt.mjs` uses belt items with keys 1-8 / right click (Tablet, Capsule, Vitality Source, Apple).
+- `magic.mjs` casts Fire Bolt-style spells at a goblin with a clear line of fire; `tabs.mjs` checks F-keys, M, tab clicks and Esc for the Status/Magic windows; `mapsave.mjs` also opens the map and checks the saved magic/explored data.

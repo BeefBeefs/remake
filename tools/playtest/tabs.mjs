@@ -1,0 +1,12 @@
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+const b = await chromium.launch({args:['--no-sandbox']}); const p = await (await b.newContext({viewport:{width:640,height:480}})).newPage();
+await p.goto('http://localhost:8123/play.html?skip=male&scenario=00000001'); await p.waitForFunction(()=>window.app?.scene?.magic,null,{timeout:40000}); await p.waitForTimeout(800);
+const st=()=>p.evaluate(()=>({item:window.game.win.item,status:window.game.win.status,magic:window.game.win.magic,sel:window.game.magic.sel}));
+await p.mouse.move(200,400); await p.waitForTimeout(80); await p.mouse.down(); await p.waitForTimeout(50); await p.mouse.up(); await p.waitForTimeout(100); console.log('click bar slot0', JSON.stringify(await st()));
+await p.keyboard.press('F1'); await p.waitForTimeout(100); console.log('F1', JSON.stringify(await st()));
+await p.keyboard.press('F9'); await p.waitForTimeout(100); console.log('F9', JSON.stringify(await st()));
+await p.keyboard.press('m'); await p.waitForTimeout(100); await p.keyboard.press('m'); await p.waitForTimeout(100); console.log('m m', JSON.stringify(await st()));
+await p.keyboard.press('m'); await p.waitForTimeout(100); await p.mouse.move(250,20); await p.mouse.down(); await p.waitForTimeout(50); await p.mouse.up(); await p.waitForTimeout(100); console.log('tab click magic->?', JSON.stringify(await st()));
+await p.mouse.move(100,20); await p.mouse.down(); await p.waitForTimeout(50); await p.mouse.up(); await p.waitForTimeout(100); console.log('tab status', JSON.stringify(await st()));
+await p.keyboard.press('Escape'); await p.waitForTimeout(100); console.log('esc', JSON.stringify(await st()));
+await b.close();

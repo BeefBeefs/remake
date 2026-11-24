@@ -2,7 +2,7 @@ import { App, Text } from './app.js';
 import { SpriteSet } from './sprites.js';
 import { settings, saveSettings } from './settings.js';
 
-export type MenuAction = 'close' | 'missions' | 'title' | 'exit' | null;
+export type MenuAction = 'close' | 'missions' | 'map' | 'title' | 'exit' | null;
 type Page = 'main' | 'settings' | 'help';
 
 const MAIN: [string, string][] = [['settings', 'Settings'], ['missions', 'Mission List'], ['map', 'Map'], ['help', 'Help'], ['title', 'Save and Return to Title'], ['exit', 'Save and Exit']];
@@ -10,7 +10,8 @@ const MAIN: [string, string][] = [['settings', 'Settings'], ['missions', 'Missio
 export const HELP: [string, string][] = [
   ['Left click', 'Walk / talk / attack / pick up'], ['Ctrl + click', 'Run while Walk is selected'], ['R', 'Switch Walk / Run'],
   ['S or C', 'Status window'], ['I', 'Item window'], ['Q', 'Mission List'], ['H', 'This help'], ['Esc', 'Game menu / close windows'],
-  ['1 - 8', 'Use belt pocket item (or right click)'], ['Right click', 'Use an item in the item window'],
+  ['1 - 8', 'Use belt pocket item (or right click)'], ['M', 'Magic window'], ['N', 'Map'],
+  ['F1 - F8', 'Select a magic for the right mouse button'], ['F9', 'Select attack for right click'], ['Right click', 'Cast / attack (items: use)'],
   ['F12', 'Mute sound'], ['G', 'Debug overlay'],
 ];
 
@@ -39,8 +40,7 @@ export class GameMenu {
     switch (r.id) {
       case 'settings': case 'help': this.page = r.id; return null;
       case 'back': this.page = 'main'; return null;
-      case 'missions': case 'title': case 'exit': return r.id;
-      case 'map': this.note = 'The map is not available yet'; this.noteT = 2500; return null;
+      case 'missions': case 'map': case 'title': case 'exit': return r.id;
       case 'music': settings.music = (settings.music + (x > r.x + r.w / 2 ? 1 : 10)) % 11; saveSettings(); return null;
       case 'sfx': settings.sfx = (settings.sfx + (x > r.x + r.w / 2 ? 1 : 10)) % 11; saveSettings(); return null;
       case 'dark': settings.darkness = !settings.darkness; saveSettings(); return null;
