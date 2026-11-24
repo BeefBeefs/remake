@@ -5,6 +5,7 @@ import { ScriptVM } from './script.js';
 import { Gui, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
 import { Text } from './app.js';
 import { Windows } from './windows.js';
+import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 const q = new URLSearchParams(location.search);
 const SCENARIO = q.get('scenario') ?? '00000000';
@@ -13,6 +14,15 @@ const LINKS = { '00000000': '00000001', '00000001': '00000000' };
 /** Script state kept per scenario so quests are not replayed when re-entering a map. */
 const savedVars = new Map();
 let savedGlobals = new Map();
+const savedGround = new Map();
+const SAVE_KEY = 'shadowflare_save_v1';
+export function readSave() { try {
+    const t = localStorage.getItem(SAVE_KEY);
+    return t ? JSON.parse(t) : null;
+}
+catch {
+    return null;
+} }
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
 const FRAME_MS = 60;
@@ -21,6 +31,28 @@ const ANIM_IDLE = 0, ANIM_WALK = 1, ANIM_RUN = 2;
 const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
 const dirIndex = (vx, vy) => FACING[(Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 8];
 export class GameScene {
+    /** Remember per-scenario script flags and ground items (used for transitions and saving). */
+    stash() {
+        if (this.vm) {
+            savedVars.set(this.scenario, this.vm.vars);
+            savedGlobals = this.vm.globals;
+        }
+        savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold })));
+    }
+    save() {
+        this.stash();
+        const d = {
+            v: 1, name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
+            inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y]),
+            vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround),
+        };
+        try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify(d));
+        }
+        catch (e) {
+            console.warn('save failed', e);
+        }
+    }
     atExit() {
         const p = this.player;
         if (this.map.hasMarkerZone)
@@ -36,10 +68,7 @@ export class GameScene {
         if (!at || !this.armed)
             return;
         this.leaving = true;
-        if (this.vm) {
-            savedVars.set(this.scenario, this.vm.vars);
-            savedGlobals = this.vm.globals;
-        }
+        this.save();
         GameScene.create(this.app, this.gender, this.name, { scenario: LINKS[this.scenario], carry: this }).then(g => this.app.go(g));
     }
     openDialog() {
@@ -133,6 +162,7 @@ export class GameScene {
         this.floaters = [];
         this.armed = false;
         this.leaving = false;
+        this.saveT = 0;
         /** Items lying on the ground (real-pixel coordinates). gold > 0 for gold piles. */
         this.ground = [];
         this.groundDraw = { get y() { return 0; }, draw: () => { } };
@@ -178,6 +208,16 @@ export class GameScene {
             };
     }
     static async create(app, gender, name, opts) {
+        const ld = opts?.load;
+        if (ld) {
+            savedGlobals = new Map(ld.globals);
+            savedVars.clear();
+            for (const [k, v] of Object.entries(ld.vars))
+                savedVars.set(k, new Map(v));
+            savedGround.clear();
+            for (const [k, v] of Object.entries(ld.ground))
+                savedGround.set(k, v);
+        }
         const scenario = opts?.scenario ?? SCENARIO;
         const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null, actors: [] }));
         const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
@@ -187,6 +227,24 @@ export class GameScene {
             const sv = savedVars.get(scenario);
             if (sv)
                 vm.vars = sv;
+        }
+        const sg = savedGround.get(scenario);
+        if (sg)
+            g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0 }] : []; })());
+        if (ld) {
+            Object.assign(g.player, { x: ld.x, y: ld.y });
+            g.spawnPos = { x: map.markerReal()?.[0] ?? ld.x, y: map.markerReal()?.[1] ?? ld.y };
+            g.hud = ld.hud;
+            g.totalExp = ld.totalExp;
+            g.syncExp();
+            g.win.gold = ld.gold;
+            for (const [sec, idx, x, y] of ld.inv) {
+                const item = win.db.get(sec, idx);
+                if (item) {
+                    const [w, h] = ItemDb.size(item);
+                    g.win.inv.entries.push({ item, x, y, w, h });
+                }
+            }
         }
         const cr = opts?.carry;
         if (cr) {
@@ -260,6 +318,10 @@ export class GameScene {
     update(dt) {
         this.dev();
         this.checkExit();
+        if ((this.saveT += dt) > 10000 && !this.dead && !this.leaving) {
+            this.saveT = 0;
+            this.save();
+        }
         for (const a of this.actors)
             a.update(dt, this.actorCtx);
         this.actors = this.actors.filter(a => !(a.enemy && a.state === 'die' && a.deadT > 6000));
@@ -284,8 +346,10 @@ export class GameScene {
         if (inp.clicked) {
             const b = this.gui.button(inp.x, inp.y);
             if (this.paused) {
-                if (inp.y > 215 && inp.y < 235)
+                if (inp.y > 215 && inp.y < 235) {
+                    this.save();
                     TitleScene.create(this.app).then(t => this.app.go(t));
+                }
                 else
                     this.paused = false;
             }

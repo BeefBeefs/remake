@@ -1,6 +1,7 @@
 import { App, Scene, put, inRect, Text } from './app.js';
 import { SpriteSet } from './sprites.js';
 import { SelectScene } from './select.js';
+import { GameScene, readSave } from './game.js';
 
 /** Title screen: System/Title/Pattern/Title.njp (0 = backdrop, 1..3 = menu entries, 4 = copyright). */
 export class TitleScene implements Scene {
@@ -13,7 +14,10 @@ export class TitleScene implements Scene {
     if (!i.clicked) return;
     const hit = this.items.findIndex(p => inRect(this.t.pattern(p), i.x, i.y));
     if (hit === 0) SelectScene.create(this.app).then(s => this.app.go(s));
-    else if (hit === 1) { this.msg = 'Load game: not implemented yet'; this.msgT = 2500; }
+    else if (hit === 1) {
+      const d = readSave();
+      if (!d) { this.msg = 'No saved game found'; this.msgT = 2500; } else { this.msg = 'Loading...'; this.msgT = 60000; GameScene.create(this.app, d.gender, d.name, { scenario: d.scenario, load: d }).then(g => this.app.go(g)); }
+    }
     else if (hit === 2) { this.msg = 'Close the tab to exit :)'; this.msgT = 2500; }
   }
   draw(ctx: CanvasRenderingContext2D) {

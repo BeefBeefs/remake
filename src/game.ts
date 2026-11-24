@@ -17,6 +17,14 @@ const SCENARIO = q.get('scenario') ?? '00000000';
 const LINKS: Record<string, string> = { '00000000': '00000001', '00000001': '00000000' };
 /** Script state kept per scenario so quests are not replayed when re-entering a map. */
 const savedVars = new Map<string, Map<string, number>>(); let savedGlobals = new Map<string, number>();
+interface GroundSave { x: number; y: number; sec: number; idx: number; gold: number; }
+const savedGround = new Map<string, GroundSave[]>();
+const SAVE_KEY = 'shadowflare_save_v1';
+export interface SaveData {
+  v: 1; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
+  inv: [number, number, number, number][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>;
+}
+export function readSave(): SaveData | null { try { const t = localStorage.getItem(SAVE_KEY); return t ? JSON.parse(t) : null; } catch { return null; } }
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
 const FRAME_MS = 60;
@@ -37,7 +45,21 @@ export class GameScene implements Scene {
   private spawnPos = { x: 0, y: 0 };
   floaters: { x: number; y: number; t: number; s: string }[] = [];
   private actorCtx: ActorCtx;
-  private armed = false; private leaving = false;
+  private armed = false; private leaving = false; private saveT = 0;
+  /** Remember per-scenario script flags and ground items (used for transitions and saving). */
+  private stash() {
+    if (this.vm) { savedVars.set(this.scenario, this.vm.vars); savedGlobals = this.vm.globals; }
+    savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold })));
+  }
+  save() {
+    this.stash();
+    const d: SaveData = {
+      v: 1, name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
+      inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y]),
+      vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround),
+    };
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch (e) { console.warn('save failed', e); }
+  }
   private atExit() {
     const p = this.player;
     if (this.map.hasMarkerZone) return this.map.inMarker(p.x, p.y, 5);
@@ -49,7 +71,7 @@ export class GameScene implements Scene {
     if (far) this.armed = true;
     if (!at || !this.armed) return;
     this.leaving = true;
-    if (this.vm) { savedVars.set(this.scenario, this.vm.vars); savedGlobals = this.vm.globals; }
+    this.save();
     GameScene.create(this.app, this.gender, this.name, { scenario: LINKS[this.scenario], carry: this }).then(g => this.app.go(g));
   }
   /** Items lying on the ground (real-pixel coordinates). gold > 0 for gold piles. */
@@ -118,12 +140,21 @@ export class GameScene implements Scene {
       },
     };
   }
-  static async create(app: App, gender: Gender, name: string, opts?: { scenario?: string; carry?: GameScene }) {
+  static async create(app: App, gender: Gender, name: string, opts?: { scenario?: string; carry?: GameScene; load?: SaveData }) {
+    const ld = opts?.load;
+    if (ld) { savedGlobals = new Map(ld.globals); savedVars.clear(); for (const [k, v] of Object.entries(ld.vars)) savedVars.set(k, new Map(v)); savedGround.clear(); for (const [k, v] of Object.entries(ld.ground)) savedGround.set(k, v); }
     const scenario = opts?.scenario ?? SCENARIO;
     const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null as string | null, actors: [] as Actor[] }));
     const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
     const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm, scenario, gender);
     if (vm) { vm.globals = savedGlobals; const sv = savedVars.get(scenario); if (sv) vm.vars = sv; }
+    const sg = savedGround.get(scenario);
+    if (sg) g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0 }] : []; })());
+    if (ld) {
+      Object.assign(g.player, { x: ld.x, y: ld.y }); g.spawnPos = { x: map.markerReal()?.[0] ?? ld.x, y: map.markerReal()?.[1] ?? ld.y };
+      g.hud = ld.hud; g.totalExp = ld.totalExp; g.syncExp(); g.win.gold = ld.gold;
+      for (const [sec, idx, x, y] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h }); } }
+    }
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
     g.expTable = tables['13'].v; g.syncExp();
     return g;
@@ -165,6 +196,7 @@ export class GameScene implements Scene {
   update(dt: number) {
     this.dev();
     this.checkExit();
+    if ((this.saveT += dt) > 10000 && !this.dead && !this.leaving) { this.saveT = 0; this.save(); }
     for (const a of this.actors) a.update(dt, this.actorCtx);
     this.actors = this.actors.filter(a => !(a.enemy && a.state === 'die' && a.deadT > 6000));
     for (const f of this.floaters) f.t += dt; this.floaters = this.floaters.filter(f => f.t < 900);
@@ -176,7 +208,7 @@ export class GameScene implements Scene {
     if (inp.pressed.has('escape')) { if (this.win.status || this.win.item) this.win.status = this.win.item = false; else this.paused = !this.paused; }
     if (inp.clicked) {
       const b = this.gui.button(inp.x, inp.y);
-      if (this.paused) { if (inp.y > 215 && inp.y < 235) TitleScene.create(this.app).then(t => this.app.go(t)); else this.paused = false; }
+      if (this.paused) { if (inp.y > 215 && inp.y < 235) { this.save(); TitleScene.create(this.app).then(t => this.app.go(t)); } else this.paused = false; }
       else if (b === 'status') this.win.status = !this.win.status;
       else if (b === 'item') this.win.item = !this.win.item;
       else if (b === 'menu') this.paused = true;

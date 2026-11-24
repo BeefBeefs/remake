@@ -15,7 +15,7 @@ Newest entries at the bottom. Run `npm run assets && npm run build && npm run se
 - Equipment layers, facing order and anim indices for the player are guesses; equipment is not drawn yet.
 - Ground transitions between tile types are blocky; Status window values are placeholders.
 - Many script sentence types are logged and skipped (see `console.warn("script: unimplemented ...")`).
-- No shops, audio or saving yet.
+- No shops, equipping items, audio or saving yet.
 
 ## Log
 - Remote Town + NPCs + dialogue + item drops (commits 4206818 .. 951561b).
@@ -23,3 +23,4 @@ Newest entries at the bottom. Run `npm run assets && npm run build && npm run se
 - Combat v1: goblins idle/chase/attack/die (ENEMY caf anims 0 idle, 1 walk, 2 attack, 3 death), player attack = player anim 3 (11-frame slash; hit at ~45%), click an enemy to walk up and fight, damage numbers, enemy HP bars, EXP + gold drop on kill, death screen with respawn at spawn. Other player anims seen on the contact sheet: 0 idle, 1 walk, 2 run, 4-21 one-shot skills/attacks (3,5,6,7,8,10,11,13,... unknown which weapon/skill), 23 fall (used as death), 24-28 looping poses for other weapon types.
   - PLACEHOLDERS: enemy HP/damage/EXP/gold/speed (`ENEMY_STATS` in `src/actors.ts`), player damage = 8 + 2*level, player max HP/MP per level. Real values should come from Control.aid / Table.Tbd.
 - Scene transitions (PROVISIONAL): `LINKS` in `src/game.ts` maps scenario 0 <-> 1. Town exit = the 0x8000-flagged judge zone (a blocked 13x4-cell gate in the wall, so it triggers within 5 cells); the field has no flagged cells, so its exit is a circle around the arrival point, armed once the player walks 220px away. HUD/EXP/inventory/gold carry over; per-scenario script flags (kinds 3-5) are remembered, kinds 10-12 are global. Real exit data is not found yet: script sentence 37 sets a "change scene" request (global 0x48ce50, target stored as ~operand in 0x48d72c) but zone ids (10000200 ...) do not appear in Scenario.Mct and the `.map` files are 36-byte stubs. Zones are probably created by script sentence 27 (`id, x, y, message, ...`) and/or by Obl objects.
+- Save/load (localStorage key `shadowflare_save_v1`): autosave every 10 s, on map change and when exiting to the title; title "Load game" restores scenario, position, HUD/EXP, gold, inventory, script flags (per scenario + globals) and unclaimed ground items. Ground items are also kept per scenario while travelling between maps. Killed enemies respawn on re-entry (not saved).

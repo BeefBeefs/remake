@@ -1,5 +1,6 @@
 import { put, inRect, Text } from './app.js';
 import { SelectScene } from './select.js';
+import { GameScene, readSave } from './game.js';
 /** Title screen: System/Title/Pattern/Title.njp (0 = backdrop, 1..3 = menu entries, 4 = copyright). */
 export class TitleScene {
     constructor(app, t, text) {
@@ -20,8 +21,16 @@ export class TitleScene {
         if (hit === 0)
             SelectScene.create(this.app).then(s => this.app.go(s));
         else if (hit === 1) {
-            this.msg = 'Load game: not implemented yet';
-            this.msgT = 2500;
+            const d = readSave();
+            if (!d) {
+                this.msg = 'No saved game found';
+                this.msgT = 2500;
+            }
+            else {
+                this.msg = 'Loading...';
+                this.msgT = 60000;
+                GameScene.create(this.app, d.gender, d.name, { scenario: d.scenario, load: d }).then(g => this.app.go(g));
+            }
         }
         else if (hit === 2) {
             this.msg = 'Close the tab to exit :)';
