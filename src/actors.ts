@@ -36,7 +36,7 @@ export class Actor implements Drawable {
       if (st && !this.gen) {
         // Hit points, attack, speed, exp and the gold chance/min/max come from the Mct record (Mct power multiplier on top of hp/attack); gold/exp/drop fields verified against the exe death routine (0x45a000/0x45a030).
         const hp = Math.max(1, r(st.hp * k)), at = st.atk * Math.sqrt(k), noLoot = st.dlv < 0;
-        this.stats = { hp, dmg: [Math.max(1, r(at * 0.7)), Math.max(1, r(at * 1.3))], exp: st.exp, gold: noLoot ? [0, 0] : [st.gmin, Math.max(st.gmin, st.gmax)], goldChance: st.gchance, defense: st.def_, speed: 0.07 * st.spd / 170 };
+        this.stats = { hp, dmg: [Math.max(1, r(at)), Math.max(1, r(at))], exp: st.exp, gold: noLoot ? [0, 0] : [st.gmin, Math.max(st.gmin, st.gmax)], goldChance: st.gchance, defense: st.def_, speed: 0.07 * st.spd / 170 };
       }
       if (this.gen) this.stats = { hp: 80, dmg: [0, 0], exp: 30, gold: [0, 0], speed: 0 };   // PLACEHOLDER hp for the Enemy Hole generators
       this.hp = this.maxHp = this.stats.hp;

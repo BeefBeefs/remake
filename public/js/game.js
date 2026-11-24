@@ -561,8 +561,7 @@ export class GameScene {
         if (this.dead)
             return;
         const h = this.hud;
-        d = Math.max(1, d - Math.floor(this.win.stats().defense * 0.5));
-        h.hp = Math.max(0, h.hp - d);
+        d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense); // exe 0x412a40 monster->player: power*(9+rand%3)/10 - defence*Table11[neutral=10]/10, minimum 1 h.hp = Math.max(0, h.hp - d);
         this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` });
         audio.sfx(SFX.hurt, 0.8);
         if (h.hp <= 0) {

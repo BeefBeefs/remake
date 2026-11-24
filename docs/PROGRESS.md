@@ -123,3 +123,9 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 - **Player attack** (verified shape, approximate inputs): damage = power * (9 + rand%3) / 10 minus monster defence (exe 0x412a40). The player's attack-info builder was not found, so `power = weapon f26 (fists 2) + 4 + 2*level` is an approximation.
 - **Monster defence**: the exe subtracts defender struct `+0xc` = monster `+0xe8`. Mct record index 657 is the best candidate (0 for Goblin, 20 Hammer Goblin/Soldier, 40 Hammer Guard/Spike, 70 Spike Head); it is UNVERIFIED, so `hurtEnemy` floors damage at 25% of the raw hit. Index 655 (10-30) is the monster's attack power; 656 is a constant 50.
 - Still open: monster-to-player formula and how player defence is applied (currently half the armor defence), Mct index 669, combat sound ids.
+
+## Monster -> player damage (exe 0x412a40, key 2)
+- Decoded the attacker-kind 2 / target-kind 0 branch: `damage = power * (9 + rand%3) / 10 - defence * Table11[resist + 10] / 10`, where power = attackInfo `+0x10` and defence = player target struct `+0xc`. Table 11 is neutral (10) without an elemental resistance, so defence is subtracted at **full weight**, not the 0.5 the remake used.
+- The function's final clamp applies to every branch: **minimum damage 1**.
+- Remake: `hitPlayer` now rolls `(9 + rand%3) / 10` and subtracts the equipped armor defence (item field 28); monsters hit with exactly their Mct attack (index 655, scaled by sqrt of the strength multiplier) instead of a 0.7-1.3 spread.
+- Unknown: where the player's base defence (stat/level term) and element resistances come from, and what the monster-side `+0x2c4` bonus adds to power.
