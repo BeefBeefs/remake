@@ -41,3 +41,5 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `epquests.mjs` — carries the script state through all scenarios of an episode with a level-40 hero and answers every dialog with options 0, 1, 2; reports how many quests got started / completed by the scripts alone (needs items and drops for the rest, so it is a lower bound).
 
 - `epitems.mjs ep [out.json]` - fires every handler of an episode's scenarios and records the quest items the scripts ask for and the chest drop levels used; compare with Tables 30/31 (see PROGRESS "Quest item sources"). Needs the server on :8123.
+- `giveitem.mjs` - sentence 75 (reward item) puts quest items into the bag.
+- `blackjack.mjs` - Tower of Ordeal Black Jack: hand values, win/lose spread, and the script round trip in 99000023 (pay, hand, result block, win counter).

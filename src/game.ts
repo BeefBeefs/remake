@@ -5,6 +5,7 @@ import { GameMap, Drawable, worldToReal, realToWorld } from './map.js';
 import { ItemDef, InvEntry, Inventory } from './items.js';
 import { playerStats, TableDb } from './pstats.js';
 import { Zone, loadZones } from './zones.js';
+import { Blackjack } from './blackjack.js';
 import { Warehouse, WAREHOUSE_OBJECT } from './warehouse.js';
 import { FxSet, FxInst, loadFxSet, fxFolder, fxLife, drawFx } from './fx.js';
 import { audio } from './audio.js';
@@ -240,6 +241,8 @@ export class GameScene implements Scene {
   musicIdx: number | undefined;
   musicFor(scenario: string) { return this.musicIdx !== undefined ? `bgm${this.musicIdx}` : scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
   private shop: Shop | Warehouse | null = null;
+  /** Tower of Ordeal Black Jack hand in progress (script sentence 73). */
+  private bj: Blackjack | null = null;
   /** Script effects (sentence 36): sprite sets by id and the running instances. */
   fxSets = new Map<number, FxSet>(); private fxList: FxInst[] = [];
   private spawnFx(id: number, wa: number, wb: number) {
@@ -376,6 +379,8 @@ export class GameScene implements Scene {
       notice: text => { this.banner = { text: text.split('\n')[0].replace(/[^\x20-\x7e]/g, '?'), t: 0 }; },
       hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
       takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e) this.win.inv.remove(e); },
+      blackjack: bet => { this.bj = new Blackjack(bet); this.dlg = null; },
+      giveItem: (cat, id) => { const item = this.win.db.find(cat, id); if (!item) return; if (!this.win.inv.add(item)) this.ground.push({ x: this.player.x, y: this.player.y, item, gold: 0 }); },
       randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
       vitals: k => k === 0 ? [this.hud.hp, this.hud.hpMax] : k === 1 ? [this.hud.mp, this.hud.mpMax] : this.pet && !this.pet.dead ? [Math.round(this.pet.hp), this.pet.maxHp] : [-1, -1],
       heal: k => { if (k === 0) { this.hud.hp = this.hud.hpMax; if (this.pet && !this.pet.dead) this.pet.hp = this.pet.maxHp; } else this.hud.mp = this.hud.mpMax; },
@@ -814,6 +819,11 @@ export class GameScene implements Scene {
       if (inp.clicked && this.player.t > 800) { this.dead = false; Object.assign(this.player, { x: this.spawnPos.x, y: this.spawnPos.y, anim: ANIM_IDLE, t: 0 }); this.hud.hp = this.hud.hpMax; }
       return;
     }
+    if (this.bj) {
+      const k = ['h', 's', 'enter', ' '].find(k => inp.pressed.has(k));
+      if ((inp.clicked && this.bj.click(inp.x, inp.y)) || (k && this.bj.key(k))) { const r = this.bj.result; this.bj = null; this.vm?.finishBlackjack(r); this.openDialog(); }
+      return;
+    }
     if (this.shop) {
       if (inp.pressed.has('escape') || (inp.clicked && (this.shop.over(inp.x, inp.y) ? this.shop.click(inp.x, inp.y, this.win) : (this.shop.sell(inp.x, inp.y, this.win), false)))) this.closeShop();
       return;
@@ -946,7 +956,7 @@ export class GameScene implements Scene {
     if (this.pet) this.gui.partner(ctx, this.pet.hp / this.pet.maxHp, this.pet.mode === 'active');
     this.magic.drawBar(ctx, this.text, inp.x, inp.y);
     this.belt().forEach((e, k) => this.win.drawIcon(ctx, e.item, BELT[k].x + BELT[k].w / 2, BELT[k].y + BELT[k].h / 2, 0.7));
-    this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y);
+    this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y); this.bj?.draw(ctx, this.text);
     if (this.qlog) this.drawQuestLog(ctx);
     if (this.dlg) this.drawDialog(ctx);
     if (this.dead) { ctx.fillStyle = 'rgba(80,0,0,0.45)'; ctx.fillRect(0, 0, SCREEN_W, HUD_Y); this.text.drawCenter(ctx, 'YOU DIED', 320, 190); this.text.drawCenter(ctx, '(click to continue)', 320, 215); }

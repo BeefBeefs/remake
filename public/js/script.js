@@ -2,6 +2,9 @@ import { Data } from './data.js';
 const warned = new Set();
 export class ScriptVM {
     get pending() { return this.queue[0] ?? null; }
+    /** A Black Jack hand ended with `result` (0 draw, 1 win, 2 lose): run the block that reads it (the first one holding sentence 74). */
+    finishBlackjack(result) { this.bjResult = result; const n = this.data.blocks.findIndex(b => b.some(s => s[0] === 74)); if (n >= 0)
+        this.runBlock(n); }
     constructor(data) {
         this.data = data;
         this.vars = new Map();
@@ -12,6 +15,8 @@ export class ScriptVM {
         this.fmt = [];
         this.talking = false;
         this.ended = false;
+        this.bjResult = 0;
+        this.lastPaid = 0;
         this.hooks = null;
         this.char = 0;
         for (const [id, v] of data.flags)
@@ -196,6 +201,7 @@ export class ScriptVM {
                 this.set(o[0][0], o[0][1], this.hooks?.gold() ?? 0);
                 return true;
             case 54:
+                this.lastPaid = ev(0);
                 this.hooks?.addGold(-ev(0));
                 return true;
             case 58:
@@ -204,6 +210,18 @@ export class ScriptVM {
             case 59:
                 this.hooks?.takeItem(ev(0), ev(1));
                 return true;
+            case 73:
+                if (this.hooks?.blackjack) {
+                    this.hooks.blackjack(this.lastPaid);
+                    return false;
+                }
+                return true; // Tower of Ordeal Black Jack (99000018 / 99000023): the hand is a modal game, the script resumes at the block that reads the result
+            case 74:
+                this.set(o[0][0], o[0][1], this.bjResult);
+                return true; // result of the last hand: 0 draw, 1 win, 2 lose (as the branches in block 35 of 99000023 read it)
+            case 75:
+                this.hooks?.giveItem?.(ev(0), ev(1));
+                return true; // reward item: used by the Ep3/Ep4 quest givers (Sacred Wing, Antidote, Demon Fang ...); signature taken from the call sites, same operands as 59
             case 49: {
                 const t = this.data.messages[String(ev(0))];
                 if (t)

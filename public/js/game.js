@@ -4,6 +4,7 @@ import { GameMap, worldToReal, realToWorld } from './map.js';
 import { Inventory } from './items.js';
 import { playerStats } from './pstats.js';
 import { loadZones } from './zones.js';
+import { Blackjack } from './blackjack.js';
 import { Warehouse, WAREHOUSE_OBJECT } from './warehouse.js';
 import { loadFxSet, fxFolder, fxLife, drawFx } from './fx.js';
 import { audio } from './audio.js';
@@ -475,6 +476,8 @@ export class GameScene {
         /** Quest log (Q): lists quests set by sentence 62 (state 1 accepted, 2 done); text from Table.Tbd 41 (titles) and 700+q (description lines). */
         this.qlog = null;
         this.shop = null;
+        /** Tower of Ordeal Black Jack hand in progress (script sentence 73). */
+        this.bj = null;
         /** Script effects (sentence 36): sprite sets by id and the running instances. */
         this.fxSets = new Map();
         this.fxList = [];
@@ -567,6 +570,10 @@ export class GameScene {
                 hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
                 takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e)
                     this.win.inv.remove(e); },
+                blackjack: bet => { this.bj = new Blackjack(bet); this.dlg = null; },
+                giveItem: (cat, id) => { const item = this.win.db.find(cat, id); if (!item)
+                    return; if (!this.win.inv.add(item))
+                    this.ground.push({ x: this.player.x, y: this.player.y, item, gold: 0 }); },
                 randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
                 vitals: k => k === 0 ? [this.hud.hp, this.hud.hpMax] : k === 1 ? [this.hud.mp, this.hud.mpMax] : this.pet && !this.pet.dead ? [Math.round(this.pet.hp), this.pet.maxHp] : [-1, -1],
                 heal: k => { if (k === 0) {
@@ -1553,6 +1560,16 @@ export class GameScene {
             }
             return;
         }
+        if (this.bj) {
+            const k = ['h', 's', 'enter', ' '].find(k => inp.pressed.has(k));
+            if ((inp.clicked && this.bj.click(inp.x, inp.y)) || (k && this.bj.key(k))) {
+                const r = this.bj.result;
+                this.bj = null;
+                this.vm?.finishBlackjack(r);
+                this.openDialog();
+            }
+            return;
+        }
         if (this.shop) {
             if (inp.pressed.has('escape') || (inp.clicked && (this.shop.over(inp.x, inp.y) ? this.shop.click(inp.x, inp.y, this.win) : (this.shop.sell(inp.x, inp.y, this.win), false))))
                 this.closeShop();
@@ -1869,6 +1886,7 @@ export class GameScene {
         this.magic.drawBar(ctx, this.text, inp.x, inp.y);
         this.belt().forEach((e, k) => this.win.drawIcon(ctx, e.item, BELT[k].x + BELT[k].w / 2, BELT[k].y + BELT[k].h / 2, 0.7));
         this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y);
+        this.bj?.draw(ctx, this.text);
         if (this.qlog)
             this.drawQuestLog(ctx);
         if (this.dlg)
