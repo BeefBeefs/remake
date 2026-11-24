@@ -325,6 +325,8 @@ export class GameScene implements Scene {
       hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
       takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e) this.win.inv.remove(e); },
       randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
+      vitals: k => k === 0 ? [this.hud.hp, this.hud.hpMax] : k === 1 ? [this.hud.mp, this.hud.mpMax] : this.pet && !this.pet.dead ? [Math.round(this.pet.hp), this.pet.maxHp] : [-1, -1],
+      heal: k => { if (k === 0) { this.hud.hp = this.hud.hpMax; if (this.pet && !this.pet.dead) this.pet.hp = this.pet.maxHp; } else this.hud.mp = this.hud.mpMax; },
       needIdentify: () => this.win.needsIdentify(), identify: () => this.win.identifyAll(),
       repairCost: slot => this.win.repairCostOf(slot), repair: slot => this.win.repair(slot),
       drop: (cat, id, a, b, min, max) => {

@@ -14,3 +14,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `commander.mjs` walks the Cold Svalt commander's quest ladder (quests 4-10); `town.mjs` talks to every Remote Town NPC for several quest states; `talkall.mjs [scenarios]` auto-talks to every scripted object and reports stuck dialogs / warnings.
 - `turret.mjs` stands in the Garam Goblin room and checks that the pillar turrets shoot bolts that hurt the hero.
 - `repair.mjs` — Malse identify/repair services, durability wear.
+- `heal.mjs` — Syria healing (HP/MP/dog).
