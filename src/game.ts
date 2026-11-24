@@ -3,6 +3,7 @@ import { loadCaf, Caf } from './caf.js';
 import { GameMap, Drawable, worldToReal } from './map.js';
 import { ItemDef } from './items.js';
 import { Zone } from './zones.js';
+import { Shop, shopStock, sellPrice } from './shop.js';
 import { Actor, ActorCtx, loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
@@ -106,7 +107,7 @@ export class GameScene implements Scene {
   private openDialog() {
     this.dlgPick = null;
     const p = this.vm?.pending; if (!p) { this.dlg = null; return; }
-    const lines = p.text.replace(/%d/g, '100').replace(/\n$/, '').split('\n'); const opts: [number, number, number][] = [];
+    const lines = p.text.replace(/\n$/, '').split('\n'); const opts: [number, number, number][] = [];
     lines.forEach((l, i) => { const re = /~([^~]*)~/g; let m; while ((m = re.exec(l))) opts.push([i, m.index, m.index + m[0].length]); });
     this.dlg = { lines: lines.map(l => l.replace(/~/g, ' ').replace(/[^\x20-\x7e]/g, c => c === '・' ? '-' : '?')), opts };
   }
@@ -132,6 +133,12 @@ export class GameScene implements Scene {
     if (g.item) { if (!this.win.inv.add(g.item)) return; } else this.win.gold += g.gold;
     this.ground.splice(this.ground.indexOf(g), 1);
   }
+  private shop: Shop | null = null;
+  private openShop(index: number) {
+    this.shop = new Shop(shopStock(this.win.db, index)); this.dlg = null; this.win.item = true;
+    this.win.sellValue = sellPrice; this.win.panel = (x, y) => !!this.shop?.over(x, y);
+  }
+  private closeShop() { this.shop = null; this.win.sellValue = null; this.win.panel = null; }
   /** Click a scripted object (chest, barrel...): runs its status-0 block when the player is close enough. */
   private useZone(z: Zone) {
     if (!this.vm || Math.hypot(z.x - this.player.x, (z.y - this.player.y) * 1.6) > 200) return;
@@ -184,6 +191,8 @@ export class GameScene implements Scene {
       },
       show: (id, v) => { const z = this.zones.find(z => z.rec.id === id); if (z) z.visible = v; const a = this.actors.find(a => 12000000 + a.rec.id === id); if (a) a.hidden = !v; },
       partner: () => this.partner,
+      gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
+      openShop: i => this.openShop(i),
       randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
       drop: (cat, id, a, b, min, max) => {
         const [x, y] = worldToReal(a, b), amount = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
@@ -266,7 +275,7 @@ export class GameScene implements Scene {
     if (inp.clicked) {
       const b = this.gui.button(inp.x, inp.y);
       if (this.paused) { if (inp.y > 215 && inp.y < 235) { this.save(); TitleScene.create(this.app).then(t => this.app.go(t)); } else this.paused = false; }
-      else if (this.win.entryAt(inp.x, inp.y)) this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y)!);
+      else if (!this.shop && this.win.entryAt(inp.x, inp.y)) this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y)!);
       else if (b === 'status') this.win.status = !this.win.status;
       else if (b === 'item') this.win.item = !this.win.item;
       else if (b === 'menu') this.paused = true;
@@ -275,6 +284,10 @@ export class GameScene implements Scene {
     if (this.dead) {
       this.player.t += dt;
       if (inp.clicked && this.player.t > 800) { this.dead = false; Object.assign(this.player, { x: this.spawnPos.x, y: this.spawnPos.y, anim: ANIM_IDLE, t: 0 }); this.hud.hp = this.hud.hpMax; }
+      return;
+    }
+    if (this.shop) {
+      if (inp.pressed.has('escape') || (inp.clicked && (this.shop.over(inp.x, inp.y) ? this.shop.click(inp.x, inp.y, this.win) : (this.shop.sell(inp.x, inp.y, this.win), false)))) this.closeShop();
       return;
     }
     if (this.dlg) { this.updateDialog(); return; }
@@ -342,6 +355,7 @@ export class GameScene implements Scene {
     ctx.fillStyle = '#000'; ctx.fillRect(0, HUD_Y, SCREEN_W, SCREEN_H - HUD_Y);
     this.win.draw(ctx, this.hud, this.name, inp.x, inp.y);
     this.gui.draw(ctx, this.hud);
+    this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y);
     if (this.dlg) this.drawDialog(ctx);
     if (this.dead) { ctx.fillStyle = 'rgba(80,0,0,0.45)'; ctx.fillRect(0, 0, SCREEN_W, HUD_Y); this.text.drawCenter(ctx, 'YOU DIED', 320, 190); this.text.drawCenter(ctx, '(click to continue)', 320, 215); }
     if (this.paused) {

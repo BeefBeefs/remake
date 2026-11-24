@@ -1,5 +1,6 @@
 import { loadCaf } from './caf.js';
 import { GameMap, worldToReal } from './map.js';
+import { Shop, shopStock, sellPrice } from './shop.js';
 import { loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
 import { Gui, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
@@ -102,7 +103,7 @@ export class GameScene {
             this.dlg = null;
             return;
         }
-        const lines = p.text.replace(/%d/g, '100').replace(/\n$/, '').split('\n');
+        const lines = p.text.replace(/\n$/, '').split('\n');
         const opts = [];
         lines.forEach((l, i) => { const re = /~([^~]*)~/g; let m; while ((m = re.exec(l)))
             opts.push([i, m.index, m.index + m[0].length]); });
@@ -157,6 +158,14 @@ export class GameScene {
             this.win.gold += g.gold;
         this.ground.splice(this.ground.indexOf(g), 1);
     }
+    openShop(index) {
+        this.shop = new Shop(shopStock(this.win.db, index));
+        this.dlg = null;
+        this.win.item = true;
+        this.win.sellValue = sellPrice;
+        this.win.panel = (x, y) => !!this.shop?.over(x, y);
+    }
+    closeShop() { this.shop = null; this.win.sellValue = null; this.win.panel = null; }
     /** Click a scripted object (chest, barrel...): runs its status-0 block when the player is close enough. */
     useZone(z) {
         if (!this.vm || Math.hypot(z.x - this.player.x, (z.y - this.player.y) * 1.6) > 200)
@@ -246,6 +255,7 @@ export class GameScene {
         this.groundDraw = { get y() { return 0; }, draw: () => { } };
         /** Open message window: text lines and clickable ~option~ regions (line, col0, col1). */
         this.dlg = null;
+        this.shop = null;
         const mk = map.markerReal();
         this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
         const p = this.player;
@@ -282,6 +292,8 @@ export class GameScene {
                     z.visible = v; const a = this.actors.find(a => 12000000 + a.rec.id === id); if (a)
                     a.hidden = !v; },
                 partner: () => this.partner,
+                gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
+                openShop: i => this.openShop(i),
                 randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
                 drop: (cat, id, a, b, min, max) => {
                     const [x, y] = worldToReal(a, b), amount = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
@@ -461,7 +473,7 @@ export class GameScene {
                 else
                     this.paused = false;
             }
-            else if (this.win.entryAt(inp.x, inp.y))
+            else if (!this.shop && this.win.entryAt(inp.x, inp.y))
                 this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y));
             else if (b === 'status')
                 this.win.status = !this.win.status;
@@ -479,6 +491,11 @@ export class GameScene {
                 Object.assign(this.player, { x: this.spawnPos.x, y: this.spawnPos.y, anim: ANIM_IDLE, t: 0 });
                 this.hud.hp = this.hud.hpMax;
             }
+            return;
+        }
+        if (this.shop) {
+            if (inp.pressed.has('escape') || (inp.clicked && (this.shop.over(inp.x, inp.y) ? this.shop.click(inp.x, inp.y, this.win) : (this.shop.sell(inp.x, inp.y, this.win), false))))
+                this.closeShop();
             return;
         }
         if (this.dlg) {
@@ -625,6 +642,7 @@ export class GameScene {
         ctx.fillRect(0, HUD_Y, SCREEN_W, SCREEN_H - HUD_Y);
         this.win.draw(ctx, this.hud, this.name, inp.x, inp.y);
         this.gui.draw(ctx, this.hud);
+        this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y);
         if (this.dlg)
             this.drawDialog(ctx);
         if (this.dead) {

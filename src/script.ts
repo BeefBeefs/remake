@@ -16,6 +16,11 @@ export interface ScriptHooks {
   randomDrop(tier: number, a: number, b: number): void;
   /** Sentence 62: quest `q` (Table.Tbd table 41 row) changed to `state` (1 accepted, 2 completed). */
   quest(q: number, state: number): void;
+  /** Sentences 53/54: read the player's gold / add (negative = pay) gold. */
+  gold(): number;
+  addGold(delta: number): void;
+  /** Sentence 5: open the trade window of shop `index`. */
+  openShop(index: number): void;
   /** Sentence 61: the player's current level. */
   level(): number;
 }
@@ -27,6 +32,8 @@ export class ScriptVM {
   /** Kinds 10-12 (quest switches / counters) are global across scenarios. */
   globals = new Map<string, number>();
   queue: Pending[] = [];
+  /** Values for the %d placeholders of the next message (set by sentence 51). */
+  private fmt: number[] = [];
   get pending(): Pending | null { return this.queue[0] ?? null; }
   talking = false; private ended = false;
   hooks: ScriptHooks | null = null;
@@ -60,8 +67,9 @@ export class ScriptVM {
       }
       case 1: this.set(o[0][0], o[0][1], ev(1)); return true;
       case 2: {
-        const msg = ev(0); const text = this.data.messages[String(msg)];
+        const msg = ev(0); let text = this.data.messages[String(msg)];
         if (text === undefined) return true;
+        text = text.replace(/%(\d*)d/g, (_, w) => String(this.fmt.shift() ?? 0).padStart(Number(w) || 0));
         this.queue.push({ msg, text, resultVar: o[1] && o[1][1] !== -1 ? [o[1][0], o[1][1]] : null });
         return true;
       }
@@ -76,6 +84,13 @@ export class ScriptVM {
       case 34: this.set(o[1][0], o[1][1], -1); return true;   // zone/player interaction state: -1 = not applicable (the town gate is hard-wired in game.ts)
       // Decoded but not simulated yet: 27 named warp zone, 46/56 object state fields, 36/30/33 spawn hazard/effect objects, 65 ambient colour.
       case 27: case 46: case 56: case 36: case 30: case 33: case 65: return true;
+      case 5: this.hooks?.openShop(ev(0)); return true;
+      case 51: { this.fmt = []; for (const [k, v] of o) { if (k === 0 && v === -1) break; this.fmt.push(this.get(k, v)); } return true; }   // arguments of the next message's %d
+      case 52: this.set(o[1][0], o[1][1], 0); return true;   // repair cost of the item in an equipment slot: items have no durability yet -> 0
+      case 55: this.set(o[0][0], o[0][1], 0); return true;   // 1 when the player carries unidentified items (not modelled) -> 0
+      case 53: this.set(o[0][0], o[0][1], this.hooks?.gold() ?? 0); return true;
+      case 54: this.hooks?.addGold(-ev(0)); return true;
+      case 9: case 4: return true;   // repair an item / coin sound (no durability yet)
       case 16: return true;   // play sound effect at a position (audio not implemented)
       case 24: this.hooks?.randomDrop(ev(0), ev(1), ev(2)); return true;
       case 11: this.set(o[0][0], o[0][1], ev(0) + ev(1)); return true;

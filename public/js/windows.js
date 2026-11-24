@@ -12,6 +12,10 @@ export class Windows {
         this.item = false;
         this.inv = new Inventory();
         this.gold = 0;
+        /** Set while a shop is open: clicking an inventory item sells it for this price (tooltip hint). */
+        this.sellValue = null;
+        /** Extra left-hand panel (shop) that also blocks world clicks. */
+        this.panel = null;
     }
     static async load(app) { const [st, icons, text, db] = await Promise.all([app.gui('Game_Status'), app.gui('Game_Item0000'), Text.load(app), ItemDb.load()]); return new Windows(st, icons, text, db); }
     /** Draw an item's inventory icon centred on (cx, cy). */
@@ -27,7 +31,7 @@ export class Windows {
     }
     /** Inventory entry under screen point (x,y) while the item window is open. */
     entryAt(x, y) { return this.item && x >= GRID_X ? this.inv.at(Math.floor((x - GRID_X) / CELL), Math.floor((y - GRID_Y) / CELL)) : undefined; }
-    overUI(x, y) { return (this.status && x < 320 && y < 416) || (this.item && x >= 320 && y < 416); }
+    overUI(x, y) { return (this.panel?.(x, y) ?? false) || (this.status && x < 320 && y < 416) || (this.item && x >= 320 && y < 416); }
     draw(ctx, h, name, mx = -1, my = -1) {
         if (this.status) {
             put(ctx, this.st, 5);
@@ -81,7 +85,9 @@ export class Windows {
                 else if (it.sec === 1)
                     lines.push(`Defense: ${ItemDb.defense(it)}`);
                 lines.push(`Price: ${ItemDb.price(it)}`);
-                if (ItemDb.slot(it))
+                if (this.sellValue)
+                    lines.push(`Click to sell for ${this.sellValue(it)}`);
+                else if (ItemDb.slot(it))
                     lines.push(hover.eq ? '[Equipped] click to remove' : 'Click to equip');
                 drawTooltip(ctx, this.text, lines, mx + 12, my + 12);
             }

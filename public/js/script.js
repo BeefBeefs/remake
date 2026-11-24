@@ -7,6 +7,8 @@ export class ScriptVM {
         /** Kinds 10-12 (quest switches / counters) are global across scenarios. */
         this.globals = new Map();
         this.queue = [];
+        /** Values for the %d placeholders of the next message (set by sentence 51). */
+        this.fmt = [];
         this.talking = false;
         this.ended = false;
         this.hooks = null;
@@ -69,9 +71,10 @@ export class ScriptVM {
                 return true;
             case 2: {
                 const msg = ev(0);
-                const text = this.data.messages[String(msg)];
+                let text = this.data.messages[String(msg)];
                 if (text === undefined)
                     return true;
+                text = text.replace(/%(\d*)d/g, (_, w) => String(this.fmt.shift() ?? 0).padStart(Number(w) || 0));
                 this.queue.push({ msg, text, resultVar: o[1] && o[1][1] !== -1 ? [o[1][0], o[1][1]] : null });
                 return true;
             }
@@ -116,6 +119,32 @@ export class ScriptVM {
             case 30:
             case 33:
             case 65: return true;
+            case 5:
+                this.hooks?.openShop(ev(0));
+                return true;
+            case 51: {
+                this.fmt = [];
+                for (const [k, v] of o) {
+                    if (k === 0 && v === -1)
+                        break;
+                    this.fmt.push(this.get(k, v));
+                }
+                return true;
+            } // arguments of the next message's %d
+            case 52:
+                this.set(o[1][0], o[1][1], 0);
+                return true; // repair cost of the item in an equipment slot: items have no durability yet -> 0
+            case 55:
+                this.set(o[0][0], o[0][1], 0);
+                return true; // 1 when the player carries unidentified items (not modelled) -> 0
+            case 53:
+                this.set(o[0][0], o[0][1], this.hooks?.gold() ?? 0);
+                return true;
+            case 54:
+                this.hooks?.addGold(-ev(0));
+                return true;
+            case 9:
+            case 4: return true; // repair an item / coin sound (no durability yet)
             case 16: return true; // play sound effect at a position (audio not implemented)
             case 24:
                 this.hooks?.randomDrop(ev(0), ev(1), ev(2));
