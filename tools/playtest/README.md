@@ -47,3 +47,6 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `touch.mjs` - touch controls with emulated touch (stick, ATK, menu buttons, canvas tap, fullscreen toggle).
 - `touchname.mjs` - tap the name field on the new-character screen: the hidden input takes focus and edits the name.
 - `equipdraw.mjs`: equips armor/shield/weapon combinations and screenshots the hero (look at /tmp/equip_N.png).
+- `questpoll.mjs` - the nine accepted-only quests: set state 1, kill all monsters of the completion scenario, expect state 2 (8 of 9; 28 uses `quest28.mjs`).
+- `quest3.mjs [scenario] [quest]` - single-quest version of the kill-all completion check.
+- `quest28.mjs` - quest 28 completes on arriving through exit entry 2 (sentence 50).
