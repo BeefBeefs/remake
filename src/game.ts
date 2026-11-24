@@ -2,7 +2,7 @@ import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
 import { GameMap, Drawable, worldToReal } from './map.js';
 import { ItemDef } from './items.js';
-import { Actor, loadScenarioActors } from './actors.js';
+import { Actor, ActorCtx, loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
 import { App, Scene, Text } from './app.js';
@@ -28,6 +28,11 @@ export class GameScene implements Scene {
   private camX = 0; private camY = 0;
   private expTable: number[] = []; private totalExp = 0; private devNext = 0;
   private drawPlayer: Drawable;
+  // --- combat ---
+  private target: Actor | null = null; private atkT = -1; private atkHit = false; private dead = false;
+  private spawnPos = { x: 0, y: 0 };
+  floaters: { x: number; y: number; t: number; s: string }[] = [];
+  private actorCtx: ActorCtx;
   /** Items lying on the ground (real-pixel coordinates). gold > 0 for gold piles. */
   ground: { x: number; y: number; item?: ItemDef; gold: number }[] = [];
   private groundDraw: Drawable = { get y() { return 0; }, draw: () => {} };
@@ -70,12 +75,13 @@ export class GameScene implements Scene {
   private constructor(private app: App, private name: string, private map: GameMap, private set: SpriteSet, private caf: Caf, private gui: Gui, private win: Windows, private text: Text, private actors: Actor[], private vm: ScriptVM | null) {
     const mk = map.markerReal();
     this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
-    const p = this.player;
+    const p = this.player; this.spawnPos = { x: p.x, y: p.y };
+    this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d) };
     this.drawPlayer = {
       get y() { return p.y; },
       draw: (c, camX, camY) => {
         const d = this.caf.anims[p.anim].dirs[p.dir];
-        const fi = d.frames ? Math.max(0, Math.floor(p.t / FRAME_MS)) % d.frames : 0;
+        const raw = Math.max(0, Math.floor(p.t / FRAME_MS)), fi = d.frames ? (p.anim === 23 ? Math.min(raw, d.frames - 1) : raw % d.frames) : 0;
         for (const l of LAYERS) {
           const seq = d.layers[l]; if (!seq || !seq.length) continue;
           const f = this.set.pattern(seq[Math.min(fi, seq.length - 1)][1]); if (!f) continue;
@@ -118,12 +124,27 @@ export class GameScene implements Scene {
       this.win.item = true;
     }
   }
+  private hitPlayer(d: number) {
+    if (this.dead) return; const h = this.hud; h.hp = Math.max(0, h.hp - d);
+    this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` });
+    if (h.hp <= 0) { this.dead = true; this.target = null; this.atkT = -1; this.player.anim = 23; this.player.t = 0; }
+  }
+  private hurtEnemy(a: Actor) {
+    const dmg = Math.max(1, Math.round((8 + this.hud.level * 2) * (0.8 + Math.random() * 0.4)));
+    a.hp -= dmg; this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) });
+    if (a.hp <= 0) {
+      a.die(); this.totalExp += a.stats.exp; this.syncExp();
+      const [g0, g1] = a.stats.gold; this.ground.push({ x: a.x, y: a.y, gold: g0 + Math.floor(Math.random() * (g1 - g0 + 1)) });
+    }
+  }
   private blocked(x: number, y: number) {
-    return this.map.blockedReal(x, y) || this.actors.some(a => Math.hypot(a.x - x, (a.y - y) * 1.6) < a.radius);
+    return this.map.blockedReal(x, y) || this.actors.some(a => a.solid && Math.hypot(a.x - x, (a.y - y) * 1.6) < a.radius);
   }
   update(dt: number) {
     this.dev();
-    for (const a of this.actors) a.update(dt);
+    for (const a of this.actors) a.update(dt, this.actorCtx);
+    this.actors = this.actors.filter(a => !(a.enemy && a.state === 'die' && a.deadT > 6000));
+    for (const f of this.floaters) f.t += dt; this.floaters = this.floaters.filter(f => f.t < 900);
     const inp = this.app.input, keys = inp.keys, p = this.player, hud = this.hud;
     if (inp.pressed.has('g') || inp.pressed.has('f1')) this.debug = !this.debug;
     if (inp.pressed.has('r')) hud.running = !hud.running;
@@ -138,10 +159,18 @@ export class GameScene implements Scene {
       else if (b === 'menu') this.paused = true;
     }
     if (this.paused) return;
+    if (this.dead) {
+      this.player.t += dt;
+      if (inp.clicked && this.player.t > 800) { this.dead = false; Object.assign(this.player, { x: this.spawnPos.x, y: this.spawnPos.y, anim: ANIM_IDLE, t: 0 }); this.hud.hp = this.hud.hpMax; }
+      return;
+    }
     if (this.dlg) { this.updateDialog(); return; }
     const hov = inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
     const gh = !hov && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
-    if (inp.clicked && hov) this.talkTo(hov); else if (inp.clicked && gh) this.pickUp(gh);
+    if (hov?.enemy && (inp.clicked || inp.down)) this.target = hov;
+    else if (inp.clicked && hov) this.talkTo(hov); else if (inp.clicked && gh) this.pickUp(gh);
+    else if (inp.clicked) this.target = null;
+    if (this.target && !this.target.alive) this.target = null;
     let dx = 0, dy = 0;
     if (keys.has('a') || keys.has('arrowleft')) dx--;
     if (keys.has('d') || keys.has('arrowright')) dx++;
@@ -153,6 +182,13 @@ export class GameScene implements Scene {
       const mx = inp.x - (p.x - this.camX), my = inp.y - (p.y - this.camY), d = Math.hypot(mx, my);
       if (d > 6) { vx = mx / d; vy = my / d; }
     }
+    const atk = this.atkT >= 0;
+    if (!dx && !dy && this.target) {
+      const tx = this.target.x - p.x, ty = this.target.y - p.y, td = Math.hypot(tx, ty * 1.6), tl = Math.hypot(tx, ty) || 1;
+      if (!atk) p.dir = actorDir(tx, ty);
+      if (td > 58 && !atk) { vx = tx / tl; vy = ty / tl; } else { vx = vy = 0; if (!atk) { this.atkT = 0; this.atkHit = false; p.anim = 3; p.t = 0; } }
+    } else if (dx || dy) this.target = null;
+    if (this.atkT >= 0) { vx = vy = 0; }
     if (vx || vy) {
       const run = keys.has('shift') || hud.running, n = Math.hypot(vx, vy), sp = (run ? 0.30 : 0.16) * dt;
       p.dir = dirIndex(vx, vy);
@@ -162,8 +198,13 @@ export class GameScene implements Scene {
       else if (!this.blocked(nx, p.y)) p.x = nx;
       else if (!this.blocked(p.x, ny)) p.y = ny;
       const na = run ? ANIM_RUN : ANIM_WALK; if (na !== p.anim) { p.anim = na; p.t = 0; }
-    } else if (p.anim !== ANIM_IDLE) { p.anim = ANIM_IDLE; p.t = 0; }
+    } else if (this.atkT < 0 && p.anim !== ANIM_IDLE) { p.anim = ANIM_IDLE; p.t = 0; }
     p.t += dt;
+    if (this.atkT >= 0) {
+      const fr = this.caf.anims[3].dirs[p.dir].frames || 11;
+      if (!this.atkHit && p.t >= fr * FRAME_MS * 0.45) { this.atkHit = true; if (this.target?.alive) this.hurtEnemy(this.target); }
+      if (p.t >= fr * FRAME_MS) { this.atkT = -1; p.anim = ANIM_IDLE; p.t = 0; }
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -175,6 +216,7 @@ export class GameScene implements Scene {
       if (g.item) this.win.drawIcon(c, g.item, g.x - cx, g.y - cy - 10, 0.5); else this.text.drawCenter(c, `${g.gold}G`, g.x - cx, g.y - cy - 14);
     } }));
     map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...gd]);
+    for (const f of this.floaters) this.text.drawCenter(ctx, f.s, Math.round(f.x - this.camX), Math.round(f.y - this.camY - f.t / 25));
     if (this.debug) { map.drawJudge(ctx, this.camX, this.camY, SCREEN_W, HUD_Y); this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2); }
     const hov = inp.y < HUD_Y ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
     const gh = !hov && inp.y < HUD_Y ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
@@ -184,6 +226,7 @@ export class GameScene implements Scene {
     this.win.draw(ctx, this.hud, this.name, inp.x, inp.y);
     this.gui.draw(ctx, this.hud);
     if (this.dlg) this.drawDialog(ctx);
+    if (this.dead) { ctx.fillStyle = 'rgba(80,0,0,0.45)'; ctx.fillRect(0, 0, SCREEN_W, HUD_Y); this.text.drawCenter(ctx, 'YOU DIED', 320, 190); this.text.drawCenter(ctx, '(click to continue)', 320, 215); }
     if (this.paused) {
       ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, SCREEN_W, HUD_Y);
       this.text.drawCenter(ctx, 'PAUSED', 320, 190); this.text.drawCenter(ctx, 'Exit to title', 320, 220); this.text.drawCenter(ctx, '(click elsewhere to resume)', 320, 245);
