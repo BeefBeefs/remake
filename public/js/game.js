@@ -278,7 +278,7 @@ export class GameScene {
             if (ref < 0)
                 continue;
             const r = t31.v.slice(ref * t31.cols, (ref + 1) * t31.cols);
-            const item = r[0] !== -1 ? this.win.db.find(r[0], r[3]) : this.windowItem(r[1], r[2], code);
+            const item = r[0] !== -1 ? this.win.db.find(r[0], r[3]) : this.windowItem(r[1], r[2], code, r[4]);
             if (!item)
                 continue;
             if (item.sec === 4 && (item.f['1'] ?? 0) >= 99000000 && this.hasQuestItem(item))
@@ -291,11 +291,12 @@ export class GameScene {
         return this.win.inv.entries.some(e => e.item.sec === 4 && (e.item.f['1'] ?? 0) === id) || (quest > 0 && this.vm?.globals.get(`q:${quest}`) === 2);
     }
     /** Random weapon/armor/accessory with power in [min, max] (field 36 for weapons/armor, 25 for accessories), weighted by field 4; the list is picked by its total weight. */
-    windowItem(max, min, code) {
+    /** `mask` = Table 31 column 4; an item qualifies when `mask & item field 3` is non-zero (exe 0x465500 tests `mask & node+0x88`; field 3 is 1 for normal items and 2 for the few special ones, windows 213/252/256 use mask 3). */
+    windowItem(max, min, code, mask = 1) {
         const ok = [true, Math.floor(code / 10) % 10 !== 0, Math.floor(code / 100) % 10 !== 0], g0 = code % 10 !== 0;
         const lists = [0, 1, 2].map(sec => this.win.db.sections[sec].filter(i => {
             const g = i.f['2'] ?? 0, grade = g === 0 ? g0 : g === 3 ? true : ok[g], v = i.f[sec === 2 ? '25' : '36'];
-            return grade && v !== undefined && (max < 0 || v <= max) && (min < 0 || v >= min);
+            return grade && (mask & (i.f['3'] ?? 0)) !== 0 && v !== undefined && (max < 0 || v <= max) && (min < 0 || v >= min);
         }));
         const w = (i) => i.f['4'] ?? 0, tot = lists.map(l => l.reduce((p, i) => p + w(i), 0)), sum = tot[0] + tot[1] + tot[2];
         if (sum <= 0)
