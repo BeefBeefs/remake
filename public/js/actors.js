@@ -32,6 +32,9 @@ export class Actor {
         this.deadT = 0;
         this.hitDone = false;
         this.shot = false;
+        this.slam = false;
+        this.animOv = null;
+        this.specT = 2500;
         /** Hit reaction (GUESS: the CAF hit animation is not identified): a short stagger that interrupts a wind-up and pushes the monster back. */
         this.stun = 0;
         this.kx = 0;
@@ -81,6 +84,8 @@ export class Actor {
         this.t = 0;
         this.hitDone = false;
         this.shot = false;
+        this.slam = false;
+        this.animOv = null;
     } }
     /** Bring a dormant/dead slot monster into the world at real position (x, y). */
     revive(x, y) { this.x = x; this.y = y; this.hp = this.maxHp; this.hidden = false; this.deadT = 0; this.set('idle'); this.state = 'idle'; }
@@ -106,6 +111,7 @@ export class Actor {
             return;
         }
         this.shootT -= dt;
+        this.specT -= dt;
         let tx = c.px, ty = c.py, onPet = false;
         if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) * 0.9) {
             tx = c.pet.x;
@@ -113,13 +119,27 @@ export class Actor {
             onPet = true;
         }
         const dx = tx - this.x, dy = (ty - this.y) * 1.6, d = Math.hypot(dx, dy);
-        const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
+        const frames = this.caf.anims[this.animOv ?? ANIM.attack]?.dirs[this.dir]?.frames || 10;
         if (this.state === 'attack') {
+            if (this.slam) { // golem slam: heavy blow with an area around the monster
+                if (!this.hitDone && this.t >= frames * FRAME_MS * 0.6) {
+                    this.hitDone = true;
+                    const dm = Math.round(this.stats.dmg[1] * 1.6);
+                    if (Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) < 150 * this.scale)
+                        c.hitPlayer(dm);
+                    if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < 150 * this.scale)
+                        c.hitPet?.(dm);
+                }
+                if (this.t >= frames * FRAME_MS)
+                    this.set('idle');
+                return;
+            }
             if (this.shot) {
                 if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) {
                     this.hitDone = true;
                     const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1));
                     c.shoot?.(this.x, this.y, tx, ty, dm);
+                    c.sfx?.(21);
                 }
                 if (this.t >= frames * FRAME_MS) {
                     this.shot = false;
@@ -141,17 +161,41 @@ export class Actor {
                 this.set('idle');
             return;
         }
+        const has = (a) => (this.caf.anims[a]?.dirs[this.dir]?.frames ?? 0) > 0;
         if (this.ranged && !onPet && d >= 120 && d < 380 && this.shootT <= 0 && c.shoot) {
             this.dir = dirIndex(dx, ty - this.y);
             this.set('attack');
             this.shootT = 1900;
             this.shot = true;
+            if (has(7))
+                this.animOv = 7;
+            c.sfx?.(94);
+            return; // GUESS: extra CAF animation 7 of the shaman model is its cast
+        }
+        // special attacks with the models' extra animations (GUESS for which animation is what): gargoyle (3) casts a bolt with anim 7 from a distance, golem/giant (4) slams with anim 5
+        if (!onPet && this.specT <= 0 && this.rec.model === 3 && has(7) && c.shoot && d >= 110 && d < 320) {
+            this.dir = dirIndex(dx, ty - this.y);
+            this.set('attack');
+            this.specT = 3500;
+            this.shot = true;
+            this.animOv = 7;
+            c.sfx?.(94);
+            return;
+        }
+        if (this.specT <= 0 && this.rec.model === 4 && has(5) && d < 110 * this.scale) {
+            this.dir = dirIndex(dx, ty - this.y);
+            this.set('attack');
+            this.specT = 4500;
+            this.slam = true;
+            this.animOv = 5;
+            c.sfx?.(19);
             return;
         }
         if (d < 46 * this.scale) {
             this.dir = dirIndex(dx, ty - this.y);
             this.set('attack');
-        }
+            c.sfx?.(this.rec.model === 0 ? 29 : 22);
+        } // GUESS from the exe: 22 is the most common constant in the monster behaviour functions, bats use 29/23
         else if (d < 300) {
             this.dir = dirIndex(dx, ty - this.y);
             this.set('walk');
@@ -175,7 +219,7 @@ export class Actor {
             this.bar(c, camX, camY, -40);
             return;
         }
-        const anim = this.enemy ? ANIM[this.state] : 0;
+        const anim = this.enemy ? (this.state === 'attack' && this.animOv !== null ? this.animOv : ANIM[this.state]) : 0;
         const d = this.caf.anims[anim]?.dirs[this.dir];
         if (!d)
             return;

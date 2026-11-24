@@ -1,9 +1,11 @@
 import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
 import { GameMap, Drawable, worldToReal, realToWorld } from './map.js';
-import { ItemDef, InvEntry } from './items.js';
+import { ItemDef, InvEntry, Inventory } from './items.js';
 import { playerStats, TableDb } from './pstats.js';
-import { Zone } from './zones.js';
+import { Zone, loadZones } from './zones.js';
+import { Warehouse, WAREHOUSE_OBJECT } from './warehouse.js';
+import { FxSet, FxInst, loadFxSet, fxFolder, fxLife, drawFx } from './fx.js';
 import { audio } from './audio.js';
 import { Shop, shopStock, sellPrice, Tbl } from './shop.js';
 import { Actor, ActorCtx, loadScenarioActors, dirIndex as actorDir } from './actors.js';
@@ -13,7 +15,8 @@ import { Pet, PetCtx, PetSave } from './companion.js';
 import { MapWindow, ExploredSave } from './mapwin.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y, BELT, MINE_BTN, POWER_BTN, PET_GAUGE, inBox } from './gui.js';
 import { App, Scene, Text } from './app.js';
-import { Windows, SET_BTN } from './windows.js';
+import { Windows, SET_BTN, CAREER_BTN } from './windows.js';
+import { CLASS_OF, careerOptions, Usage } from './career.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 import { writeSlot, firstFree } from './saves.js';
@@ -32,12 +35,13 @@ const savedGround = new Map<string, GroundSave[]>();
 /** PLACEHOLDER combat sound ids (indices into Voice00.Voc; script-driven sounds use the real ids, e.g. chest 77/78, Black Hammer's taunts 40-43). */
 /** GUESS: share of dropped magical variants that are still unidentified (the original rate is not decoded). */
 const UNID_CHANCE = 0.6;
-const SFX = { hit: 1, hurt: 2, kill: 10 };
+/** Voice00.Voc ids. From the exe: the item method 0x466110 returns the weapon sounds (kind 0/1 swing 47 or 48 [light weapon 48], bow/gun class 93, kind 4 impact 1 = light / 2 = heavy); monster behaviour functions use constants 22 (melee, most common), 21 (cast release), 94 (cast start), 29/23 (bats), 19. Which weapon counts as 'light' (item+0x28 < 60) is not mapped to an Item.Ibn field, so the arms class stands in (GUESS); hurt / kill keep placeholders. */
+const SFX = { hit: 1, hurt: 2, kill: 10, heavyHit: 2, swingLight: 48, swingHeavy: 47, swingBow: 93 };
 const savedZones = new Map<string, Record<number, boolean>>();
 export interface SaveData {
   v: 1; slot?: number; at?: number; area?: string; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
   inv: [number, number, number, number, number?, number?, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>; zones?: Record<string, Record<number, boolean>>;
-  magic?: MagicSave; explored?: ExploredSave; pet?: PetSave; invSet?: number;
+  magic?: MagicSave; explored?: ExploredSave; pet?: PetSave; invSet?: number; career?: number; usage?: Usage; wh?: [number, number, number, number, number?, number?, number?][];
 }
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
@@ -82,7 +86,7 @@ export class GameScene implements Scene {
     this.stash();
     const d: SaveData = {
       v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-      invSet: this.win.inv.set,
+      career: this.win.career, usage: this.usage, invSet: this.win.inv.set, wh: this.win.wh.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, 0, e.unid ? 1 : 0, e.dur ?? -1]),
       inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, (e.eq ? 1 : 0) | (e.alt ? 2 : 0), e.unid ? 1 : 0, e.dur ?? -1]),
       vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
       magic: this.magic.save(), explored: this.mapwin.encode(), pet: this.pet?.save(this.petKills),
@@ -160,6 +164,8 @@ export class GameScene implements Scene {
   }
   /** Items lying on the ground (real-pixel coordinates). gold > 0 for gold piles. */
   ground: { x: number; y: number; item?: ItemDef; gold: number; unid?: boolean; dur?: number }[] = [];
+  /** Brain Globe being held with the left button (and for how long, ms). */
+  private holdZone: Zone | null = null; private holdT = 0;
   private groundDraw: Drawable = { get y() { return 0; }, draw: () => {} };
   /** Open message window: text lines and clickable ~option~ regions (line, col0, col1). */
   private dlg: { lines: string[]; opts: [number, number, number][] } | null = null;
@@ -219,12 +225,26 @@ export class GameScene implements Scene {
   /** Music number from the scenario's Mct header (exe 0x4275e0); falls back to a guess when the data lacks it. */
   musicIdx: number | undefined;
   musicFor(scenario: string) { return this.musicIdx !== undefined ? `bgm${this.musicIdx}` : scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
-  private shop: Shop | null = null;
+  private shop: Shop | Warehouse | null = null;
+  /** Script effects (sentence 36): sprite sets by id and the running instances. */
+  fxSets = new Map<number, FxSet>(); private fxList: FxInst[] = [];
+  private spawnFx(id: number, wa: number, wb: number) {
+    const fx = this.fxSets.get(id); if (!fx) return; const [x, y] = worldToReal(wa, wb);
+    if (this.fxList.some(e => e.id === id && Math.hypot(e.x - x, e.y - y) < 40) || this.fxList.length > 40) return;   // scripts re-issue some effects every poll
+    this.fxList.push({ fx, id, x, y, t: 0 });
+  }
+  /** Career change bookkeeping: how often melee / magic / ranged attacks were used (saved). */
+  usage: Usage = { melee: 0, magic: 0, ranged: 0 };
+  private refreshCareer() { this.win.careerOpts = careerOptions(this.win.career, this.hud.level, this.usage); if (!this.win.careerOpts.length) this.win.careerMenu = false; }
+  private openWarehouse() {
+    this.qlog = null; this.shop = new Warehouse(); this.dlg = null; this.win.item = true; this.win.sellValue = null; this.win.panelHint = 'Click to store in the warehouse';
+    this.win.panel = (x, y) => !!this.shop?.over(x, y);
+  }
   private openShop(index: number) {
     this.qlog = null; this.shop = new Shop(shopStock(this.win.db, index, this.tables as unknown as Record<string, Tbl>)); this.dlg = null; this.win.item = true;
     this.win.sellValue = sellPrice; this.win.panel = (x, y) => !!this.shop?.over(x, y);
   }
-  private closeShop() { this.shop = null; this.win.sellValue = null; this.win.panel = null; }
+  private closeShop() { this.shop = null; this.win.sellValue = null; this.win.panelHint = null; this.win.panel = null; }
   /** Click a scripted object (chest, barrel...): runs its status-0 block when the player is close enough. */
   private useZone(z: Zone, force = false) {
     if (!this.vm || (!force && Math.hypot(z.x - this.player.x, (z.y - this.player.y) * 1.6) > 200)) return;
@@ -276,7 +296,7 @@ export class GameScene implements Scene {
     this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
     const p = this.player; this.spawnPos = { x: p.x, y: p.y };
     const self = this;
-    this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
+    this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d), sfx: id => audio.sfx(id, 0.7), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
     this.petCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), enemies: () => this.actors.filter(a => a.enemy && !a.gen && a.alive), hit: (a, d) => this.damage(a, d) };
     this.drawPlayer = {
       get y() { return p.y; },
@@ -303,6 +323,10 @@ export class GameScene implements Scene {
       // operand 9: 1 while the hero or the dog stands inside the object's rect (the pressure-plate statues count 90 polls of this before they trigger)
       pressed: id => {
         const z = this.zones.find(q => q.rec.id === id); if (!z) return 0;
+        if (z.rec.type === 5) {   // Brain Globe / statue plate: hold the left button on it (manual: "put the cursor on the globe and hold left-click"); the dog standing on it also works
+          const [pa, pb] = this.pet && !this.pet.dead ? realToWorld(this.pet.x, this.pet.y) : [1e9, 1e9], r = z.rec.rect;
+          return this.holdZone === z || (pa >= z.rec.a + r[0] - 200 && pa <= z.rec.a + r[2] + 200 && pb >= z.rec.b + r[1] - 200 && pb <= z.rec.b + r[3] + 200) ? 1 : 0;
+        }
         const r = z.rec.rect, m = 200, at = (e: { x: number; y: number }) => { const [wa, wb] = realToWorld(e.x, e.y); return wa >= z.rec.a + r[0] - m && wa <= z.rec.a + r[2] + m && wb >= z.rec.b + r[1] - m && wb <= z.rec.b + r[3] + m; };   // rect inflated by 200 world units (GUESS: the record's rect is only the statue's footprint)
         return at(this.player) || (this.pet && !this.pet.dead && at(this.pet)) ? 1 : 0;
       },
@@ -328,6 +352,7 @@ export class GameScene implements Scene {
       randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
       vitals: k => k === 0 ? [this.hud.hp, this.hud.hpMax] : k === 1 ? [this.hud.mp, this.hud.mpMax] : this.pet && !this.pet.dead ? [Math.round(this.pet.hp), this.pet.maxHp] : [-1, -1],
       heal: k => { if (k === 0) { this.hud.hp = this.hud.hpMax; if (this.pet && !this.pet.dead) this.pet.hp = this.pet.maxHp; } else this.hud.mp = this.hud.mpMax; },
+      warehouse: () => this.openWarehouse(), effect: (id, a, b) => this.spawnFx(id, a, b),
       needIdentify: () => this.win.needsIdentify(), identify: () => this.win.identifyAll(),
       repairCost: slot => this.win.repairCostOf(slot), repair: slot => this.win.repair(slot),
       drop: (cat, id, a, b, min, max) => {
@@ -358,13 +383,25 @@ export class GameScene implements Scene {
     if (ld) {
       Object.assign(g.player, { x: ld.x, y: ld.y }); g.spawnPos = { x: map.markerReal()?.[0] ?? ld.x, y: map.markerReal()?.[1] ?? ld.y };
       g.hud = ld.hud; g.totalExp = ld.totalExp; g.syncExp(); g.win.gold = ld.gold;
-      g.win.inv.set = ld.invSet ?? 0;
+      g.win.inv.set = ld.invSet ?? 0; g.win.career = ld.career ?? 0; g.usage = ld.usage ?? g.usage;
+      for (const [sec, idx, x, y, , unid, dur] of ld.wh ?? []) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.wh.entries.push({ item, x, y, w, h, unid: !!unid, dur: dur !== undefined && dur >= 0 ? dur : undefined }); } }
       for (const [sec, idx, x, y, eq, unid, dur] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h, eq: !!((eq ?? 0) & 1), alt: !!((eq ?? 0) & 2), unid: !!unid, dur: dur !== undefined && dur >= 0 ? dur : undefined }); } }
     }
-    const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
+    const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.wh = cr.win.wh; g.win.career = cr.win.career; g.usage = cr.usage ?? g.usage; g.win.gold = cr.win.gold; }
     // monsters addressed by the 'free slot' sentence 32 start dormant: the script summons them (trap rooms, waves). Sentence 31 ranges (alive checks, e.g. 'all monsters of the room are dead') address ordinary monsters
     if (vm) { const ranges: [number, number][] = []; for (const b of vm.data.blocks) for (const [sid, ops] of b) if (sid === 32 && ops[0][0] < 3 && ops[1][0] < 3) ranges.push([ops[0][1], ops[1][1]]); for (const a of g.actors) if (a.enemy && ranges.some(([lo, hi]) => 14000000 + a.rec.id >= lo && 14000000 + a.rec.id <= hi)) { a.slot = true; a.hidden = true; } }
     g.zones = sc.zones; g.musicIdx = sc.music;
+    if (vm) {   // effect sprite sets named by sentence 36 of this scenario
+      const ids = new Set<number>(); for (const bl of vm.data.blocks) for (const [sid, ops] of bl) if (sid === 36 && ops[0]?.[0] === 1) ids.add(ops[0][1]);
+      if (ids.size) { const index: string[] = await (await fetch('data/ep1/fx/index.json')).json().catch(() => []); await Promise.all([...ids].map(async id => { const f = fxFolder(index, id), set = f ? await loadFxSet(app, f) : null; if (set) g.fxSets.set(id, set); })); }
+    }
+    // the scripts of the three towns answer a click on object 10000300 (the warehouse, not an Mct record) with sentence 41; draw a chest near the arrival point (PLACEHOLDER position and sprite: the exe's own placement is not decoded)
+    if (vm?.data.status.some(([, st, c]) => st === 0 && c === WAREHOUSE_OBJECT)) {
+      const [wz] = await loadZones(app, [{ id: WAREHOUSE_OBJECT, type: 0, a: 0, b: 0, rect: [-80, -80, 80, 80], vis: 1, pat: 0 }]);
+      const ok = (x: number, y: number) => [[0, 0], [30, 0], [-30, 0], [0, 20], [0, -20]].every(([ox, oy]) => !map.blockedReal(x + ox, y + oy));
+      outer: for (const r of [240, 300, 360, 420]) for (let a = 0; a < 360; a += 20) { const x = g.player.x + r * Math.cos(a * Math.PI / 180), y = g.player.y + r * 0.6 * Math.sin(a * Math.PI / 180); if (ok(x, y)) { wz.x = x; wz.y = y; break outer; } }
+      if (wz.x !== 0 || wz.y !== 0) g.zones.push(wz);
+    }
     // object-local 0 = "currently shown" (sentences 22/23 keep it up to date); objects placed visible start at 1 (the boss-room polls wait for the reward chest 10011000 to read 1)
     if (vm) for (const z of g.zones) if (z.visible && z.rec.id >= 10000000 && z.rec.id < 11000000 && !vm.vars.has(`5:${z.rec.id}:1000000`)) vm.vars.set(`5:${z.rec.id}:1000000`, 1);
     if (vm) for (const [, st, ch] of vm.data.status) if (st === 3) g.enterIds.add(ch);
@@ -405,7 +442,7 @@ export class GameScene implements Scene {
   /** Hero stats from the exe's stat tables (src/pstats.ts); a level-up refills HP/MP. */
   private applyStats(refill: boolean) {
     if (!this.tables['900']) return;
-    const h = this.hud, ps = playerStats(this.tables as unknown as TableDb, this.gender, h.level), full = h.hp >= h.hpMax && h.mp >= h.mpMax;
+    const h = this.hud, ps = playerStats(this.tables as unknown as TableDb, this.gender, h.level, CLASS_OF[this.win.career]), full = h.hp >= h.hpMax && h.mp >= h.mpMax;
     h.hpMax = ps.hp + (h.hpBonus ?? 0); h.mpMax = ps.mp + (h.mpBonus ?? 0); this.win.ps = ps;
     if (refill || full) { h.hp = h.hpMax; h.mp = h.mpMax; } else { h.hp = Math.min(h.hp, h.hpMax); h.mp = Math.min(h.mp, h.mpMax); }
   }
@@ -440,12 +477,12 @@ export class GameScene implements Scene {
     // power = weapon attack (item field 26; fists = 10) * strength% (stat table row 4: 140 at level 1, +10 per fighter level). The real player attack builder was not found, so using strength as a multiplier is a GUESS.
     // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
     const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
-    const raw = power * (this.powerT > 0 ? 1.5 : 1) * (9 + Math.floor(Math.random() * 3)) / 10; this.win.wearWeapon();
+    const raw = power * (this.powerT > 0 ? 1.5 : 1) * (9 + Math.floor(Math.random() * 3)) / 10; this.win.wearWeapon(); { const w = this.win.inv.equipped('weapon')[0]; this.usage[w && ItemDb.isRanged(w.item) ? 'ranged' : 'melee']++; }
     this.damage(a, Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0)))));
   }
   /** Apply final damage to a monster: floater, sound, and the death rewards (experience, gold, item drop, kill script event). */
   private damage(a: Actor, dmg: number) {
-    a.hp -= dmg; if (a.hp > 0) a.hurt(this.player.x, this.player.y); this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) }); audio.sfx(a.hp <= 0 ? SFX.kill : SFX.hit, 0.8);
+    a.hp -= dmg; if (a.hp > 0) a.hurt(this.player.x, this.player.y); this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) }); audio.sfx(a.hp <= 0 ? SFX.kill : (() => { const w = this.win.inv.equipped('weapon')[0], ar = w ? ItemDb.arms(w.item) : 0; return ar === 1 || ar === 3 ? SFX.heavyHit : SFX.hit; })(), 0.8);
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp(); if (this.pet && !this.pet.dead) this.pet.addKill();
       if (this.vm?.event(4, 14000000 + a.rec.id)) this.openDialog();
@@ -548,8 +585,18 @@ export class GameScene implements Scene {
       if (this.atkT < 0) p.dir = dirIndex(dx, dy);
       this.shots.push({ x: p.x, y: p.y, vx: dx / d, vy: dy / d, t: 0, spell: sp, dmg: (24 + 3 * (h.level - 1)) * m.power(sp.id) * (this.powerT > 0 ? 1.3 : 1) });
     }
-    h.mp -= sp.mp; this.castT = 400; audio.sfx(SFX.hit, 0.5);
+    h.mp -= sp.mp; this.usage.magic++; this.castT = 400; audio.sfx(SFX.hit, 0.5);
     if (m.use(sp.id)) this.banner = { text: `${sp.name} reached magic level ${m.level(sp.id)}`, t: 0 };
+  }
+  /** Arrows / shot pellets of the hero's ranged arms (GUESS: 0.7 px/ms, damage on arrival). */
+  private arrows: { x: number; y: number; target: Actor }[] = [];
+  private rangedWeapon() { const w = this.win.inv.equipped('weapon').find(e => !Inventory.broken(e)); return !!w && ItemDb.isRanged(w.unid ? this.win.db.base(w.item) : w.item); }
+  private updateArrows(dt: number) {
+    for (const a of this.arrows) {
+      const dx = a.target.x - a.x, dy = a.target.y - a.y, d = Math.hypot(dx, dy * 1.6) || 1, st = 0.7 * dt;
+      if (d <= st + 14 || !a.target.alive) { if (a.target.alive) this.hurtEnemy(a.target); a.x = NaN; } else { a.x += dx / d * st; a.y += dy / d * st; }
+    }
+    this.arrows = this.arrows.filter(a => !Number.isNaN(a.x));
   }
   private updateBullets(dt: number) {
     for (const b of this.bullets) {
@@ -607,7 +654,8 @@ export class GameScene implements Scene {
       if (inp.pressed.has(' ')) this.togglePetMode();
     }
     if (!this.dead) this.updatePower(dt);
-    this.mapwin.reveal(this.scenario, this.map, p.x, p.y); this.mapwin.update(dt, keys, inp.pressed); this.updateShots(dt); this.updateBullets(dt);
+    this.mapwin.reveal(this.scenario, this.map, p.x, p.y); this.mapwin.update(dt, keys, inp.pressed); this.updateShots(dt); this.updateBullets(dt); this.updateArrows(dt);
+    this.refreshCareer(); for (const e of this.fxList) e.t += dt; this.fxList = this.fxList.filter(e => e.t < fxLife(e.fx));
     if (inp.pressed.has('i')) this.win.item = !this.win.item;
     if (inp.pressed.has('q')) this.toggleQuestLog();
     if (inp.pressed.has('h')) { this.menu.open('help'); this.paused = true; return; }
@@ -631,6 +679,8 @@ export class GameScene implements Scene {
       else if ((this.win.status || this.win.magic) && inp.x < 320 && inp.y >= 4 && inp.y < 36 && inp.x >= 40 && inp.x < 280) this.showLeft(inp.x < 165 ? 'status' : 'magic', true);
       else if (this.win.magic && inp.x < 320 && inp.y < 416) this.magic.click(inp.x, inp.y);
       else if (this.qlog && inp.x < 320 && inp.y < 416) this.qlogClick(inp.x, inp.y);
+      else if (this.win.status && this.win.careerMenu && this.win.careerPick(inp.x, inp.y) >= 0) { this.win.career = this.win.careerOpts[this.win.careerPick(inp.x, inp.y)]; this.win.careerMenu = false; this.applyStats(false); this.refreshCareer(); this.banner = { text: `Career changed: ${['Mercenary', 'Warrior', 'Wizard', 'Hunter'][this.win.career]}`, t: 0 }; }
+      else if (this.win.status && this.win.careerOpts.length && inBox(CAREER_BTN, inp.x, inp.y)) this.win.careerMenu = !this.win.careerMenu;
       else if (this.win.item && !this.shop && SET_BTN.some((r, i) => inBox(r, inp.x, inp.y) && (this.win.inv.switchSet(i), true))) { /* Change Equipment I / II */ }
       else if (!this.shop && this.win.entryAt(inp.x, inp.y)) this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y)!);
       else if (b === 'status') this.showLeft('status');
@@ -653,6 +703,8 @@ export class GameScene implements Scene {
     const hov = inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
     const gh = !hov && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
     const zov = !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.zones.find(z => z.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
+    const gz = zov && zov.rec.type === 5 && inp.down && !this.dead && Math.hypot(zov.x - p.x, (zov.y - p.y) * 1.6) < 450 ? zov : null;
+    this.holdZone = gz; this.holdT = gz ? this.holdT + dt : 0;
     const tab = keys.has('tab') && !!this.pet;
     if (tab && inp.clicked && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y)) this.petCommand(inp.x + this.camX, inp.y + this.camY, hov, gh, zov);
     else if (tab && inp.down) { /* TAB held: the mouse commands the dog, the hero stays */ }
@@ -668,7 +720,7 @@ export class GameScene implements Scene {
     if (keys.has('w') || (ar && keys.has('arrowup'))) dy--;
     if (keys.has('s') || (ar && keys.has('arrowdown'))) dy++;
     let vx = dx, vy = dy;
-    if (!dx && !dy && inp.down && !tab && !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y)) {
+    if (!dx && !dy && inp.down && !tab && !hov && !gh && !gz && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y)) {
       // walk towards the mouse pointer (screen space, relative to the player)
       const mx = inp.x - (p.x - this.camX), my = inp.y - (p.y - this.camY), d = Math.hypot(mx, my);
       if (d > 6) { vx = mx / d; vy = my / d; }
@@ -677,7 +729,8 @@ export class GameScene implements Scene {
     if (!dx && !dy && this.target) {
       const tx = this.target.x - p.x, ty = this.target.y - p.y, td = Math.hypot(tx, ty * 1.6), tl = Math.hypot(tx, ty) || 1;
       if (!atk) p.dir = actorDir(tx, ty);
-      if (td > 58 * (this.target?.scale ?? 1) && !atk) { vx = tx / tl; vy = ty / tl; } else { vx = vy = 0; if (!atk) { this.atkT = 0; this.atkHit = false; p.anim = 3; p.t = 0; } }
+      const reach = this.rangedWeapon() ? 420 : 58 * (this.target?.scale ?? 1);   // bow guns / slings shoot from a distance (manual: keep the button pressed to keep shooting)
+      if (td > reach && !atk) { vx = tx / tl; vy = ty / tl; } else { vx = vy = 0; if (!atk) { this.atkT = 0; this.atkHit = false; p.anim = 3; p.t = 0; } }
     } else if (dx || dy) this.target = null;
     if (this.atkT >= 0) { vx = vy = 0; }
     if (vx || vy) {
@@ -693,7 +746,7 @@ export class GameScene implements Scene {
     p.t += dt;
     if (this.atkT >= 0) {
       const fr = this.caf.anims[3].dirs[p.dir].frames || 11, dur = fr * FRAME_MS * 100 / Math.max(30, this.win.stats().speed);
-      if (!this.atkHit && p.t >= dur * 0.45) { this.atkHit = true; if (this.target?.alive) this.hurtEnemy(this.target); }
+      if (!this.atkHit && p.t >= dur * 0.45) { this.atkHit = true; if (this.target?.alive) { { const w = this.win.inv.equipped('weapon')[0], ar = w ? ItemDb.arms(w.item) : 0; audio.sfx(this.rangedWeapon() ? SFX.swingBow : ar === 1 || ar === 3 ? SFX.swingHeavy : SFX.swingLight, 0.6); } if (this.rangedWeapon()) this.arrows.push({ x: p.x, y: p.y - 4, target: this.target }); else this.hurtEnemy(this.target); } }
       if (p.t >= dur) { this.atkT = -1; p.anim = ANIM_IDLE; p.t = 0; }
     }
   }
@@ -734,6 +787,9 @@ export class GameScene implements Scene {
       }
       ctx.globalAlpha = 1;
     }
+    for (const e of this.fxList) drawFx(ctx, e, this.camX, this.camY);
+    for (const a of this.arrows) { ctx.strokeStyle = '#f0e0a0'; ctx.lineWidth = 2; ctx.beginPath(); const ax = a.x - this.camX, ay = a.y - this.camY - 36, vx = a.target.x - a.x, vy = a.target.y - a.y, n = Math.hypot(vx, vy) || 1; ctx.moveTo(ax - vx / n * 10, ay - vy / n * 6); ctx.lineTo(ax, ay); ctx.stroke(); }
+    if (this.holdZone) { const left = Math.max(0, Math.ceil((90 - this.holdT * 0.03) / 30)); this.text.drawCenter(ctx, String(left), Math.round(this.holdZone.x - this.camX), Math.round(this.holdZone.y - this.camY - 110)); }   // Brain Globe countdown (90 script polls = 3 s)
     for (const f of this.floaters) this.text.drawCenter(ctx, f.s, Math.round(f.x - this.camX), Math.round(f.y - this.camY - f.t / 25));
     if (this.banner) { const w = this.banner.text.length * 6 + 24; ctx.fillStyle = 'rgba(8,8,24,0.85)'; ctx.fillRect(320 - w / 2, 20, w, 24); ctx.strokeStyle = '#a89868'; ctx.strokeRect(320 - w / 2 + 0.5, 20.5, w - 1, 23); this.text.drawCenter(ctx, this.banner.text, 320, 26); }
     if (this.debug) { map.drawJudge(ctx, this.camX, this.camY, SCREEN_W, HUD_Y); this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2); }

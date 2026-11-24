@@ -28,6 +28,10 @@ export interface ScriptHooks {
   vitals?(kind: 0 | 1 | 2): [number, number];
   /** Sentences 7 (HP of the hero and the living dog back to full) / 8 (MP full). */
   heal?(kind: 0 | 1): void;
+  /** Sentence 36: spawn effect `id` (20007-20009 ...) at world position (a, b). */
+  effect?(id: number, a: number, b: number): void;
+  /** Sentence 41: open the warehouse window. */
+  warehouse?(): void;
   /** Sentences 55 / 4: any carried item unidentified? / identify everything. */
   needIdentify?(): boolean;
   identify?(): void;
@@ -130,7 +134,8 @@ export class ScriptVM {
       case 28: { const c = this.char, e = this.ended; this.char = ev(0); this.runStatus(6, ev(0)); this.char = c; this.ended = e; return true; }
       case 33: { const t = this.hooks?.nearTarget?.(ev(0), ev(2)) ?? null; this.set(o[3][0], o[3][1], t ? 0 : -1); if (t) { this.set(o[4][0], o[4][1], Math.round(t[0])); this.set(o[5][0], o[5][1], Math.round(t[1])); } return true; }   // (char, 0, range, outTarget, outX, outY): nearest player within range (exe 0x43288d)
       case 30: { if (ev(2) === 0 && ev(7) > 0) this.hooks?.bullet?.(ev(0), ev(1), ev(3), ev(6)); return true; }   // (x, y, kind, angle, .., power, travel, ..): create an attack object (exe 0x43309b); kind 0 with a travel value = trap projectile, the other kinds are scenery effects
-      case 29: case 27: case 46: case 56: case 36: case 65: return true;
+      case 29: case 27: case 46: case 56: case 65: return true;
+      case 36: this.hooks?.effect?.(ev(0), ev(1), ev(2)); return true;   // exe 0x43332d: effect object (OPTION sprite set)
       case 31: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1); return true;
       case 32: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), false) ?? -1); return true;
       case 25: this.hooks?.spawnSlot(ev(0), ev(1), ev(2)); return true;   // (slot, x, y, effect type)
@@ -158,7 +163,8 @@ export class ScriptVM {
       // No offline effect / visual only: 7 8 (talk begin/end markers), 20 (partner hire dialog), 26 (loot burst effect), 40 (object move effect), 41 (unused town object), 45 (partner candidate), 60 (effect), 64, 72.
       case 7: this.hooks?.heal?.(0); return true;   // exe 0x43244d: HP = max (and the living dog's)
       case 8: this.hooks?.heal?.(1); return true;   // exe 0x4324cf: MP = max
-      case 20: case 26: case 40: case 41: case 60: case 64: case 72: return true;
+      case 41: this.hooks?.warehouse?.(); return true;   // exe 0x4335ac toggles the warehouse window (clicked via object 10000300 in the three towns)
+      case 20: case 26: case 40: case 60: case 64: case 72: return true;
       case 12: this.set(o[0][0], o[0][1], ev(0) - ev(1)); return true;
       case 62: { const q = ev(0), st = ev(1); if (st === 2) { if (this.globals.get(`q:${q}`) === 2) return true; }   // a quest completes only once (exe keeps a done flag per quest)
         this.globals.set(`q:${q}`, st); this.hooks?.quest(q, st); return true; }

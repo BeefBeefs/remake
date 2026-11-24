@@ -18,6 +18,11 @@ export class ItemDb {
   /** Footprint in inventory cells (fields 7 x 8). */
   static size(it: ItemDef): [number, number] { return [it.f['7'] || 1, it.f['8'] || 1]; }
   static price(it: ItemDef) { return it.f['5'] ?? 0; }
+  /** Arms class of a weapon (field 0): none = one-handed sword, 1 axe, 3 great sword, 5 bow gun / sling / crossbow, 8 staff, 9 rod. */
+  static arms(it: ItemDef) { return it.sec === 0 ? it.f['0'] ?? 0 : -1; }
+  static isRanged(it: ItemDef) { return ItemDb.arms(it) === 5; }
+  /** Two-handed arms (manual: a shield cannot be used together with them). GUESS: great swords, bow guns and staffs; the flag itself was not located in Item.Ibn. */
+  static twoHanded(it: ItemDef) { const a = ItemDb.arms(it); return a === 3 || a === 5 || a === 8; }
   /** Maximum durability (field 25) of weapons and armor; 0 = does not wear. */
   static maxDur(it: ItemDef) { return it.sec <= 1 ? it.f['25'] ?? 0 : 0; }
   /** Magical variants carry an item id (field 1); the plain item of the same type has none. Only variants can be unidentified. */

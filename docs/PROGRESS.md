@@ -233,3 +233,27 @@ Test: `tools/playtest/equipsets.mjs`.
 - Hit reaction: `Actor.hurt()` staggers a monster for 240 ms (interrupts a wind-up, slides it back ~10 px, brief additive flash). GUESS: the CAF hit animation is not identified, so there is no separate hurt animation.
 - Shamans (model 5: Goblin/Phantom Shaman, Wild Earth) now cast from 120-380 px away every ~1.9 s using the attack animation; the bolt reuses the trap-bolt projectile (0.2 px/ms, hits the hero only, damage = the monster's Mct damage minus defence). GUESS: range, rate, speed; gargoyle/golem special attacks (anims 5/7/8) are still melee-only.
 - Test: `tools/playtest/shaman.mjs` (scenario 01000004).
+
+## Warehouse
+Exe sentence 41 (0x4335ac) toggles the warehouse window; object 10000300 is the chest clicked in towns. That id is absent from the Mct files, so a synthetic chest zone is placed in each town (GUESS: position near the town's start point). `src/warehouse.ts` is a grid panel storing items across towns and saves (`SaveData.wh`). Identify also covers warehouse items (manual). Test: `warehouse.mjs`.
+
+## Brain Globes
+Manual: hold the click and a countdown runs before the globe takes effect. Implemented as `holdZone`/`holdT` in game.ts with a countdown drawn over the globe (GUESS: duration 1.5 s). Test: `statue.mjs`.
+
+## Career change
+Status window "Change Career" button (Mercenary becomes Warrior / Wizard / Hunter). `src/career.ts` holds the class table; the real thresholds are in Tables.Tbd 104-107 but are NOT decoded. GUESS: requirement is based on per-profession usage counters (melee / magic / ranged; weights from Tbd 100-103) and the level, with a fixed minimum. Class growth tables 902/904/906. Test: `career.mjs`.
+
+## Two-handed weapons and ranged hero attacks
+Item.Ibn weapon field 0 is the arms class (none = sword, 1 axe, 3 great sword, 5 bow/sling/crossbow, 8 staff, 9 rod). Great sword / bow / staff / rod are two-handed: the shield is ignored for stats and shown as disabled. Bow-class weapons fire arrows (`arrows`, `updateArrows`). Tests: `twohand.mjs`.
+
+## Gargoyle / golem specials
+Gargoyle (anim 7) shoots a bolt, golem (anim 5) does a ground slam with an area hit; both on a cooldown. Timings are GUESSES. Test: `special.mjs`.
+
+## Effect sprites
+`tools/build_fx.py` converts the `Character\Option\*` effect folders into `public/data/ep1/fx` (87 sets). Script sentence 36 spawns effects 20007-20009; the id to folder mapping is a GUESS (`fx.mjs`).
+
+## Sound effects
+From the exe: item method 0x466110 returns weapon sounds (swing 47 / 48, bow 93, impact 1 / 2); monster behaviour functions use 22 (melee), 21 (cast release), 94 (cast start), 29 / 23 (bats), 19 (slam). GUESS: "light" vs "heavy" weapon is approximated by the arms class because item+0x28 has no mapped Ibn field. Hurt / kill sounds remain placeholders.
+
+## Still not implemented
+Attribute levels, profession spell gating, triple attack, Ctrl/Shift click controls, R walk/run key, X special-items window, plain CapsLock swap.

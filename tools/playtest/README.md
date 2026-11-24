@@ -17,3 +17,8 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `heal.mjs` — Syria healing (HP/MP/dog).
 - `equipsets.mjs` — I/II equipment sets, unidentified equip block.
 - `shaman.mjs` — shaman bolts + stagger.
+- `warehouse.mjs` — store/take items in the town warehouse chest.
+- `career.mjs` — Change Career menu and class pick.
+- `twohand.mjs` — two-handed weapons disable the shield; bow attacks.
+- `special.mjs` — gargoyle bolt and golem slam.
+- `fx.mjs` — script effect sprite spawning.

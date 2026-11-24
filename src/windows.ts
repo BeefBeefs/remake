@@ -2,20 +2,29 @@ import { App, put, Text } from './app.js';
 import { SpriteSet } from './sprites.js';
 import { HudState } from './gui.js';
 import { PlayerStats } from './pstats.js';
+import { CAREERS } from './career.js';
 import { ItemDb, ItemDef, Inventory, InvEntry, SECTION_NAMES, drawTooltip } from './items.js';
 
 export interface CombatStats { atkMin: number; atkMax: number; defense: number; speed: number; }
 
 const GRID_X = 335, GRID_Y = 71, CELL = 32;
 /** Change Equipment buttons I / II (PLACEHOLDER position: the original icons are part of Status.njp, not located yet). */
+/** 'Change Career' button on the Status window (PLACEHOLDER position) and the row height of its choice list. */
+export const CAREER_BTN = { x: 20, y: 388, w: 160, h: 18 };
 export const SET_BTN = [{ x: 540, y: 394, w: 22, h: 16 }, { x: 566, y: 394, w: 26, h: 16 }];
 
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
 export class Windows {
+  /** Career change: current profession, options available now, and whether the choice list is open. */
+  career = 0; careerOpts: number[] = []; careerMenu = false;
   mineStock = 0; status = false; item = false; magic = false; mapOpen = false; ps?: PlayerStats;
   /** HUD elements that sit above the world view (the magic bar) and must swallow clicks. */
   hudOver: ((x: number, y: number) => boolean) | null = null;
   inv = new Inventory(); gold = 0;
+  /** Town warehouse (Warehouse Transfer Box). */
+  wh = new Inventory();
+  /** Tooltip hint for clicking an inventory item while a side panel (shop / warehouse) is open; overrides the sell price. */
+  panelHint: string | null = null;
   /** Set while a shop is open: clicking an inventory item sells it for this price (tooltip hint). */
   sellValue: ((it: ItemDef) => number) | null = null;
   private constructor(private st: SpriteSet, private icons: SpriteSet, private text: Text, public db: ItemDb) {}
@@ -27,7 +36,8 @@ export class Windows {
     const eff = (e: InvEntry) => e.unid ? this.db.base(e.item) : e.item;   // an unidentified variant only performs like its plain base item
     const w = this.inv.equipped('weapon').find(e => !Inventory.broken(e));
     const [atkMin, atkMax] = w ? ItemDb.attack(eff(w)) : [0, 0];
-    return { atkMin, atkMax, defense: this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) ? ItemDb.defense(eff(e)) : 0), 0), speed: w ? ItemDb.speed(eff(w)) : 100 };
+    const twoH = !!w && ItemDb.twoHanded(eff(w));
+    return { atkMin, atkMax, defense: this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) && !(twoH && ItemDb.slot(e.item) === 'shield') ? ItemDb.defense(eff(e)) : 0), 0), speed: w ? ItemDb.speed(eff(w)) : 100 };
   }
   /** Durability wear (GUESS: 1 point per weapon hit dealt; 1 point on one random worn armor piece per hit taken). */
   wearWeapon() { const w = this.inv.equipped('weapon')[0]; if (w && ItemDb.maxDur(w.item) > 0) w.dur = Math.max(0, Inventory.dur(w) - 1); }
@@ -44,10 +54,14 @@ export class Windows {
   repairCostOf(slot: number) { return this.slotEntries(slot).reduce((a, e) => a + this.repairCost(e), 0); }
   repair(slot: number) { for (const e of this.slotEntries(slot)) e.dur = undefined; }
   /** Sentence 55: any item carried (worn or not) still unidentified? Sentence 4 identifies them all. */
-  needsIdentify() { return this.inv.entries.some(e => e.unid); }
-  identifyAll() { for (const e of this.inv.entries) e.unid = false; }
+  needsIdentify() { return this.inv.entries.some(e => e.unid) || this.wh.entries.some(e => e.unid); }
+  identifyAll() { for (const e of [...this.inv.entries, ...this.wh.entries]) e.unid = false; }   // the manual: items in the town warehouse are identified too
   /** Name shown for an entry (unidentified variants show their plain base name and a '?'). */
   label(e: InvEntry) { return e.unid ? `${this.db.base(e.item).name} ?` : e.item.name; }
+  /** A worn shield stops working (drawn semi-transparent) while a two-handed arm is equipped. */
+  shieldOff(e: InvEntry) { const w = this.inv.equipped('weapon').find(x => !Inventory.broken(x)); return !!e.eq && ItemDb.slot(e.item) === 'shield' && !!w && ItemDb.twoHanded(w.unid ? this.db.base(w.item) : w.item); }
+  /** Which career choice (index into careerOpts) is under (x, y) while the list is open. */
+  careerPick(x: number, y: number) { const n = this.careerOpts.length, y0 = CAREER_BTN.y - 18 - n * 18, i = Math.floor((y - y0 - 18) / 18); return x >= CAREER_BTN.x && x < CAREER_BTN.x + CAREER_BTN.w && i >= 0 && i < n ? i : -1; }
   /** Inventory entry under screen point (x,y) while the item window is open. */
   entryAt(x: number, y: number): InvEntry | undefined { return this.item && x >= GRID_X ? this.inv.at(Math.floor((x - GRID_X) / CELL), Math.floor((y - GRID_Y) / CELL)) : undefined; }
   /** Extra left-hand panel (shop) that also blocks world clicks. */
@@ -57,7 +71,7 @@ export class Windows {
     if (this.status) {
       put(ctx, this.st, 5);
       const t = this.text, v = (s: string | number, x: number, y: number) => t.draw(ctx, String(s), x, y);
-      v(name.slice(0, 9), 22, 42); v('Fighter', 94, 42); v(h.level, 270, 42);
+      v(name.slice(0, 9), 22, 42); v(CAREERS[this.career], 94, 42); v(h.level, 270, 42);
       v(`${h.exp}/${h.expMax}`, 250, 67);
       v(`${h.hp}/${h.hpMax}`, 60, 90);
       // Attack / Defense / Attack Speed come from the equipped items; the rest is not decoded yet -> placeholders
@@ -69,13 +83,16 @@ export class Windows {
       v(`${h.mp}/${h.mpMax}`, 60, 194);
       v('--', 70, 218); v('--', 240, 218); v(n(ps?.mhit), 80, 242); v(n(ps?.meva), 270, 242);
       for (let i = 0; i < 8; i++) v('0', 262, 267 + i * 16);
+      if (this.careerOpts.length) { const hot = mx >= CAREER_BTN.x && mx < CAREER_BTN.x + CAREER_BTN.w && my >= CAREER_BTN.y && my < CAREER_BTN.y + CAREER_BTN.h; ctx.fillStyle = hot ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.55)'; ctx.fillRect(CAREER_BTN.x, CAREER_BTN.y, CAREER_BTN.w, CAREER_BTN.h); ctx.strokeStyle = '#e0c860'; ctx.strokeRect(CAREER_BTN.x + .5, CAREER_BTN.y + .5, CAREER_BTN.w, CAREER_BTN.h); v('Change Career', CAREER_BTN.x + 28, CAREER_BTN.y + 4); }
+      if (this.careerMenu) { const n = this.careerOpts.length, y0 = CAREER_BTN.y - 18 - n * 18; ctx.fillStyle = 'rgba(8,8,24,0.95)'; ctx.fillRect(CAREER_BTN.x, y0, CAREER_BTN.w, n * 18 + 18); ctx.strokeStyle = '#e0c860'; ctx.strokeRect(CAREER_BTN.x + .5, y0 + .5, CAREER_BTN.w, n * 18 + 18); v('Change profession to:', CAREER_BTN.x + 6, y0 + 4); this.careerOpts.forEach((c, i) => { if (my >= y0 + 18 + i * 18 && my < y0 + 36 + i * 18 && mx >= CAREER_BTN.x && mx < CAREER_BTN.x + CAREER_BTN.w) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(CAREER_BTN.x, y0 + 18 + i * 18, CAREER_BTN.w, 18); } v(CAREERS[c], CAREER_BTN.x + 20, y0 + 22 + i * 18); }); }
     }
     if (this.item) {
       put(ctx, this.st, 7, undefined, 320, 0); put(ctx, this.st, 8, undefined, 320, 0);
       for (const e of this.inv.entries) {
         const f = this.icons.pattern(ItemDb.icon(e.item)); if (!f) continue;
         const cx = GRID_X + e.x * CELL + (e.w * CELL - f.canvas.width) / 2, cy = GRID_Y + e.y * CELL + (e.h * CELL - f.canvas.height) / 2;
-        ctx.drawImage(f.canvas, Math.round(cx), Math.round(cy));
+        if (this.shieldOff(e)) ctx.globalAlpha = 0.4;
+        ctx.drawImage(f.canvas, Math.round(cx), Math.round(cy)); ctx.globalAlpha = 1;
         if (e.unid) this.text.draw(ctx, '?', GRID_X + e.x * CELL + 3, GRID_Y + e.y * CELL + 3);
         if (e.alt && !e.eq) { ctx.strokeStyle = '#5080c0'; ctx.lineWidth = 1; ctx.strokeRect(GRID_X + e.x * CELL + 3, GRID_Y + e.y * CELL + 3, e.w * CELL - 6, e.h * CELL - 6); }
         if (e.eq) { ctx.strokeStyle = Inventory.broken(e) ? '#e06060' : '#60e060'; ctx.lineWidth = 2; ctx.strokeRect(GRID_X + e.x * CELL + 1, GRID_Y + e.y * CELL + 1, e.w * CELL - 2, e.h * CELL - 2); }
@@ -88,8 +105,9 @@ export class Windows {
         if (hover.unid) lines.push('Unidentified (see a merchant)');
         if (it.sec === 0) { const [a, b] = ItemDb.attack(it); lines.push(`Attack: ${a === b ? a : `${a}-${b}`}  Speed: ${ItemDb.speed(it)}%`); }
         else if (it.sec === 1) lines.push(`Defense: ${ItemDb.defense(it)}`);
+        if (it.sec === 0 && ItemDb.twoHanded(it)) lines.push('Two-handed: no shield');
         if (ItemDb.maxDur(it) > 0) lines.push(`Durability: ${Inventory.dur(hover)}/${ItemDb.maxDur(hover.item)}${Inventory.broken(hover) ? ' (broken)' : ''}`);
-        lines.push(`Price: ${ItemDb.price(it)}`); if (this.sellValue) lines.push(`Click to sell for ${this.sellValue(it)}`); else if (ItemDb.slot(it)) lines.push(hover.unid ? 'Cannot be used until identified' : hover.eq ? '[Equipped] click to remove' : hover.alt ? '[Set ' + (this.inv.set ? 'I' : 'II') + '] click to equip here' : 'Click to equip');
+        lines.push(`Price: ${ItemDb.price(it)}`); if (this.panelHint) lines.push(this.panelHint); else if (this.sellValue) lines.push(`Click to sell for ${this.sellValue(it)}`); else if (ItemDb.slot(it)) lines.push(hover.unid ? 'Cannot be used until identified' : hover.eq ? '[Equipped] click to remove' : hover.alt ? '[Set ' + (this.inv.set ? 'I' : 'II') + '] click to equip here' : 'Click to equip');
         drawTooltip(ctx, this.text, lines, mx + 12, my + 12);
       }
     }

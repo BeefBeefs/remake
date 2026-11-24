@@ -15,7 +15,7 @@ export const ENEMY_STATS: Record<number, { hp: number; dmg: [number, number]; ex
   2: { hp: 45, dmg: [4, 9], exp: 12, gold: [8, 30], speed: 0.075 },
   5: { hp: 200, dmg: [8, 16], exp: 120, gold: [200, 400], speed: 0.09 },
 };
-export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; /** Ranged attack: a bolt from the monster's ground position toward (tx, ty). */ shoot?(x: number, y: number, tx: number, ty: number, dmg: number): void; }
+export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; /** Ranged attack: a bolt from the monster's ground position toward (tx, ty). */ shoot?(x: number, y: number, tx: number, ty: number, dmg: number): void; /** Play Voice00.Voc entry `id` (monster attack sounds, exe 0x42a000-0x430000). */ sfx?(id: number): void; }
 type State = 'idle' | 'walk' | 'attack' | 'die';
 const ANIM: Record<State, number> = { idle: 0, walk: 1, attack: 2, die: 3 };
 /** Draw order of CAF layers (1 and 0 are the body for the player; higher ones are optional equipment/overlay variants). */
@@ -24,7 +24,7 @@ const LAYERS = [1, 0, 2, 3, 4, 5, 6];
 /** Static/idle actor placed from Scenario.Mct (NPCs and partners). */
 export class Actor implements Drawable {
   x: number; y: number; dir: number; t = Math.random() * 1000;
-  hp = 0; maxHp = 0; state: State = 'idle'; deadT = 0; private hitDone = false; private shot = false;
+  hp = 0; maxHp = 0; state: State = 'idle'; deadT = 0; private hitDone = false; private shot = false; private slam = false; private animOv: number | null = null; private specT = 2500;
   /** Hit reaction (GUESS: the CAF hit animation is not identified): a short stagger that interrupts a wind-up and pushes the monster back. */
   stun = 0; private kx = 0; private ky = 0; private shootT = 0;
   /** Shamans (model 5) cast bolts from a distance (GUESS from their cast sounds/animation set; the exact range and rate are not decoded). */
@@ -67,7 +67,7 @@ export class Actor implements Drawable {
     const [set, sdw, caf] = await Promise.all([app.set(base), app.set(base + '_sdw'), loadCaf(base + '.caf.json')]);
     return new Actor(r, set, sdw, caf);
   }
-  private set(st: State) { if (this.state !== st) { this.state = st; this.t = 0; this.hitDone = false; this.shot = false; } }
+  private set(st: State) { if (this.state !== st) { this.state = st; this.t = 0; this.hitDone = false; this.shot = false; this.slam = false; this.animOv = null; } }
   /** Bring a dormant/dead slot monster into the world at real position (x, y). */
   revive(x: number, y: number) { this.x = x; this.y = y; this.hp = this.maxHp; this.hidden = false; this.deadT = 0; this.set('idle'); this.state = 'idle'; }
   /** A slot is free when its monster is hidden or dead (sentence 32). */
@@ -82,21 +82,33 @@ export class Actor implements Drawable {
       if (!c.blocked(nx, ny)) { this.x = nx; this.y = ny; }
       this.set('idle'); return;
     }
-    this.shootT -= dt;
+    this.shootT -= dt; this.specT -= dt;
     let tx = c.px, ty = c.py, onPet = false;
     if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) * 0.9) { tx = c.pet.x; ty = c.pet.y; onPet = true; }
     const dx = tx - this.x, dy = (ty - this.y) * 1.6, d = Math.hypot(dx, dy);
-    const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
+    const frames = this.caf.anims[this.animOv ?? ANIM.attack]?.dirs[this.dir]?.frames || 10;
     if (this.state === 'attack') {
-      if (this.shot) { if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); c.shoot?.(this.x, this.y, tx, ty, dm); } if (this.t >= frames * FRAME_MS) { this.shot = false; this.set('idle'); } return; }
+      if (this.slam) {   // golem slam: heavy blow with an area around the monster
+        if (!this.hitDone && this.t >= frames * FRAME_MS * 0.6) { this.hitDone = true; const dm = Math.round(this.stats.dmg[1] * 1.6); if (Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) < 150 * this.scale) c.hitPlayer(dm); if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < 150 * this.scale) c.hitPet?.(dm); }
+        if (this.t >= frames * FRAME_MS) this.set('idle'); return;
+      }
+      if (this.shot) { if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); c.shoot?.(this.x, this.y, tx, ty, dm); c.sfx?.(21); } if (this.t >= frames * FRAME_MS) { this.shot = false; this.set('idle'); } return; }
       if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70 * this.scale) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm); } }
       if (this.t >= frames * FRAME_MS) this.set('idle');
       return;
     }
+    const has = (a: number) => (this.caf.anims[a]?.dirs[this.dir]?.frames ?? 0) > 0;
     if (this.ranged && !onPet && d >= 120 && d < 380 && this.shootT <= 0 && c.shoot) {
-      this.dir = dirIndex(dx, ty - this.y); this.set('attack'); this.shootT = 1900; this.shot = true; return;
+      this.dir = dirIndex(dx, ty - this.y); this.set('attack'); this.shootT = 1900; this.shot = true; if (has(7)) this.animOv = 7; c.sfx?.(94); return;   // GUESS: extra CAF animation 7 of the shaman model is its cast
     }
-    if (d < 46 * this.scale) { this.dir = dirIndex(dx, ty - this.y); this.set('attack'); }
+    // special attacks with the models' extra animations (GUESS for which animation is what): gargoyle (3) casts a bolt with anim 7 from a distance, golem/giant (4) slams with anim 5
+    if (!onPet && this.specT <= 0 && this.rec.model === 3 && has(7) && c.shoot && d >= 110 && d < 320) {
+      this.dir = dirIndex(dx, ty - this.y); this.set('attack'); this.specT = 3500; this.shot = true; this.animOv = 7; c.sfx?.(94); return;
+    }
+    if (this.specT <= 0 && this.rec.model === 4 && has(5) && d < 110 * this.scale) {
+      this.dir = dirIndex(dx, ty - this.y); this.set('attack'); this.specT = 4500; this.slam = true; this.animOv = 5; c.sfx?.(19); return;
+    }
+    if (d < 46 * this.scale) { this.dir = dirIndex(dx, ty - this.y); this.set('attack'); c.sfx?.(this.rec.model === 0 ? 29 : 22); }   // GUESS from the exe: 22 is the most common constant in the monster behaviour functions, bats use 29/23
     else if (d < 300) {
       this.dir = dirIndex(dx, ty - this.y); this.set('walk');
       const sp = this.stats.speed * dt, nx = this.x + dx / d * sp, ny = this.y + (ty - this.y) / Math.hypot(dx, ty - this.y) * sp;
@@ -106,7 +118,7 @@ export class Actor implements Drawable {
   draw(c: CanvasRenderingContext2D, camX: number, camY: number) {
     if (this.hidden) return;
     if (this.gen) { this.bar(c, camX, camY, -40); return; }
-    const anim = this.enemy ? ANIM[this.state] : 0;
+    const anim = this.enemy ? (this.state === 'attack' && this.animOv !== null ? this.animOv : ANIM[this.state]) : 0;
     const d = this.caf.anims[anim]?.dirs[this.dir]; if (!d) return;
     const raw = Math.floor(this.t / FRAME_MS), fi = d.frames ? (this.state === 'die' ? Math.min(raw, d.frames - 1) : raw % d.frames) : 0;
     const flash = this.stun > 120;

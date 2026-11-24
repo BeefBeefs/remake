@@ -160,8 +160,10 @@ export class ScriptVM {
             case 27:
             case 46:
             case 56:
-            case 36:
             case 65: return true;
+            case 36:
+                this.hooks?.effect?.(ev(0), ev(1), ev(2));
+                return true; // exe 0x43332d: effect object (OPTION sprite set)
             case 31:
                 this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1);
                 return true;
@@ -254,10 +256,12 @@ export class ScriptVM {
             case 8:
                 this.hooks?.heal?.(1);
                 return true; // exe 0x4324cf: MP = max
+            case 41:
+                this.hooks?.warehouse?.();
+                return true; // exe 0x4335ac toggles the warehouse window (clicked via object 10000300 in the three towns)
             case 20:
             case 26:
             case 40:
-            case 41:
             case 60:
             case 64:
             case 72: return true;
