@@ -1,5 +1,5 @@
 import { loadCaf } from './caf.js';
-import { GameMap, worldToReal } from './map.js';
+import { GameMap, worldToReal, realToWorld } from './map.js';
 import { audio } from './audio.js';
 import { Shop, shopStock, sellPrice } from './shop.js';
 import { loadScenarioActors, dirIndex as actorDir } from './actors.js';
@@ -11,14 +11,6 @@ import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 const q = new URLSearchParams(location.search);
 const SCENARIO = q.get('scenario') ?? '00000000';
-/** PROVISIONAL scene links (the real exit table is not decoded yet): flagged zone / spawn circle -> scenario. */
-/** Episode 1 map graph (PROVISIONAL): the town's exit opens an area list; every other map returns to the town at its arrival point.
- *  Names are message 1000000 of each Scenario.Scs. The real game picks the destination on a world map. */
-const HOME = '00000000';
-const AREAS = [
-    ['00000001', 'Near the Remote Town'], ['00000003', 'Wasteland of Hesitation'], ['00000004', 'Iron Boundary Line'], ['00000005', 'Frosty Forest'], ['00000006', 'Wasteland of Pillars'],
-    ['00010000', 'Dusty Ruins, B1F'], ['00010001', 'Dusty Ruins, B3F'], ['00010002', 'Dusty Ruins, B4F'], ['00010003', 'Dusty Ruins, B5F'], ['00010004', 'Dusty Ruins, Room of Judgment'], ['00010005', 'Dusty Ruins, Continued Room'],
-];
 /** Script state kept per scenario so quests are not replayed when re-entering a map. */
 const savedVars = new Map();
 let savedGlobals = new Map();
@@ -66,32 +58,57 @@ export class GameScene {
             console.warn('save failed', e);
         }
     }
-    atExit() {
-        const p = this.player;
-        if (this.scenario === HOME && this.map.hasMarkerZone)
-            return this.map.inMarker(p.x, p.y, 5);
-        return Math.hypot(p.x - this.spawnPos.x, (p.y - this.spawnPos.y) * 1.6) < 90;
+    zoneRect(z, wa, wb) { const r = z.rec.rect; return (r[0] || r[1] || r[2] || r[3]) !== 0 && wa >= z.rec.a + r[0] && wa <= z.rec.a + r[2] && wb >= z.rec.b + r[1] && wb <= z.rec.b + r[3]; }
+    checkZones(init = false) {
+        if (this.leaving || !this.vm)
+            return;
+        const [wa, wb] = realToWorld(this.player.x, this.player.y);
+        for (const z of this.zones) {
+            const id = z.rec.id;
+            if (!this.enterIds.has(id))
+                continue;
+            if (!this.zoneRect(z, wa, wb)) {
+                this.inside.delete(id);
+                continue;
+            }
+            if (this.inside.has(id))
+                continue;
+            this.inside.add(id);
+            if (!init && this.vm.event(3, id))
+                this.openDialog();
+        }
     }
-    checkExit() {
-        if (this.leaving || this.dlg)
+    /** Sentence 17: leave for scenario `idx` (folder = index zero-padded to 8 digits) and arrive in its exit zone number `entry`. */
+    async exit(idx, entry) {
+        if (this.leaving)
             return;
-        const at = this.atExit(), far = Math.hypot(this.player.x - this.spawnPos.x, this.player.y - this.spawnPos.y) > 220;
-        if (far)
-            this.armed = true;
-        if (!at || !this.armed)
+        const id = String(idx).padStart(8, '0');
+        const ok = await fetch(`data/ep1/scenario/${id}.script.json`, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+        if (!ok) {
+            this.banner = { text: 'This area is not available', t: 0 };
             return;
-        if (this.scenario !== HOME)
-            return this.travel(HOME);
-        this.armed = false;
+        }
         this.target = null;
-        this.dlgPick = i => { if (i < AREAS.length)
-            this.travel(AREAS[i][0]); };
-        this.setDialog(['Where do you want to go?', '', ...AREAS.map(a => `  ~${a[1]}~`), '', '  ~Stay in town~']);
+        this.travel(id, entry);
     }
-    travel(scenario) {
+    /** Walkable real-pixel point nearest to the centre of exit zone `entry`. */
+    entryPoint(entry) {
+        const z = this.zones.find(z => z.rec.id === 10000000 + entry);
+        if (!z)
+            return null;
+        const r = z.rec.rect, [cx, cy] = worldToReal(z.rec.a + (r[0] + r[2]) / 2, z.rec.b + (r[1] + r[3]) / 2);
+        for (let rad = 0; rad < 1500; rad += 8)
+            for (let k = 0; k < Math.max(1, rad / 4); k++) {
+                const an = k / Math.max(1, rad / 4) * Math.PI * 2, x = cx + Math.cos(an) * rad, y = cy + Math.sin(an) * rad * 0.6;
+                if (!this.map.blockedReal(x, y))
+                    return [x, y];
+            }
+        return null;
+    }
+    travel(scenario, entry) {
         this.leaving = true;
         this.save();
-        GameScene.create(this.app, this.gender, this.name, { scenario, carry: this }).then(g => this.app.go(g));
+        GameScene.create(this.app, this.gender, this.name, { scenario, carry: this, entry }).then(g => this.app.go(g));
     }
     setDialog(lines) {
         const opts = [];
@@ -295,6 +312,9 @@ export class GameScene {
         this.armed = false;
         this.leaving = false;
         this.saveT = 0;
+        /** Map exits: Mct zone records 10000000+n fire status 3 when the player walks into their rect; the script block runs sentence 17 (destination scenario index, entry zone number). */
+        this.inside = new Set();
+        this.enterIds = new Set();
         this.dlgPick = null;
         /** Items lying on the ground (real-pixel coordinates). gold > 0 for gold piles. */
         this.ground = [];
@@ -342,6 +362,7 @@ export class GameScene {
                 partner: () => this.partner,
                 gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
                 openShop: i => this.openShop(i),
+                exit: (idx, entry) => { void this.exit(idx, entry); },
                 entity: spawn => { const a = this.actors.find(a => a.enemy && a.rec.id === spawn); return a ? (a.alive ? 1 : 0) : undefined; },
                 findSlot: (a, b, alive) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id >= a && 14000000 + m.rec.id <= b && (alive ? !m.free : m.free)); return m ? 14000000 + m.rec.id : -1; },
                 spawnSlot: (slot, a, b) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id === slot); if (m) {
@@ -436,6 +457,19 @@ export class GameScene {
                 }
         }
         g.zones = sc.zones;
+        if (vm)
+            for (const [, st, ch] of vm.data.status)
+                if (st === 3)
+                    g.enterIds.add(ch);
+        if (opts?.entry !== undefined) {
+            const pt = g.entryPoint(opts.entry);
+            if (pt) {
+                g.player.x = pt[0];
+                g.player.y = pt[1];
+                g.spawnPos = { x: pt[0], y: pt[1] };
+            }
+        }
+        g.checkZones(true); // zones already under the player (arrival point) only fire once he has left and re-entered
         g.tables = tables;
         g.expTable = tables['13'].v;
         g.titles = tables['41']?.s ?? [];
@@ -511,7 +545,7 @@ export class GameScene {
     }
     update(dt) {
         this.dev();
-        this.checkExit();
+        this.checkZones();
         if ((this.saveT += dt) > 10000 && !this.dead && !this.leaving) {
             this.saveT = 0;
             this.save();

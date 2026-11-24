@@ -186,6 +186,9 @@ export class ScriptVM {
             case 6: return true;
             case 9:
             case 4: return true; // repair an item / coin sound (no durability yet)
+            case 17:
+                this.hooks?.exit(ev(0), ev(1));
+                return true;
             case 16:
                 this.hooks?.sound(ev(0), ev(2), ev(3));
                 return true; // (sound id, 0, x, y)

@@ -26,6 +26,8 @@ export interface ScriptHooks {
   takeItem(cat: number, id: number): void;
   /** Sentence 16: play sound effect `id` (index into Voice00.Voc) at world position (a, b). */
   sound(id: number, a: number, b: number): void;
+  /** Sentence 17: go to scenario index `scenario`, arriving in its exit zone `entry`. */
+  exit(scenario: number, entry: number): void;
   /** Sentences 31/32: first monster slot (script char number) in [a, b] that is alive / free (dead or not yet summoned), -1 if none. */
   findSlot(a: number, b: number, alive: boolean): number;
   /** Sentence 25: summon the monster of slot `slot` at world position (a, b). */
@@ -115,6 +117,7 @@ export class ScriptVM {
       case 50: case 57: case 66: this.set(o[0][0], o[0][1], 0); return true;   // read player/exe state (arrival id, player+0x28, ...): not modelled, 0
       case 6: return true;
       case 9: case 4: return true;   // repair an item / coin sound (no durability yet)
+      case 17: this.hooks?.exit(ev(0), ev(1)); return true;
       case 16: this.hooks?.sound(ev(0), ev(2), ev(3)); return true;   // (sound id, 0, x, y)
       case 24: this.hooks?.randomDrop(ev(0), ev(1), ev(2)); return true;
       case 11: this.set(o[0][0], o[0][1], ev(0) + ev(1)); return true;
