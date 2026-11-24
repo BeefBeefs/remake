@@ -1,6 +1,6 @@
 // Interpreter for Scenario.Scs sentence blocks. Semantics taken from the executor in ShadowFlare.exe (0x430ab0/0x430f80):
 //  sentence type 0 = `if (a OP b) call block N` (OP 0 ==, 1 !=, 2 >, 3 <), 1 = assign, 2 = queue a message window (script keeps running),
-//  18/21 = talk begin/face, 19 = end talk. Operand kinds: 0-2 constant, 3/4/5 flag tables, 8 quest states (62 sets one: 1 accepted, 2 completed), 10/11/12 global arrays; others read as 0.
+//  18/21 = talk begin/face, 19 = end talk. Operand kinds: 0-2 constant, 3/4/5 flag tables, 8 = game mode (always 0 offline; quest states set by sentence 62 are kept separately: 1 accepted, 2 completed), 9 = pointer state of an object (reads 0), 10/11/12 global arrays; others read as 0.
 // Sentence types that are not implemented yet are logged once and skipped.
 export interface ScriptData { flags: [number, number][]; messages: Record<string, string>; status: number[][]; blocks: [number, [number, number][]][][]; }
 /** Game-side callbacks used by script sentences. Positions are world units (see docs/FORMATS.md, Maps). */
@@ -19,6 +19,9 @@ export interface ScriptHooks {
   /** Sentences 53/54: read the player's gold / add (negative = pay) gold. */
   gold(): number;
   addGold(delta: number): void;
+  /** Sentences 58/59: does the player carry item (category, id) / remove one copy of it. */
+  hasItem(cat: number, id: number): boolean;
+  takeItem(cat: number, id: number): void;
   /** Sentence 5: open the trade window of shop `index`. */
   openShop(index: number): void;
   /** Sentence 61: the player's current level. */
@@ -42,14 +45,15 @@ export class ScriptVM {
 
   get(kind: number, val: number): number {
     if (kind <= 2) return val;
-    if (kind === 8 || (kind >= 10 && kind <= 12)) return this.globals.get(`${kind}:${val}`) ?? 0;
+    if (kind === 8) return 0;   // operand 8 = game mode of the exe (0x482db0): 0 offline; scripts only compare it with 0/2 (always [8,0])
+    if (kind >= 10 && kind <= 12) return this.globals.get(`${kind}:${val}`) ?? 0;
     if (kind >= 3 && kind <= 5) return this.vars.get(this.key(kind, val)) ?? 0;
     if (kind === 6 || kind === 7) return Math.round(this.hooks?.charPos(val)?.[kind - 6] ?? 0);
     return 0;
   }
-  set(kind: number, val: number, v: number) { if (kind === 8 || (kind >= 10 && kind <= 12)) this.globals.set(`${kind}:${val}`, v); else if (kind >= 3 && kind <= 5) this.vars.set(this.key(kind, val), v); }
-  /** Kind 5 = per-object locals: a value 1000000+n is local n of the current object, 100000000 + id is local 0 of object `id`. */
-  private key(kind: number, val: number) { return kind !== 5 ? `${kind}:${val}` : val >= 100000000 ? `5:${val - 100000000}:1000000` : `5:${this.char}:${val}`; }
+  set(kind: number, val: number, v: number) { if (kind >= 10 && kind <= 12) this.globals.set(`${kind}:${val}`, v); else if (kind >= 3 && kind <= 5) this.vars.set(this.key(kind, val), v); }
+  /** Kind 5 = per-object locals: a value 1000000+n is local n of the current object; n*100000000 + id is local n-1 of object `id` (1e8 -> local 0, 2e8 -> local 1 ...). */
+  private key(kind: number, val: number) { if (kind !== 5) return `${kind}:${val}`; if (val < 100000000) return `5:${this.char}:${val}`; const n = Math.floor(val / 100000000); return `5:${val - n * 100000000}:${1000000 + n - 1}`; }
 
   /** Run block n; returns false if a sentence aborted the run. */
   runBlock(n: number, depth = 0): boolean {
@@ -90,12 +94,15 @@ export class ScriptVM {
       case 55: this.set(o[0][0], o[0][1], 0); return true;   // 1 when the player carries unidentified items (not modelled) -> 0
       case 53: this.set(o[0][0], o[0][1], this.hooks?.gold() ?? 0); return true;
       case 54: this.hooks?.addGold(-ev(0)); return true;
+      case 58: this.set(o[2][0], o[2][1], this.hooks?.hasItem(ev(0), ev(1)) ? 1 : 0); return true;   // quest hand-in check (no selection UI: any matching item counts)
+      case 59: this.hooks?.takeItem(ev(0), ev(1)); return true;
       case 9: case 4: return true;   // repair an item / coin sound (no durability yet)
       case 16: return true;   // play sound effect at a position (audio not implemented)
       case 24: this.hooks?.randomDrop(ev(0), ev(1), ev(2)); return true;
       case 11: this.set(o[0][0], o[0][1], ev(0) + ev(1)); return true;
       case 12: this.set(o[0][0], o[0][1], ev(0) - ev(1)); return true;
-      case 62: { const q = ev(0), st = ev(1); this.globals.set(`8:${q}`, st); this.hooks?.quest(q, st); return true; }
+      case 62: { const q = ev(0), st = ev(1); if (st === 2) { if (this.globals.get(`q:${q}`) === 2) return true; }   // a quest completes only once (exe keeps a done flag per quest)
+        this.globals.set(`q:${q}`, st); this.hooks?.quest(q, st); return true; }
       case 61: this.set(o[0][0], o[0][1], this.hooks?.level() ?? 1); return true;   // handler at 0x433f16 reads the player's level (player+0x34)
       case 48: return true;   // quest notice popup: shown by the quest hook
       case 18: this.talking = true; return true;

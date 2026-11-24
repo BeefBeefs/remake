@@ -20,7 +20,9 @@ export class ScriptVM {
     get(kind, val) {
         if (kind <= 2)
             return val;
-        if (kind === 8 || (kind >= 10 && kind <= 12))
+        if (kind === 8)
+            return 0; // operand 8 = game mode of the exe (0x482db0): 0 offline; scripts only compare it with 0/2 (always [8,0])
+        if (kind >= 10 && kind <= 12)
             return this.globals.get(`${kind}:${val}`) ?? 0;
         if (kind >= 3 && kind <= 5)
             return this.vars.get(this.key(kind, val)) ?? 0;
@@ -28,12 +30,14 @@ export class ScriptVM {
             return Math.round(this.hooks?.charPos(val)?.[kind - 6] ?? 0);
         return 0;
     }
-    set(kind, val, v) { if (kind === 8 || (kind >= 10 && kind <= 12))
+    set(kind, val, v) { if (kind >= 10 && kind <= 12)
         this.globals.set(`${kind}:${val}`, v);
     else if (kind >= 3 && kind <= 5)
         this.vars.set(this.key(kind, val), v); }
-    /** Kind 5 = per-object locals: a value 1000000+n is local n of the current object, 100000000 + id is local 0 of object `id`. */
-    key(kind, val) { return kind !== 5 ? `${kind}:${val}` : val >= 100000000 ? `5:${val - 100000000}:1000000` : `5:${this.char}:${val}`; }
+    /** Kind 5 = per-object locals: a value 1000000+n is local n of the current object; n*100000000 + id is local n-1 of object `id` (1e8 -> local 0, 2e8 -> local 1 ...). */
+    key(kind, val) { if (kind !== 5)
+        return `${kind}:${val}`; if (val < 100000000)
+        return `5:${this.char}:${val}`; const n = Math.floor(val / 100000000); return `5:${val - n * 100000000}:${1000000 + n - 1}`; }
     /** Run block n; returns false if a sentence aborted the run. */
     runBlock(n, depth = 0) {
         const b = this.data.blocks[n];
@@ -143,6 +147,12 @@ export class ScriptVM {
             case 54:
                 this.hooks?.addGold(-ev(0));
                 return true;
+            case 58:
+                this.set(o[2][0], o[2][1], this.hooks?.hasItem(ev(0), ev(1)) ? 1 : 0);
+                return true; // quest hand-in check (no selection UI: any matching item counts)
+            case 59:
+                this.hooks?.takeItem(ev(0), ev(1));
+                return true;
             case 9:
             case 4: return true; // repair an item / coin sound (no durability yet)
             case 16: return true; // play sound effect at a position (audio not implemented)
@@ -157,7 +167,11 @@ export class ScriptVM {
                 return true;
             case 62: {
                 const q = ev(0), st = ev(1);
-                this.globals.set(`8:${q}`, st);
+                if (st === 2) {
+                    if (this.globals.get(`q:${q}`) === 2)
+                        return true;
+                } // a quest completes only once (exe keeps a done flag per quest)
+                this.globals.set(`q:${q}`, st);
                 this.hooks?.quest(q, st);
                 return true;
             }

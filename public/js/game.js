@@ -294,6 +294,9 @@ export class GameScene {
                 partner: () => this.partner,
                 gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
                 openShop: i => this.openShop(i),
+                hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
+                takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e)
+                    this.win.inv.remove(e); },
                 randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
                 drop: (cat, id, a, b, min, max) => {
                     const [x, y] = worldToReal(a, b), amount = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
