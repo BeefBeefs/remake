@@ -92,3 +92,4 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 
 ## Deployment
 - `.github/workflows/pages.yml`: on push to main (or manual run) builds with tsc and deploys `public/` to GitHub Pages (Settings > Pages > Source = GitHub Actions). Play at `https://beefbeefs.github.io/remake/play.html?skip=male`.
+- First run failed with a transient 'no artifacts found' from deploy-pages; re-pushed to retry.
