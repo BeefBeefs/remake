@@ -14,7 +14,7 @@ def parse(path):
         strs = []
         for _ in range(rows * cols):
             l, = struct.unpack_from('<I', out, off); off += 4
-            strs.append(out[off:off + l].decode('cp932', 'replace')); off += l
+            strs.append(bytes(255 - c for c in out[off:off + l]).decode('cp932', 'replace')); off += l
         tabs[no] = dict(rows=rows, cols=cols, v=list(vals), s=strs if any(strs) else None)
     assert off == len(out)
     return tabs

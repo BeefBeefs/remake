@@ -18,7 +18,7 @@ export class ScriptVM {
     get(kind, val) {
         if (kind <= 2)
             return val;
-        if (kind >= 10 && kind <= 12)
+        if (kind === 8 || (kind >= 10 && kind <= 12))
             return this.globals.get(`${kind}:${val}`) ?? 0;
         if (kind >= 3 && kind <= 5)
             return this.vars.get(`${kind}:${val}`) ?? 0;
@@ -26,7 +26,7 @@ export class ScriptVM {
             return Math.round(this.hooks?.charPos(val)?.[kind - 6] ?? 0);
         return 0;
     }
-    set(kind, val, v) { if (kind >= 10 && kind <= 12)
+    set(kind, val, v) { if (kind === 8 || (kind >= 10 && kind <= 12))
         this.globals.set(`${kind}:${val}`, v);
     else if (kind >= 3 && kind <= 5)
         this.vars.set(`${kind}:${val}`, v); }
@@ -82,6 +82,13 @@ export class ScriptVM {
             case 12:
                 this.set(o[0][0], o[0][1], ev(0) - ev(1));
                 return true;
+            case 62: {
+                const q = ev(0), st = ev(1);
+                this.globals.set(`8:${q}`, st);
+                this.hooks?.quest(q, st);
+                return true;
+            }
+            case 48: return true; // quest notice popup: shown by the quest hook
             case 18:
                 this.talking = true;
                 return true;
@@ -105,6 +112,8 @@ export class ScriptVM {
             }
         return false;
     }
+    /** Fire a scenario event: status 4 = character `char` (14000000 + Mct id) was killed. Returns true when a handler existed. */
+    event(status, char) { this.ended = false; const r = this.runStatus(status, char); return r; }
     /** Player clicked character `char` (Scenario char number, e.g. 12000000 + Mct id). */
     talk(char) { this.char = char; this.talking = true; this.ended = false; this.queue = []; this.runStatus(0, char); this.finish(); }
     /** The message window was closed; `choice` is the picked option index (when the message had options). */

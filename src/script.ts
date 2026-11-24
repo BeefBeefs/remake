@@ -1,6 +1,6 @@
 // Interpreter for Scenario.Scs sentence blocks. Semantics taken from the executor in ShadowFlare.exe (0x430ab0/0x430f80):
 //  sentence type 0 = `if (a OP b) call block N` (OP 0 ==, 1 !=, 2 >, 3 <), 1 = assign, 2 = queue a message window (script keeps running),
-//  18/21 = talk begin/face, 19 = end talk. Operand kinds: 0-2 constant, 3/4/5 flag tables, 10/11/12 global arrays; others read as 0.
+//  18/21 = talk begin/face, 19 = end talk. Operand kinds: 0-2 constant, 3/4/5 flag tables, 8 quest states (62 sets one: 1 accepted, 2 completed), 10/11/12 global arrays; others read as 0.
 // Sentence types that are not implemented yet are logged once and skipped.
 export interface ScriptData { flags: [number, number][]; messages: Record<string, string>; status: number[][]; blocks: [number, [number, number][]][][]; }
 /** Game-side callbacks used by script sentences. Positions are world units (see docs/FORMATS.md, Maps). */
@@ -8,6 +8,8 @@ export interface ScriptHooks {
   charPos(char: number): [number, number] | null;
   /** Sentence 10: create an item (cat 0 weapon, 1 armor, 2 accessory, 3 consumable, 4 misc; cat 4 id 0 = gold with amount) on the ground. */
   drop(cat: number, id: number, a: number, b: number, amount: number): void;
+  /** Sentence 62: quest `q` (Table.Tbd table 41 row) changed to `state` (1 accepted, 2 completed). */
+  quest(q: number, state: number): void;
 }
 export interface Pending { msg: number; text: string; resultVar: [number, number] | null; }
 const warned = new Set<number>();
@@ -25,12 +27,12 @@ export class ScriptVM {
 
   get(kind: number, val: number): number {
     if (kind <= 2) return val;
-    if (kind >= 10 && kind <= 12) return this.globals.get(`${kind}:${val}`) ?? 0;
+    if (kind === 8 || (kind >= 10 && kind <= 12)) return this.globals.get(`${kind}:${val}`) ?? 0;
     if (kind >= 3 && kind <= 5) return this.vars.get(`${kind}:${val}`) ?? 0;
     if (kind === 6 || kind === 7) return Math.round(this.hooks?.charPos(val)?.[kind - 6] ?? 0);
     return 0;
   }
-  set(kind: number, val: number, v: number) { if (kind >= 10 && kind <= 12) this.globals.set(`${kind}:${val}`, v); else if (kind >= 3 && kind <= 5) this.vars.set(`${kind}:${val}`, v); }
+  set(kind: number, val: number, v: number) { if (kind === 8 || (kind >= 10 && kind <= 12)) this.globals.set(`${kind}:${val}`, v); else if (kind >= 3 && kind <= 5) this.vars.set(`${kind}:${val}`, v); }
 
   /** Run block n; returns false if a sentence aborted the run. */
   runBlock(n: number, depth = 0): boolean {
@@ -56,6 +58,8 @@ export class ScriptVM {
       case 10: this.hooks?.drop(ev(0), ev(1), ev(2), ev(3), ev(4)); return true;
       case 11: this.set(o[0][0], o[0][1], ev(0) + ev(1)); return true;
       case 12: this.set(o[0][0], o[0][1], ev(0) - ev(1)); return true;
+      case 62: { const q = ev(0), st = ev(1); this.globals.set(`8:${q}`, st); this.hooks?.quest(q, st); return true; }
+      case 48: return true;   // quest notice popup: shown by the quest hook
       case 18: this.talking = true; return true;
       case 19: this.ended = true; return true;
       case 21: return true;
@@ -68,6 +72,8 @@ export class ScriptVM {
     for (const [, s, c, blk] of this.data.status) if (s === status && c === char) { this.runBlock(blk); return true; }
     return false;
   }
+  /** Fire a scenario event: status 4 = character `char` (14000000 + Mct id) was killed. Returns true when a handler existed. */
+  event(status: number, char: number) { this.ended = false; const r = this.runStatus(status, char); return r; }
   /** Player clicked character `char` (Scenario char number, e.g. 12000000 + Mct id). */
   talk(char: number) { this.char = char; this.talking = true; this.ended = false; this.queue = []; this.runStatus(0, char); this.finish(); }
   /** The message window was closed; `choice` is the picked option index (when the message had options). */

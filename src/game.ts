@@ -44,6 +44,8 @@ export class GameScene implements Scene {
   hud: HudState = { hp: 100, hpMax: 100, mp: 60, mpMax: 60, level: 1, exp: 0, expMax: 100, running: false };
   debug = false; paused = false;
   private camX = 0; private camY = 0;
+  /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
+  private titles: string[] = []; private banner: { text: string; t: number } | null = null;
   private expTable: number[] = []; private totalExp = 0; private devNext = 0;
   private drawPlayer: Drawable;
   // --- combat ---
@@ -151,6 +153,10 @@ export class GameScene implements Scene {
     (window as any).game = this;
     if (this.vm) this.vm.hooks = {
       charPos: char => { const r = this.actors.find(a => a.rec.kind === 'people' && 12000000 + a.rec.id === char); return r ? [r.rec.a, r.rec.b] : null; },
+      quest: (q, st) => {
+        const title = (this.titles[q] ?? `Quest ${q}`).replace(/[^\x20-\x7e]/g, '?');
+        if (st === 1 || st === 2) this.banner = { text: `${st === 1 ? 'Quest accepted' : 'Quest completed'}: ${title}`, t: 0 };
+      },
       drop: (cat, id, a, b, amount) => {
         const [x, y] = worldToReal(a, b);
         if (cat === 4 && id === 0) this.ground.push({ x, y, gold: amount });
@@ -174,7 +180,7 @@ export class GameScene implements Scene {
       for (const [sec, idx, x, y, eq] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h, eq: !!eq }); } }
     }
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
-    g.expTable = tables['13'].v; g.syncExp();
+    g.expTable = tables['13'].v; g.titles = tables['41']?.s ?? []; g.syncExp();
     return g;
   }
 
@@ -207,6 +213,7 @@ export class GameScene implements Scene {
     a.hp -= dmg; this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) });
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp();
+      if (this.vm?.event(4, 14000000 + a.rec.id)) this.openDialog();
       const [g0, g1] = a.stats.gold; this.ground.push({ x: a.x, y: a.y, gold: g0 + Math.floor(Math.random() * (g1 - g0 + 1)) });
     }
   }
@@ -220,6 +227,7 @@ export class GameScene implements Scene {
     for (const a of this.actors) a.update(dt, this.actorCtx);
     this.actors = this.actors.filter(a => !(a.enemy && a.state === 'die' && a.deadT > 6000));
     for (const f of this.floaters) f.t += dt; this.floaters = this.floaters.filter(f => f.t < 900);
+    if (this.banner && (this.banner.t += dt) > 5000) this.banner = null;
     const inp = this.app.input, keys = inp.keys, p = this.player, hud = this.hud;
     if (inp.pressed.has('g') || inp.pressed.has('f1')) this.debug = !this.debug;
     if (inp.pressed.has('r')) hud.running = !hud.running;
@@ -293,6 +301,7 @@ export class GameScene implements Scene {
     } }));
     map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...gd]);
     for (const f of this.floaters) this.text.drawCenter(ctx, f.s, Math.round(f.x - this.camX), Math.round(f.y - this.camY - f.t / 25));
+    if (this.banner) { const w = this.banner.text.length * 6 + 24; ctx.fillStyle = 'rgba(8,8,24,0.85)'; ctx.fillRect(320 - w / 2, 20, w, 24); ctx.strokeStyle = '#a89868'; ctx.strokeRect(320 - w / 2 + 0.5, 20.5, w - 1, 23); this.text.drawCenter(ctx, this.banner.text, 320, 26); }
     if (this.debug) { map.drawJudge(ctx, this.camX, this.camY, SCREEN_W, HUD_Y); this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2); }
     const hov = inp.y < HUD_Y ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
     const gh = !hov && inp.y < HUD_Y ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
