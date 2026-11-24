@@ -1,0 +1,13 @@
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+const b = await chromium.launch({args:['--no-sandbox']}); const p = await (await b.newContext({viewport:{width:640,height:480}})).newPage();
+const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+await p.goto('http://localhost:8123/play.html?skip=male&scenario=00010001'); await p.waitForFunction(()=>window.app?.scene?.win,null,{timeout:40000}); await p.waitForTimeout(1200);
+console.log('map',await p.evaluate(()=>window.app.scene.map.m.name),'dark',await p.evaluate(()=>!!window.app.scene.dark));
+await p.screenshot({path:'/tmp/g_dark.png'});
+const click=async(x,y)=>{ await p.mouse.move(x,y); await p.waitForTimeout(100); await p.mouse.down(); await p.waitForTimeout(60); await p.mouse.up(); await p.waitForTimeout(300); };
+await p.keyboard.press('Escape'); await p.waitForTimeout(300); console.log('paused',await p.evaluate(()=>window.app.scene.paused)); await p.screenshot({path:'/tmp/g_menu.png'});
+await click(320,100); await p.screenshot({path:'/tmp/g_settings.png'});
+await click(480,193); console.log('darkness',await p.evaluate(()=>JSON.parse(localStorage.getItem('shadowflare_settings')).darkness));
+await click(320,315); await click(320,198); await p.screenshot({path:'/tmp/g_help.png'});
+await p.keyboard.press('Escape'); await p.waitForTimeout(200); await p.keyboard.press('Escape'); await p.waitForTimeout(200); console.log('closed',!(await p.evaluate(()=>window.app.scene.paused)));
+console.log('errors',errs); await b.close();

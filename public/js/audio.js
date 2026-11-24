@@ -67,6 +67,9 @@ class AudioEngine {
         src.connect(gain).connect(c.destination);
         src.start();
     }
+    /** Volumes 0-1 (Settings menu). */
+    setVolumes(music, sfx) { this.musicVol = music; this.sfxVol = sfx; if (this.music)
+        this.music.gain.gain.value = this.muted ? 0 : this.musicVol; }
     toggleMute() { this.muted = !this.muted; if (this.music)
         this.music.gain.gain.value = this.muted ? 0 : this.musicVol; return this.muted; }
 }

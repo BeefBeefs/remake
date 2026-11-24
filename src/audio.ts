@@ -35,6 +35,8 @@ class AudioEngine {
     const buf = await this.load(`sfx${id}`), c = this.ctx; if (!buf || !c) return;
     const src = c.createBufferSource(), gain = c.createGain(); src.buffer = buf; gain.gain.value = this.sfxVol * vol; src.connect(gain).connect(c.destination); src.start();
   }
+  /** Volumes 0-1 (Settings menu). */
+  setVolumes(music: number, sfx: number) { this.musicVol = music; this.sfxVol = sfx; if (this.music) this.music.gain.gain.value = this.muted ? 0 : this.musicVol; }
   toggleMute() { this.muted = !this.muted; if (this.music) this.music.gain.gain.value = this.muted ? 0 : this.musicVol; return this.muted; }
 }
 export const audio = new AudioEngine();

@@ -11,6 +11,9 @@ import { Windows } from './windows.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 import { writeSlot, firstFree } from './saves.js';
+import { GameMenu } from './gamemenu.js';
+import { settings } from './settings.js';
+import { DarkLayer, isDarkMap } from './dark.js';
 const q = new URLSearchParams(location.search);
 const SCENARIO = q.get('scenario') ?? '00000000';
 /** Script state kept per scenario so quests are not replayed when re-entering a map. */
@@ -342,6 +345,7 @@ export class GameScene {
         this.hud = { hp: 100, hpMax: 100, mp: 60, mpMax: 60, level: 1, exp: 0, expMax: 100, running: false };
         this.debug = false;
         this.paused = false;
+        this.dark = null;
         this.camX = 0;
         this.camY = 0;
         /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
@@ -485,6 +489,9 @@ export class GameScene {
         const sg = savedGround.get(scenario);
         if (sg)
             g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0 }] : []; })());
+        g.menu = await GameMenu.load(app);
+        if (isDarkMap(map.m.name))
+            g.dark = await DarkLayer.load(app);
         g.slot = opts?.carry ? opts.carry.slot : ld ? (opts?.slot ?? ld.slot ?? 0) : firstFree();
         if (ld) {
             Object.assign(g.player, { x: ld.x, y: ld.y });
@@ -633,6 +640,24 @@ export class GameScene {
         return this.map.blockedReal(x, y) || this.actors.some(a => a.solid && Math.hypot(a.x - x, (a.y - y) * 1.6) < a.radius);
     }
     update(dt) {
+        if (this.app.input.pressed.has('f12'))
+            audio.toggleMute();
+        if (this.paused) { // Game Menu open: it owns the keyboard and the mouse
+            const act = this.menu.update(dt, this.app.input.x, this.app.input.y, this.app.input.clicked, this.app.input.pressed.has('escape'));
+            if (act === 'close')
+                this.paused = false;
+            else if (act === 'missions') {
+                this.paused = false;
+                if (!this.qlog)
+                    this.toggleQuestLog();
+            }
+            else if (act === 'title' || act === 'exit') {
+                this.save();
+                this.leaving = true;
+                TitleScene.create(this.app).then(t => this.app.go(t));
+            }
+            return;
+        }
         this.dev();
         this.checkZones();
         if (this.warpMenu && !this.dlg) {
@@ -655,49 +680,48 @@ export class GameScene {
         if (this.banner && (this.banner.t += dt) > 5000)
             this.banner = null;
         const inp = this.app.input, keys = inp.keys, p = this.player, hud = this.hud;
-        if (inp.pressed.has('g') || inp.pressed.has('f1'))
+        if (!this.paused && inp.pressed.has('g'))
             this.debug = !this.debug;
         if (inp.pressed.has('r'))
             hud.running = !hud.running;
-        if (inp.pressed.has('c'))
+        if (inp.pressed.has('s') || inp.pressed.has('c'))
             this.win.status = !this.win.status;
         if (inp.pressed.has('i'))
             this.win.item = !this.win.item;
         if (inp.pressed.has('q'))
             this.toggleQuestLog();
-        if (inp.pressed.has('m'))
-            audio.toggleMute();
+        if (inp.pressed.has('h')) {
+            this.menu.open('help');
+            this.paused = true;
+            return;
+        }
         if (inp.pressed.has('escape') && this.qlog)
             this.toggleQuestLog();
         else if (inp.pressed.has('escape')) {
             if (this.win.status || this.win.item)
                 this.win.status = this.win.item = false;
-            else
-                this.paused = !this.paused;
+            else {
+                this.menu.open('main');
+                this.paused = true;
+                return;
+            }
         }
         if (inp.clicked) {
             const b = this.gui.button(inp.x, inp.y);
             if (this.qlog && inp.x < 320 && inp.y < 416)
                 this.qlogClick(inp.x, inp.y);
-            else if (this.paused) {
-                if (inp.y > 215 && inp.y < 235) {
-                    this.save();
-                    TitleScene.create(this.app).then(t => this.app.go(t));
-                }
-                else
-                    this.paused = false;
-            }
             else if (!this.shop && this.win.entryAt(inp.x, inp.y))
                 this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y));
             else if (b === 'status')
                 this.win.status = !this.win.status;
             else if (b === 'item')
                 this.win.item = !this.win.item;
-            else if (b === 'menu')
+            else if (b === 'menu') {
+                this.menu.open('main');
                 this.paused = true;
+                return;
+            }
         }
-        if (this.paused)
-            return;
         if (this.dead) {
             this.player.t += dt;
             if (inp.clicked && this.player.t > 800) {
@@ -838,6 +862,8 @@ export class GameScene {
                     this.text.drawCenter(c, `${g.gold}G`, g.x - cx, g.y - cy - 14);
             } }));
         map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...this.zones.filter(z => z.drawn), ...gd]);
+        if (this.dark && settings.darkness)
+            this.dark.draw(ctx, p.x - this.camX, p.y - this.camY - 30);
         for (const f of this.floaters)
             this.text.drawCenter(ctx, f.s, Math.round(f.x - this.camX), Math.round(f.y - this.camY - f.t / 25));
         if (this.banner) {
@@ -873,13 +899,8 @@ export class GameScene {
             this.text.drawCenter(ctx, 'YOU DIED', 320, 190);
             this.text.drawCenter(ctx, '(click to continue)', 320, 215);
         }
-        if (this.paused) {
-            ctx.fillStyle = 'rgba(0,0,0,0.6)';
-            ctx.fillRect(0, 0, SCREEN_W, HUD_Y);
-            this.text.drawCenter(ctx, 'PAUSED', 320, 190);
-            this.text.drawCenter(ctx, 'Exit to title', 320, 220);
-            this.text.drawCenter(ctx, '(click elsewhere to resume)', 320, 245);
-        }
+        if (this.paused)
+            this.menu.draw(ctx, inp.x, inp.y);
         this.gui.cursor(ctx, inp.x, inp.y, inp.down);
     }
 }
