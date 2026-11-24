@@ -538,6 +538,7 @@ export class GameScene implements Scene {
   }
   private hitPet(d: number) {
     const pet = this.pet; if (!pet || pet.dead) return;
+    if (Math.random() * 100 < pet.gear.eva) { this.floaters.push({ x: pet.x, y: pet.y - 60, t: 0, s: 'Miss' }); return; }   // Companion Evasion Rate line (percent, like the hero's)
     const dm = pet.take(Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10));
     this.floaters.push({ x: pet.x, y: pet.y - 60, t: 0, s: `-${dm}` });
     if (pet.dead) this.banner = { text: `${pet.name} has fallen - feed it Meat`, t: 0 };
@@ -733,7 +734,7 @@ export class GameScene implements Scene {
     if (this.statusReq !== null && !this.dlg) { const i = this.statusReq; this.statusReq = null; this.showDogStatus(i); }
     if ((this.saveT += dt) > 10000 && !this.dead && !this.leaving) { this.saveT = 0; this.save(); }
     for (const a of this.actors) a.update(dt, this.actorCtx);
-    if (this.pet) { this.pet.heroLevel = this.hud.level; this.pet.gear = { hp: Math.round(this.win.fx('cHp')), atk: this.win.fx('cAtk'), def: Math.round(this.win.fx('cDef')) }; this.pet.update(dt, this.petCtx); }
+    if (this.pet) { this.pet.heroLevel = this.hud.level; { const f = (k: Parameters<typeof this.win.fx>[0]) => this.win.fx(k); this.pet.gear = { hp: Math.round(f('cHp')), atk: f('cAtk'), def: Math.round(f('cDef')), hit: f('cHit'), eva: f('cEva'), matk: f('cMatk'), mhit: f('cMhit'), mdef: f('cMdef'), meva: f('cMeva') }; } this.pet.update(dt, this.petCtx); }
     this.updateMines(dt);
     for (const a of this.actors) if (a.slot && a.state === 'die' && a.deadT > 3000) a.hidden = true;
     this.actors = this.actors.filter(a => !(a.enemy && !a.slot && a.state === 'die' && a.deadT > 6000));

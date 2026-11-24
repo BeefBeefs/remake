@@ -40,7 +40,7 @@ export class Pet implements Drawable {
   get dead() { return this.hp <= 0; }
   get level() { return Math.max(1, Math.min(this.heroLevel, 1 + Math.floor(this.kills / 6))); }
   /** Companion HP / Attack / Defense lines of the hero's worn gear (set every frame by the game). */
-  gear = { hp: 0, atk: 0, def: 0 };
+  gear = { hp: 0, atk: 0, def: 0, hit: 0, eva: 0, matk: 0, mhit: 0, mdef: 0, meva: 0 };
   get maxHp() { return Math.max(1, Math.round((100 + 30 * (this.level - 1)) * this.mult[0] / 1000) + this.gear.hp); }
   get attack() { return (10 + 3 * (this.level - 1)) * this.mult[1] / 1000 + this.gear.atk; }
   get defense() { return Math.round((2 + 1.5 * (this.level - 1)) * this.mult[2] / 1000) + this.gear.def; }
@@ -52,7 +52,7 @@ export class Pet implements Drawable {
   feed(hp: number) { this.hp = Math.min(this.maxHp, this.hp + hp); if (this.state === 'dead') { this.state = 'idle'; this.t = 0; } }
   toggleMode() { this.mode = this.mode === 'active' ? 'inactive' : 'active'; this.tgt = null; return this.mode; }
   addKill() { this.kills++; }
-  statusLines() { return [`${this.name}   Lv.${this.level}`, ` `, `HP ${Math.round(this.hp)}/${this.maxHp}`, `Attack ${Math.round(this.attack)}   Defense ${this.defense}`, `Monsters defeated ${this.kills}   Mode ${this.mode.toUpperCase()}`, ` `, `  ~OK~`]; }
+  statusLines() { const g = this.gear; return [`${this.name}   Lv.${this.level}`, ` `, `HP ${Math.round(this.hp)}/${this.maxHp}`, `Attack ${Math.round(this.attack)}   Defense ${this.defense}`, `Hit Rate +${Math.round(g.hit)}   Evasion +${Math.round(g.eva)}`, `Monsters defeated ${this.kills}   Mode ${this.mode.toUpperCase()}`, ` `, `  ~OK~`]; }
 
   // ---- commands from the player (TAB + click) ----
   /** Jump kick to (x, y); `onLand` runs after landing (switches). Returns false when the dog cannot jump now. */

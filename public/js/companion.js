@@ -35,7 +35,7 @@ export class Pet {
         this.cmdT = 0;
         this.fetchTo = null;
         /** Companion HP / Attack / Defense lines of the hero's worn gear (set every frame by the game). */
-        this.gear = { hp: 0, atk: 0, def: 0 };
+        this.gear = { hp: 0, atk: 0, def: 0, hit: 0, eva: 0, matk: 0, mhit: 0, mdef: 0, meva: 0 };
         this.x = x;
         this.y = y;
         this.hp = this.maxHp;
@@ -67,7 +67,7 @@ export class Pet {
     } }
     toggleMode() { this.mode = this.mode === 'active' ? 'inactive' : 'active'; this.tgt = null; return this.mode; }
     addKill() { this.kills++; }
-    statusLines() { return [`${this.name}   Lv.${this.level}`, ` `, `HP ${Math.round(this.hp)}/${this.maxHp}`, `Attack ${Math.round(this.attack)}   Defense ${this.defense}`, `Monsters defeated ${this.kills}   Mode ${this.mode.toUpperCase()}`, ` `, `  ~OK~`]; }
+    statusLines() { const g = this.gear; return [`${this.name}   Lv.${this.level}`, ` `, `HP ${Math.round(this.hp)}/${this.maxHp}`, `Attack ${Math.round(this.attack)}   Defense ${this.defense}`, `Hit Rate +${Math.round(g.hit)}   Evasion +${Math.round(g.eva)}`, `Monsters defeated ${this.kills}   Mode ${this.mode.toUpperCase()}`, ` `, `  ~OK~`]; }
     // ---- commands from the player (TAB + click) ----
     /** Jump kick to (x, y); `onLand` runs after landing (switches). Returns false when the dog cannot jump now. */
     jumpTo(x, y, enemy, onLand, blocked) {

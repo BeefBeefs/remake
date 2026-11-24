@@ -985,6 +985,10 @@ export class GameScene {
         const pet = this.pet;
         if (!pet || pet.dead)
             return;
+        if (Math.random() * 100 < pet.gear.eva) {
+            this.floaters.push({ x: pet.x, y: pet.y - 60, t: 0, s: 'Miss' });
+            return;
+        } // Companion Evasion Rate line (percent, like the hero's)
         const dm = pet.take(Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10));
         this.floaters.push({ x: pet.x, y: pet.y - 60, t: 0, s: `-${dm}` });
         if (pet.dead)
@@ -1378,7 +1382,10 @@ export class GameScene {
             a.update(dt, this.actorCtx);
         if (this.pet) {
             this.pet.heroLevel = this.hud.level;
-            this.pet.gear = { hp: Math.round(this.win.fx('cHp')), atk: this.win.fx('cAtk'), def: Math.round(this.win.fx('cDef')) };
+            {
+                const f = (k) => this.win.fx(k);
+                this.pet.gear = { hp: Math.round(f('cHp')), atk: f('cAtk'), def: Math.round(f('cDef')), hit: f('cHit'), eva: f('cEva'), matk: f('cMatk'), mhit: f('cMhit'), mdef: f('cMdef'), meva: f('cMeva') };
+            }
             this.pet.update(dt, this.petCtx);
         }
         this.updateMines(dt);
