@@ -71,8 +71,13 @@ export class Inventory {
             e.eq = false;
             return true;
         }
-        for (const o of this.entries)
-            if (o.eq && ItemDb.slot(o.item) === slot)
+        const same = this.entries.filter(o => o.eq && ItemDb.slot(o.item) === slot);
+        if (slot === 'accessory') {
+            if (same.length >= 4)
+                same[0].eq = false;
+        } // four accessory spaces; a fifth replaces the oldest
+        else
+            for (const o of same)
                 o.eq = false;
         e.eq = true;
         return true;

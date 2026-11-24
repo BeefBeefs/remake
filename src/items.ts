@@ -67,7 +67,9 @@ export class Inventory {
     const slot = ItemDb.slot(e.item); if (!slot) return false;
     if (e.unid) return false;   // an unidentified item cannot be used until a merchant identifies it
     if (e.eq) { e.eq = false; return true; }
-    for (const o of this.entries) if (o.eq && ItemDb.slot(o.item) === slot) o.eq = false;
+    const same = this.entries.filter(o => o.eq && ItemDb.slot(o.item) === slot);
+    if (slot === 'accessory') { if (same.length >= 4) same[0].eq = false; }   // four accessory spaces; a fifth replaces the oldest
+    else for (const o of same) o.eq = false;
     e.eq = true; return true;
   }
   /** Active weapon/shield configuration (0 = I, 1 = II). The sword and shield of the other configuration are flagged `alt`. */
