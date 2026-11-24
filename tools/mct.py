@@ -26,10 +26,11 @@ def parse(path):
         if kind == 'enemy': ident = head[6]   # monsters are addressed by their spawn number (script char = 14000000 + spawn#), e.g. 30001-30005 = trap-room group
         if kind == 'enemy' and j + 4 + 36 + 4 * 700 <= len(d) and model >= 0:
             # Per-monster parameter block (719 ints after the 9-int placement block). Fields identified by comparing records
-            # (see docs/FORMATS.md): [654] hit points, [655] attack power, [675] speed in percent, [659] drop chance in percent,
-            # [660] drop level (-1 = drops nothing, e.g. the trap-room Hole Goblins), [696] exp (exe: kill exp = monster+0x17c, HP = monster+0xd4 = index 654, so 0x17c = index 696), [669] gold (guess, no exe proof). Other fields not decoded.
+            # (see docs/FORMATS.md): [654] hit points, [655] attack power, [675] speed in percent, [659] exp (exe: monster+0x17c, adjacent to the drop level at +0x180),
+            # [660] drop level (-1 = drops nothing, e.g. the trap-room Hole Goblins), [695..697] gold chance %, min, max (exe 0x45a030: monster+0x198 / +0x19c / +0x1a0; values scale with HP). [669] is unidentified. Other fields not decoded.
             v = struct.unpack_from('<700i', d, j + 4 + 36)
-            rec_extra['st'] = dict(hp=v[654], atk=v[655], spd=v[675], drop=v[659], dlv=v[660], exp=v[696], gold=v[669])
+            ok = lambda x: x if 0 <= x < 10**7 else 0   # boss records with a different layout hold garbage here
+            rec_extra['st'] = dict(hp=v[654], atk=v[655], spd=v[675], dlv=v[660], exp=ok(v[659]), gchance=ok(v[695]), gmin=ok(v[696]), gmax=ok(v[697]))
         out.append(dict(name=d[i+4:i+4+L].decode(), kind=kind, model=model, id=ident, a=w[1], b=w[2], dir=w[7], radius=w[0], col=col[:3].hex(), **rec_extra))
     return out
 if __name__ == '__main__': print(json.dumps(parse(sys.argv[1]), indent=1))

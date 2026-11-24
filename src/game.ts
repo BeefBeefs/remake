@@ -342,10 +342,10 @@ export class GameScene implements Scene {
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp();
       if (this.vm?.event(4, 14000000 + a.rec.id)) this.openDialog();
-      const [g0, g1] = a.stats.gold, gold = g0 + Math.floor(Math.random() * (g1 - g0 + 1));
-      if (gold > 0) this.ground.push({ x: a.x, y: a.y, gold });
-      // item drop: chance (percent) and level come from the monster's Mct record; level picks the PLACEHOLDER table row (Table.Tbd 902-907 rows 2-8)
-      const st = a.rec.st; if (st && st.dlv >= 0 && Math.random() * 100 < st.drop) { const [wa, wb] = realToWorld(a.x, a.y); this.randomDrop(st.dlv, wa, wb); }
+      const [g0, g1] = a.stats.gold, gold = Math.random() * 100 < (a.stats.goldChance ?? 100) ? Math.max(1, g0 + Math.floor(Math.random() * (g1 - g0 + 1))) : 0;   // exe 0x45a030: chance%, then min + rand%(max-min+1)
+      if (gold > 0 && g1 > 0) this.ground.push({ x: a.x, y: a.y, gold });
+      // item drop (exe 0x45a000): always calls the generator with the monster's drop level; the chance lives in Table.Tbd 30
+      const st = a.rec.st; if (st && st.dlv >= 0) { const [wa, wb] = realToWorld(a.x, a.y); this.randomDrop(st.dlv, wa, wb); }
     }
   }
   private blocked(x: number, y: number) {

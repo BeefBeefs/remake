@@ -4,7 +4,7 @@ import { Drawable, worldToReal } from './map.js';
 import { Zone, ZoneRec, loadZones } from './zones.js';
 import type { App } from './app.js';
 
-export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; /** per-monster parameters from the Mct record (tools/mct.py): hit points, attack power, speed %, drop chance %, drop level (-1 = none) */ st?: { hp: number; atk: number; spd: number; drop: number; dlv: number; exp: number; gold: number }; }
+export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; /** per-monster parameters from the Mct record (tools/mct.py): hit points, attack power, speed %, drop chance %, drop level (-1 = none) */ st?: { hp: number; atk: number; spd: number; dlv: number; exp: number; gchance: number; gmin: number; gmax: number }; }
 const FRAME_MS = 80;
 /** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
 const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
@@ -25,7 +25,7 @@ const LAYERS = [1, 0, 2, 3, 4, 5, 6];
 export class Actor implements Drawable {
   x: number; y: number; dir: number; t = Math.random() * 1000;
   hp = 0; maxHp = 0; state: State = 'idle'; deadT = 0; private hitDone = false;
-  stats = ENEMY_STATS[1];
+  stats: { hp: number; dmg: [number, number]; exp: number; gold: [number, number]; speed: number; goldChance?: number } = ENEMY_STATS[1];
   private constructor(public rec: ActorRec, private set_: SpriteSet, private sdw: SpriteSet, private caf: Caf) {
     [this.x, this.y] = worldToReal(rec.a, rec.b); this.dir = rec.dir % 9;
     if (rec.kind === 'enemy') {
@@ -34,9 +34,9 @@ export class Actor implements Drawable {
       this.stats = { hp: r(b.hp * k * (bs ? 5 : 1)), dmg: [r(b.dmg[0] * Math.sqrt(k) * (bs ? 1.6 : 1)), r(b.dmg[1] * Math.sqrt(k) * (bs ? 1.6 : 1))], exp: r(b.exp * k * (bs ? 8 : 1)), gold: bs ? [b.gold[0] * 4, b.gold[1] * 4] : b.gold, speed: b.speed };
       const st = rec.st;
       if (st && !this.gen) {
-        // Hit points, attack, speed, exp and the gold figure come from the Mct record (Mct power multiplier on top of hp/attack); the gold spread of +-50% around the record value is a guess.
+        // Hit points, attack, speed, exp and the gold chance/min/max come from the Mct record (Mct power multiplier on top of hp/attack); gold/exp/drop fields verified against the exe death routine (0x45a000/0x45a030).
         const hp = Math.max(1, r(st.hp * k)), at = st.atk * Math.sqrt(k), noLoot = st.dlv < 0;
-        this.stats = { hp, dmg: [Math.max(1, r(at * 0.7)), Math.max(1, r(at * 1.3))], exp: st.exp, gold: noLoot ? [0, 0] : [r(st.gold * 0.5), r(st.gold * 1.5)], speed: 0.07 * st.spd / 170 };
+        this.stats = { hp, dmg: [Math.max(1, r(at * 0.7)), Math.max(1, r(at * 1.3))], exp: st.exp, gold: noLoot ? [0, 0] : [st.gmin, Math.max(st.gmin, st.gmax)], goldChance: st.gchance, speed: 0.07 * st.spd / 170 };
       }
       if (this.gen) this.stats = { hp: 80, dmg: [0, 0], exp: 30, gold: [0, 0], speed: 0 };   // PLACEHOLDER hp for the Enemy Hole generators
       this.hp = this.maxHp = this.stats.hp;
