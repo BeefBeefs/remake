@@ -488,12 +488,12 @@ export class GameScene implements Scene {
     const hm = this.harmony();
     if (this.dead) return; const h = this.hud, ev = Math.max(0, this.win.attrLv(magic ? 7 : 3)) * 0.05 + this.win.fx(magic ? 'meva' : 'eva') / 100 + hm.dodge;
     if (Math.random() < ev) { this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: 'Miss' }); return; }
-    if (magic) d = Math.max(1, Math.round(d / this.win.attrMul(5) * (1 - Math.min(0.8, this.win.mdef() / 100)) * hm.magicTaken * (this.buffs.mshield > 0 ? 0.4 : 1)));
+    if (magic) d = Math.max(1, Math.round(d / this.win.attrMul(5) * (1 - Math.min(0.8, this.win.mdef() / 100)) * hm.magicTaken * (this.buffs.mshield > 0 ? 1 - Math.min(0.95, this.spellRate(618)) : 1)));
     if (attr !== undefined) d = Math.max(1, Math.round(d / this.wheel(attr)));
     d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
     if (hm.taken < 1 && !magic) d = Math.max(1, Math.round(d * hm.taken));
     if (from && from.alive && Math.random() * 100 < this.win.fx('reflGen')) { const r = Math.ceil(d * this.win.fx('reflRate') / 100); if (r > 0) { this.damage(from, r); this.rings.push({ x: from.x, y: from.y, t: 0, r: 30, color: '#e0e0ff' }); } }   // shield reflection: chance = Generation of Reflection %, damage = Reflection Rate % (literal reading of the two lines)
-    if (this.buffs.counter > 0 && from && !magic && from.alive) { this.damage(from, Math.max(1, Math.round(d * 0.5))); this.rings.push({ x: from.x, y: from.y, t: 0, r: 40, color: '#ffc040' }); }
+    if (this.buffs.counter > 0 && from && !magic && from.alive) { this.damage(from, Math.max(1, Math.round(d * Math.min(1, this.spellRate(619))))); this.rings.push({ x: from.x, y: from.y, t: 0, r: 40, color: '#ffc040' }); }
     if (this.buffs.eshield > 0) { const ab = Math.min(h.mp, d); h.mp -= ab; d -= ab; if (d <= 0) { this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${ab} MP` }); return; } }
     h.hp = Math.max(0, h.hp - d); this.win.wearArmor();
     this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` }); audio.sfx(SFX.hurt, 0.8);
@@ -614,14 +614,14 @@ export class GameScene implements Scene {
     if (!sp) { if (hov) this.target = hov; else if (m.sel < 8) this.banner = { text: 'No magic set for this slot', t: 0 }; return; }
     if (this.castT > 0) return;
     if (sp.kind === 'none') { this.banner = { text: `${sp.name} cannot be cast`, t: 0 }; return; }
-    const h = this.hud, p = this.player, fx = SPELL_FX[sp.id], hm = this.harmony(), cost = Math.max(1, Math.round(sp.mp * hm.mpCost * Math.max(0.1, 1 + this.win.fx('mcost') / 100)));
+    const h = this.hud, p = this.player, fx = SPELL_FX[sp.id], hm = this.harmony(), cost = Math.max(1, Math.round(m.cost(sp.id, this.win.fx('mlv')) * hm.mpCost * Math.max(0.1, 1 + this.win.fx('mcost') / 100)));
     if (h.mp < cost) { this.banner = { text: 'Not enough MP', t: 0 }; return; }
     const tx = hov ? hov.x : wx, ty = hov ? hov.y : wy + 30, dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
-    const base = this.spellPower(sp);
+    const base = this.spellPower(sp), mult = this.powerKnown(sp) ? 1 : fx?.mult ?? 1;   // spells with a Table 17 power use it directly; the others (Medusa, Mud Javelin, Explosion) keep a guessed multiple of the Fire Ball power
     const bullet = (ang: number, mult: number, extra: Partial<{ phys: boolean }> = {}) => { const c = Math.cos(ang), sn = Math.sin(ang), vx = (dx / d) * c - (dy / d) * sn, vy = (dx / d) * sn + (dy / d) * c; this.shots.push({ x: p.x, y: p.y, vx, vy, t: 0, spell: sp, dmg: mult, hit: sp.kind === 'bolt' || sp.kind === 'fan' || sp.kind === 'strike' ? undefined : new Set(), ...extra }); };
     if (sp.kind === 'heal') {
       if (h.hp >= h.hpMax) { this.banner = { text: 'HP is already full', t: 0 }; return; }
-      const g = Math.min(h.hpMax - h.hp, Math.max(1, Math.round(h.hpMax * m.healPct(sp.id) * (this.powerT > 0 ? 1.5 : 1) / 100)));
+      const g = Math.min(h.hpMax - h.hp, Math.max(1, Math.round(h.hpMax * m.healPct(sp.id, this.win.fx('mlv')) * (this.powerT > 0 ? 1.5 : 1) / 100)));
       h.hp += g; this.floaters.push({ x: p.x, y: p.y - 90, t: 0, s: `+${g}` });
     } else if (sp.kind === 'identify') {
       if (!this.win.needsIdentify()) { this.banner = { text: 'Nothing to identify', t: 0 }; return; }
@@ -637,28 +637,31 @@ export class GameScene implements Scene {
       const cx = sp.kind === 'petnova' ? this.pet?.x : p.x, cy = sp.kind === 'petnova' ? this.pet?.y : p.y;
       if (cx === undefined || cy === undefined || (sp.kind === 'petnova' && (!this.pet || this.pet.dead))) { this.banner = { text: this.pet ? `${this.pet.name} cannot fight now` : 'You have no companion', t: 0 }; return; }
       this.rings.push({ x: cx, y: cy, t: 0, r: fx.radius!, color: sp.color || '#ff8040' });
-      for (const a of this.actors) if (a.enemy && a.alive && Math.hypot(a.x - cx, (a.y - cy) * 1.6) < fx.radius! * a.scale) { this.spellHit(a, sp, base * fx.mult); if (fx.stun) a.stun = Math.max(a.stun, fx.stun); }
+      for (const a of this.actors) if (a.enemy && a.alive && Math.hypot(a.x - cx, (a.y - cy) * 1.6) < fx.radius! * a.scale) { this.spellHit(a, sp, base * mult); if (fx.stun) a.stun = Math.max(a.stun, fx.stun); }
     } else if (sp.kind === 'storm') {
       const near = this.actors.filter(a => a.enemy && a.alive && Math.hypot(a.x - p.x, (a.y - p.y) * 1.6) < fx.radius!);
       for (let i = 0; i < fx.count!; i++) {
         const a = near.length ? near[i % near.length] : undefined, x = a ? a.x : p.x + (Math.random() - 0.5) * 360, y = a ? a.y : p.y + (Math.random() - 0.5) * 220;
-        this.strikes.push({ x, y, t: -i * 90 }); if (a) this.spellHit(a, sp, base * fx.mult);
+        this.strikes.push({ x, y, t: -i * 90 }); if (a) this.spellHit(a, sp, base * mult);
       }
     } else if (sp.kind === 'blade') {
       if (this.atkT < 0) p.dir = dirIndex(dx, dy);
-      bullet(0, Math.max(1, (this.win.stats().atkMax || 10) * this.win.strength() / 100 * fx.mult * hm.dmg), { phys: true });
+      bullet(0, Math.max(1, (this.win.stats().atkMax || 10) * this.win.strength() / 100 * (this.magic.param(17, sp.id, this.magic.level(sp.id) + this.win.fx('mlv')) / 100 || fx.mult) * hm.dmg), { phys: true });   // Sonic Blade: Offensive Power x Reflection Rate (Table 17 %)
     } else if (sp.kind === 'fan') {
       if (this.atkT < 0) p.dir = dirIndex(dx, dy);
-      for (let i = 0; i < fx.count!; i++) bullet((i - (fx.count! - 1) / 2) * fx.spread! / (fx.count! - 1), base * fx.mult);
+      for (let i = 0; i < fx.count!; i++) bullet((i - (fx.count! - 1) / 2) * fx.spread! / (fx.count! - 1), base * mult);
     } else {   // bolt / pierce / strike: one projectile
       if (this.atkT < 0) p.dir = dirIndex(dx, dy);
-      bullet(0, base * (fx?.mult ?? 1));
+      bullet(0, base * mult);
     }
-    h.mp -= cost; this.usage.magic++; this.castT = 400 * 100 / Math.max(20, 100 + this.win.fx('chant')); audio.sfx(SFX.hit, 0.5);
+    h.mp -= cost; this.usage.magic++; this.castT = 400 * m.castMul(sp.id) * 100 / Math.max(20, 100 + this.win.fx('chant'));   // Table 20 = cast time per mille (Earth Spears 0.6, Medusa 1.5) audio.sfx(SFX.hit, 0.5);
     if (m.use(sp.id)) this.banner = { text: `${sp.name} reached magic level ${m.level(sp.id)}`, t: 0 };
   }
-  /** Base spell power: 24 + 3 per hero level (GUESS) x magic level bonus x Holy attribute x weapon magic attack % x power mode x harmony. */
-  private spellPower(sp: Spell) { return (24 + 3 * (this.hud.level - 1) + this.win.fx('matk')) * Math.max(0.2, 1 + 0.2 * (this.magic.level(sp.id) - 1 + this.win.fx('mlv'))) * this.win.attrMul(4) * (this.powerT > 0 ? 1.3 : 1) * this.harmony().magic; }
+  /** Spell power = Table 17 of the spell at its (gear-raised) magic level + the gear's magic attack, x Holy attribute x power mode x harmony (exe 0x4399db: Table 17 value + player+0x1c4). Spells whose Table 17 entry is 0 or a different quantity (Mud Javelin 600+) fall back to the Fire Ball value. */
+  /** Table 17 of a rate spell as a fraction (Magic Shield 25 %+, Counter Burst 50 %+). */
+  private spellRate(id: number) { return this.magic.param(17, id, this.magic.level(id) + this.win.fx('mlv')) / 100; }
+  private powerKnown(sp: Spell) { const v = this.magic.param(17, sp.id, 1); return v > 0 && v < 500 && sp.kind !== 'blade'; }
+  private spellPower(sp: Spell) { const lv = this.magic.level(sp.id) + this.win.fx('mlv'), t = this.powerKnown(sp) ? this.magic.param(17, sp.id, lv) : this.magic.param(17, 601, lv); return (t + this.win.fx('matk')) * this.win.attrMul(4) * (this.powerT > 0 ? 1.3 : 1) * this.harmony().magic; }
   /** Elemental effect on a monster: the attribute opposite to the monster's is strong (x1.3), its own attribute weak (x0.7). GUESS. */
   private elemMul(a: Actor, elem: number) { if (elem < 0) return 1; const m = a.stats.attr ?? 0; return elem === (m ^ 1) ? 1.3 : elem === m ? 0.7 : 1; }
   private spellHit(a: Actor, sp: Spell, dmg: number) { this.damage(a, Math.max(1, Math.round(dmg * this.elemMul(a, SPELL_FX[sp.id]?.elem ?? -1) * (9 + Math.floor(Math.random() * 3)) / 10))); }

@@ -34,3 +34,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `learn.mjs` walks the spell learning rule (class history x Table.Tbd 100-107): Plasma at 5 Mercenary levels, Wizard spells after the change, etc.
 - `upgrade.mjs` — an Episode-1 save is continued in Episode 3 from the LOAD DATA screen's "Continue in Episode N >" picker (gold and map kept, `Data.ep` = 3).
 - `compgear.mjs` — Companion Evasion gear makes the dog dodge, its status shows Hit Rate / Evasion.
+- `spelltables.mjs` — real spell data: MP cost (Table 16), Heal % (17), exp per level (27, +1 exp per cast, cap 20), cast-time multiplier (20).

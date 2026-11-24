@@ -28,7 +28,9 @@ const PER_PAGE = 6, ROW_Y = 52, ROW_H = 50, LIST_X = 28;
 export const WIN_SLOTS = Array.from({ length: 8 }, (_, k) => ({ x: 32 + k * 32, y: 359, w: 26, h: 26 }));
 const HUD_X = 192, HUD_Y0 = 389, HUD_PITCH = 19;
 export const BAR_SLOTS = Array.from({ length: 9 }, (_, k) => ({ x: HUD_X + k * HUD_PITCH + (k === 8 ? 6 : 0), y: HUD_Y0, w: 18, h: 18 }));
-export const MAX_MAGIC_LEVEL = 10, EXP_PER_LEVEL = 20;
+/** Exe 0x44f6f0: a spell's magic level is capped at 0x14 = 20; every cast adds 1 exp and the level rises when exp reaches Table.Tbd 27[spell][level-1] (the exp is carried over). */
+export const MAX_MAGIC_LEVEL = 20;
+type Tables = Record<string, { s?: string[]; cols?: number; v?: number[] }>;
 
 export class Magic {
   spells: Spell[];
@@ -39,17 +41,29 @@ export class Magic {
   sel = 8;
   prog = new Map<number, [number, number]>();   // spell id -> [magic level, exp]
   page = 0;
-  private constructor(private win: SpriteSet, private mi: SpriteSet, private mb: SpriteSet, tables: Record<string, { s?: string[] }>) {
+  private constructor(private win: SpriteSet, private mi: SpriteSet, private mb: SpriteSet, private tables: Tables) {
     this.spells = DEF.map(([id, icon, mp, kind, color]) => {
       const s = (tables[String(id)]?.s ?? ['?']).map(l => l.replace(/\u3000/g, '').trim());
       const [name, attr] = (s[0] ?? '?').split(' - ');
       return { id, name, attr: attr ?? '', desc: s.slice(1).filter(l => l), icon, mp, kind, color };
     });
   }
-  static async load(app: App, tables: Record<string, { s?: string[] }>) {
+  static async load(app: App, tables: Tables) {
     const [win, mi, mb] = await Promise.all([app.gui('Game_Status'), app.gui('Game_MagicIcon'), app.gui('Game_MagicBarIcon')]);
     return new Magic(win, mi, mb, tables);
   }
+  /**
+   * Per-spell tables of Table.Tbd, row = spell id - 600 (0 = Transport), decoded from the exe's accessor 0x417410 (kind 0..4 -> tables 17, 18, 16, 35, 21) and the cast routines:
+   * 16 = MP cost per magic level (Heal 40 at level 1 = the manual), 17 = spell power (added to the gear's magic attack; Heal = heal %, Sonic Blade / Counter Burst / Magic Shield = rate %),
+   * 18 = magic hit rate (+ gear), 19 = cast motion kind, 20 = cast time x per mille, 21 = flag from a level on, 27 = exp needed per level (20 columns), 35 / 70-78 = visual parameters.
+   */
+  param(table: number, id: number, lvl: number) {
+    const t = this.tables[String(table)], row = id - 600; if (!t?.v || !t.cols || row < 0) return 0;
+    return t.v[row * t.cols + Math.max(0, Math.min(t.cols - 1, lvl - 1))] ?? 0;
+  }
+  cost(id: number, extraLv = 0) { const v = this.param(16, id, this.level(id) + extraLv); return v > 0 ? v : this.spell(id)?.mp ?? 0; }
+  expNeed(id: number) { return this.param(27, id, this.level(id)) || 20; }
+  castMul(id: number) { return (this.param(20, id, 1) || 1000) / 1000; }
   spell(id: number) { return this.spells.find(s => s.id === id); }
   learn(id: number) { if (this.spell(id) && !this.known.includes(id)) this.known.push(id); }
   level(id: number) { return this.prog.get(id)?.[0] ?? 1; }
@@ -58,13 +72,11 @@ export class Magic {
   use(id: number) {
     const [lv, ex] = this.prog.get(id) ?? [1, 0];
     if (lv >= MAX_MAGIC_LEVEL) return false;
-    if (ex + 1 >= EXP_PER_LEVEL) { this.prog.set(id, [lv + 1, 0]); return true; }
+    const need = this.expNeed(id); if (ex + 1 >= need) { this.prog.set(id, [lv + 1, ex + 1 - need]); return true; }
     this.prog.set(id, [lv, ex + 1]); return false;
   }
-  /** Heal restores 10 % of max HP per magic level (the manual's screenshot: level 1, 10 %). */
-  healPct(id: number) { return 10 * this.level(id); }
-  /** Bolt damage multiplier from the magic level (guess: +20 % per level). */
-  power(id: number) { return 1 + 0.2 * (this.level(id) - 1); }
+  /** Heal restores Table 17 % of max HP (10 % at level 1 as in the manual's screenshot, +2 per level). */
+  healPct(id: number, extraLv = 0) { return this.param(17, id, this.level(id) + extraLv) || 10 * this.level(id); }
   /** The spell currently selected for the right mouse button (undefined = attack / empty slot). */
   selected(): Spell | undefined { return this.sel < 8 ? this.spell(this.bar[this.sel]) : undefined; }
 
@@ -101,8 +113,8 @@ export class Magic {
       const f = this.mi.pattern(s.icon); if (f) ctx.drawImage(f.canvas, LIST_X, y + 2);
       if (on) { ctx.strokeStyle = '#60e060'; ctx.lineWidth = 1; ctx.strokeRect(LIST_X - 0.5, y + 1.5, 28, 28); }
       text.draw(ctx, s.name, 66, y + 2); if (s.attr) text.draw(ctx, s.attr, 66, y + 16);
-      text.drawRight(ctx, `Lv.${this.level(s.id)} Exp.${this.exp(s.id)}/${EXP_PER_LEVEL}`, 298, y + 2);
-      text.drawRight(ctx, s.kind === 'heal' ? `MP.${s.mp} Heal.${this.healPct(s.id)}%` : `MP.${s.mp}`, 298, y + 16);
+      text.drawRight(ctx, `Lv.${this.level(s.id)} Exp.${this.exp(s.id)}/${this.level(s.id) >= MAX_MAGIC_LEVEL ? '-' : this.expNeed(s.id)}`, 298, y + 2);
+      text.drawRight(ctx, s.kind === 'heal' ? `MP.${this.cost(s.id)} Heal.${this.healPct(s.id)}%` : `MP.${this.cost(s.id)}`, 298, y + 16);
     }
     text.draw(ctx, '<<', 34, 335); text.draw(ctx, '>>', 266, 335); text.drawCenter(ctx, `${this.page + 1}/${this.pages()}`, 160, 335);
     WIN_SLOTS.forEach((r, k) => { const s = this.spell(this.bar[k]); if (s) { const f = this.mi.pattern(s.icon); if (f) ctx.drawImage(f.canvas, r.x, r.y); } });
@@ -121,6 +133,6 @@ export class Magic {
       ctx.strokeStyle = k === this.sel ? '#ffe060' : 'rgba(168,152,104,0.55)'; ctx.lineWidth = 1; ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
     });
     const k = this.barHit(mx, my);
-    if (k >= 0) { const s = k < 8 ? this.spell(this.bar[k]) : undefined; drawTooltip(ctx, text, [k === 8 ? 'F9: Attack' : s ? `F${k + 1}: ${s.name}  (MP ${s.mp})` : `F${k + 1}: empty`], Math.min(mx, 500), my - 24); }
+    if (k >= 0) { const s = k < 8 ? this.spell(this.bar[k]) : undefined; drawTooltip(ctx, text, [k === 8 ? 'F9: Attack' : s ? `F${k + 1}: ${s.name}  (MP ${this.cost(s.id)})` : `F${k + 1}: empty`], Math.min(mx, 500), my - 24); }
   }
 }
