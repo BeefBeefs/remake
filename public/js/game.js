@@ -16,6 +16,8 @@ const savedVars = new Map();
 let savedGlobals = new Map();
 const savedGround = new Map();
 /** Zone ids whose visibility differs from the Mct default (opened chests ...), per scenario. */
+/** Quest-item drops by `scenario:actor id` (see hurtEnemy). */
+const QUEST_DROPS = { '00000004:0': 99000000, '00010001:0': 99000001 };
 /** PLACEHOLDER combat sound ids (indices into Voice00.Voc; script-driven sounds use the real ids, e.g. chest 77/78, Black Hammer's taunts 40-43). */
 const SFX = { hit: 1, hurt: 2, kill: 10 };
 const savedZones = new Map();
@@ -571,6 +573,14 @@ export class GameScene {
             if (gold > 0)
                 this.ground.push({ x: a.x, y: a.y, gold });
             // item drop: chance (percent) and level come from the monster's Mct record; level picks the PLACEHOLDER table row (Table.Tbd 902-907 rows 2-8)
+            // quest items (the town script wants item section 4: Malse's Gem 99000000, Syria's Spirit Stone 99000001). No script grants them, so the exe must drop them from the
+            // thief monsters: Black Hammer (scenario 4 boss, "snatched a gem") and the goblin boss of the ruins ("stolen by Goblins at the ruins"). The second one is a GUESS.
+            const qd = QUEST_DROPS[`${this.scenario}:${a.rec.id}`];
+            if (qd && !this.win.inv.entries.some(e => e.item.sec === 4 && (e.item.f['1'] ?? 0) === qd) && this.vm?.globals.get(`q:${qd === 99000000 ? 1 : 2}`) !== 2) {
+                const it = this.win.db.find(4, qd);
+                if (it)
+                    this.ground.push({ x: a.x + 20, y: a.y + 10, item: it, gold: 0 });
+            }
             const st = a.rec.st;
             if (st && st.dlv >= 0 && Math.random() * 100 < st.drop) {
                 const [wa, wb] = realToWorld(a.x, a.y);

@@ -63,3 +63,7 @@ Newest entries at the bottom. Run `npm run assets && npm run build && npm run se
 - 42/43/63 `(a,b)` are party/network precondition checks; offline they reset both vars to 0 so the script's `a != b` branch never fires.
 - 7/8/20/26/40/41/45/60/64/72 are visual/NPC-marker sentences with no offline effect and are accepted as no-ops (no more "unimplemented" warnings in scenarios 0, 6, 10003).
 - Still guessed: warp cost (col 2 of Table 40) is not charged yet.
+
+## Quest items
+- The town script's two hand-in quests want item section 4 ids 99000000 (Malse's Gem) and 99000001 (Syria's Spirit Stone); the flags are set in scenario 0 (vars 1000029-1000032) and no dungeon script grants them (no item-grant sentence, no kill status on those bosses), so the exe must drop them from the thieves.
+- Black Hammer (scenario 00000004 boss, id 0) now drops Malse's Gem; the goblin boss of 00010001 drops the Spirit Stone (GUESS for the location: quest text only says "Goblins at the ruins"). Drops stop once the item is held or the quest is completed.
