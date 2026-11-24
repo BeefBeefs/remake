@@ -40,9 +40,9 @@ export class Actor {
             this.stats = { hp: r(b.hp * k * (bs ? 5 : 1)), dmg: [r(b.dmg[0] * Math.sqrt(k) * (bs ? 1.6 : 1)), r(b.dmg[1] * Math.sqrt(k) * (bs ? 1.6 : 1))], exp: r(b.exp * k * (bs ? 8 : 1)), gold: bs ? [b.gold[0] * 4, b.gold[1] * 4] : b.gold, speed: b.speed };
             const st = rec.st;
             if (st && !this.gen) {
-                // Hit points, attack and speed come from the Mct record (Mct power multiplier on top); exp and gold are still derived from the hit points (the real fields are not decoded).
+                // Hit points, attack, speed, exp and the gold figure come from the Mct record (Mct power multiplier on top of hp/attack); the gold spread of +-50% around the record value is a guess.
                 const hp = Math.max(1, r(st.hp * k)), at = st.atk * Math.sqrt(k), noLoot = st.dlv < 0;
-                this.stats = { hp, dmg: [Math.max(1, r(at * 0.7)), Math.max(1, r(at * 1.3))], exp: Math.max(1, r(hp * 0.3 * (bs ? 2 : 1))), gold: noLoot ? [0, 0] : [r(hp * 0.1), r(hp * 0.35)], speed: 0.07 * st.spd / 170 };
+                this.stats = { hp, dmg: [Math.max(1, r(at * 0.7)), Math.max(1, r(at * 1.3))], exp: st.exp, gold: noLoot ? [0, 0] : [r(st.gold * 0.5), r(st.gold * 1.5)], speed: 0.07 * st.spd / 170 };
             }
             if (this.gen)
                 this.stats = { hp: 80, dmg: [0, 0], exp: 30, gold: [0, 0], speed: 0 }; // PLACEHOLDER hp for the Enemy Hole generators

@@ -235,35 +235,36 @@ export class GameScene {
         this.vm.talk(z.rec.id);
         this.openDialog();
     }
-    /** Sentence 24 (PLACEHOLDER): the real drop tables are Table.Tbd 900-907 (13 rows = tiers); rows give weights per base item type for weapons (902), armor (904) and another category (906). */
-    randomDrop(tier, a, b) {
-        const [x, y] = worldToReal(a, b), t = this.tables, row = (id) => { const T = t[id]; return T ? T.v.slice(tier * T.cols, (tier + 1) * T.cols) : []; };
-        const cats = [[0, row('902')], [1, row('904')], [3, row('906')]];
-        const sum = (w) => w.reduce((p, c) => p + c, 0), total = cats.reduce((p, c) => p + sum(c[1]), 0);
-        if (total <= 0) {
-            this.ground.push({ x, y, gold: 10 + Math.floor(Math.random() * 40) * Math.max(1, tier) });
-            return;
-        }
-        let r = Math.random() * total, sec = 0, w = [];
-        for (const [s, ws] of cats) {
-            if (r < sum(ws)) {
+    /** Sentence 24 / monster drops: `level` is the drop level (chests use 4, 15, 20, 22 in the scripts; monsters 0-23 in their Mct record). The real generator is not decoded
+     *  (Table.Tbd 900-907 turned out to be the player stat tables), so PLACEHOLDER: pick a category, then an item whose price is within the band of that level
+     *  (cap grows 1.2x per level from 300 gold: level 4 ~600, 15 ~4500, 22 ~16000), weighted towards the expensive end. */
+    randomDrop(level, a, b) {
+        const [x, y] = worldToReal(a, b), cap = 300 * Math.pow(1.2, Math.max(0, level));
+        const cats = [[0, 35], [1, 35], [2, 15], [3, 15]];
+        let r = Math.random() * 100, sec = 0;
+        for (const [s, w] of cats) {
+            if (r < w) {
                 sec = s;
-                w = ws;
                 break;
             }
-            r -= sum(ws);
+            r -= w;
         }
-        let r2 = Math.random() * sum(w), col = 0;
-        for (; col < w.length; col++) {
-            if (r2 < w[col])
+        const all = this.win.db.sections[sec].filter(i => ItemDb.price(i) > 0 && ItemDb.price(i) <= cap && (i.name === i.type || Math.random() < 0.5));
+        const pool = all.filter(i => ItemDb.price(i) >= cap / 6).length ? all.filter(i => ItemDb.price(i) >= cap / 6) : all;
+        if (!pool.length) {
+            this.ground.push({ x, y, gold: Math.round(cap * (0.05 + Math.random() * 0.1)) + 5 });
+            return;
+        }
+        const wt = (i) => Math.sqrt(ItemDb.price(i)), tot = pool.reduce((p, i) => p + wt(i), 0);
+        let r2 = Math.random() * tot, item = pool[0];
+        for (const i of pool) {
+            r2 -= wt(i);
+            if (r2 <= 0) {
+                item = i;
                 break;
-            r2 -= w[col];
+            }
         }
-        const list = this.win.db.sections[sec], types = [...new Set(list.map(i => i.type))];
-        const pool = sec === 3 ? [list[col % list.length]] : list.filter(i => i.type === types[col % types.length]);
-        const item = Math.random() < 0.7 ? pool[0] : pool[Math.floor(Math.random() * pool.length)];
-        if (item)
-            this.ground.push({ x, y, item, gold: 0 });
+        this.ground.push({ x, y, item, gold: 0 });
     }
     talkTo(a) {
         if (!this.vm || a.rec.kind !== 'people')
@@ -543,7 +544,7 @@ export class GameScene {
             const st = a.rec.st;
             if (st && st.dlv >= 0 && Math.random() * 100 < st.drop) {
                 const [wa, wb] = realToWorld(a.x, a.y);
-                this.randomDrop(Math.min(8, 2 + Math.floor(st.dlv / 4)), wa, wb);
+                this.randomDrop(st.dlv, wa, wb);
             }
         }
     }
