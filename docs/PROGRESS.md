@@ -362,3 +362,9 @@ Same mechanical sweep as before (every handler of every scenario in the episode 
 - Ep3 chain (145 scenarios): 17 quests started / 3 completed without items; 21 started / 12 completed with items (still only accepted: 3, 6, 11, 15, 18, 20, 23, 24, 28).
 - Ep4 chain (209 scenarios): 19 started / 4 completed without items; 24 started / 14 completed with items (only accepted: 3, 6, 11, 15, 18, 20, 23, 24, 28, 41).
 - So items are the main blocker for completion (+10 quests), and the item sources are now covered except the ones listed under "Quest item sources". The remaining accepted-only quests wait for something the sweep does not do: kills of specific monsters, a dungeon floor reached through the exits, quest-chain order inside one scenario, partner/dog state or option choices beyond the first three. Not verified by hand.
+
+## Phone feedback fixes (ground, direction, stick, pop-in)
+- Ground texture: the Gnd cell block is three planes of w*h int16 (flags | slot | pattern), not interleaved triples. `map.ts` now reads planar cells; ground looked scrambled before.
+- Sprite pop-in: objects/shadows are culled by their exact frame rect instead of a coarse anchor margin.
+- Facing: the left/right entries of the facing table were swapped (measured by holding each arrow key and cropping the hero). Table is now `[2,1,0,7,6,5,4,3]` in `game.ts` and `actors.ts` (actors and companion share it). Diagonals follow the same rotation (GUESS: CAF order 0 down, 1 down-right, 2 right, 3 up-right, 4 up, 5 up-left, 6 left, 7 down-left).
+- Virtual stick drives the arrow keys instead of WASD; S is the Status hotkey, so dragging down opened Status. `touch.mjs` now checks this (`downNoMenu`).

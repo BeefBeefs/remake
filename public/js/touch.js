@@ -2,7 +2,7 @@ import { SCREEN_W, SCREEN_H } from './gui.js';
 /**
  * Touch controls for phones / tablets (Android Chrome): a DOM overlay over the canvas.
  *  - drag on the game screen = the mouse (hold to walk towards the finger, tap an enemy to attack, tap items / NPCs / buttons / windows)
- *  - left pad: virtual stick, drives the WASD keys
+ *  - left pad: virtual stick, drives the arrow keys (WASD would open Status with S)
  *  - right: ATK (hold = Shift + left button aimed at the nearest enemy or in front of the hero), MAGIC (right button aimed the same way), RUN, DOG (Space)
  *  - menu row: ITEM I, STAT C, MAGIC M, MAP N, QUEST Q, HELP H, MENU Esc; belt 1-4
  *  - FULL: fullscreen toggle (landscape lock where the browser allows it)
@@ -84,16 +84,16 @@ export class TouchControls {
             const r = s.getBoundingClientRect(), dx = ev.clientX - (r.left + r.width / 2), dy = ev.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy), m = r.width / 2, c = d > m ? m / d : 1;
             k.style.transform = `translate(${dx * c}px,${dy * c}px)`;
             const dz = 18;
-            this.key('a', dx < -dz);
-            this.key('d', dx > dz);
-            this.key('w', dy < -dz);
-            this.key('s', dy > dz);
+            this.key('arrowleft', dx < -dz);
+            this.key('arrowright', dx > dz);
+            this.key('arrowup', dy < -dz);
+            this.key('arrowdown', dy > dz); // arrow keys, not WASD: S is also the Status hotkey
         };
         s.addEventListener('pointerdown', ev => { ev.preventDefault(); s.setPointerCapture(ev.pointerId); this.stickId = ev.pointerId; move(ev); });
         s.addEventListener('pointermove', ev => { if (ev.pointerId === this.stickId)
             move(ev); });
         const end = (ev) => { if (ev.pointerId !== this.stickId)
-            return; this.stickId = -1; k.style.transform = ''; for (const c of ['a', 'd', 'w', 's'])
+            return; this.stickId = -1; k.style.transform = ''; for (const c of ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'])
             this.key(c, false); };
         s.addEventListener('pointerup', end);
         s.addEventListener('pointercancel', end);

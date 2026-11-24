@@ -1,6 +1,7 @@
 // Quest reachability by script: for every scenario of an episode, fires all handlers repeatedly (talks answered with option 0, then 1, then 2; kills; zone events; polls)
 // and records the highest state each quest (sentence 62) reaches: 1 accepted, 2 done. Quests whose conditions need items, other maps' flags or specific drops stay lower.
 // CHEAT=1: the hero carries every item (hasItem always true, takeItem free) and has 10 million gold, to see which quests the scripts can finish when only the items are missing.
+// This is the first version (options 0/1/2 by round); epquests2.mjs explores every dialogue branch.
 // usage: [CHEAT=1] node tools/playtest/epquests.mjs [eps=1,2,3,4]
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import fs from 'fs';

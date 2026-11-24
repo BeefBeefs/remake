@@ -3,8 +3,8 @@ import { loadCaf } from './caf.js';
 import { worldToReal } from './map.js';
 import { loadZones } from './zones.js';
 const FRAME_MS = 80;
-/** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
-const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
+/** Facing index (CAF direction order: 0 down, 1 down-right, 2 right, 3 up-right, 4 up, 5 up-left, 6 left, 7 down-left; left and right were swapped before, found on a phone) for 8 compass sectors starting at "right" going clockwise on screen. */
+const FACING = [2, 1, 0, 7, 6, 5, 4, 3];
 export const dirIndex = (vx, vy) => FACING[(Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 8];
 /** PLACEHOLDER stats (real values live in Control.aid / Table.Tbd, not decoded yet): ENEMY model -> hp, damage range, exp, gold range, speed px/ms. */
 export const ENEMY_STATS = {

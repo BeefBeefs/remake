@@ -54,8 +54,8 @@ export interface SaveData {
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
 const FRAME_MS = 60;
 const ANIM_IDLE = 0, ANIM_WALK = 1, ANIM_RUN = 2;
-/** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
-const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
+/** Facing index (CAF direction order: 0 down, 1 down-right, 2 right, 3 up-right, 4 up, 5 up-left, 6 left, 7 down-left; left and right were swapped before, found on a phone) for 8 compass sectors starting at "right" going clockwise on screen. */
+const FACING = [2, 1, 0, 7, 6, 5, 4, 3];
 const dirIndex = (vx: number, vy: number) => FACING[(Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 8];
 
 export class GameScene implements Scene {

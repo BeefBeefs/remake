@@ -7,8 +7,8 @@ import type { App } from './app.js';
 
 export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; /** per-monster parameters from the Mct record (tools/mct.py): hit points, attack power, speed %, drop chance %, drop level (-1 = none) */ st?: { hp: number; atk: number; def_: number; spd: number; dlv: number; exp: number; gchance: number; gmin: number; gmax: number; attr?: number }; }
 const FRAME_MS = 80;
-/** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
-const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
+/** Facing index (CAF direction order: 0 down, 1 down-right, 2 right, 3 up-right, 4 up, 5 up-left, 6 left, 7 down-left; left and right were swapped before, found on a phone) for 8 compass sectors starting at "right" going clockwise on screen. */
+const FACING = [2, 1, 0, 7, 6, 5, 4, 3];
 export const dirIndex = (vx: number, vy: number) => FACING[(Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 8];
 /** PLACEHOLDER stats (real values live in Control.aid / Table.Tbd, not decoded yet): ENEMY model -> hp, damage range, exp, gold range, speed px/ms. */
 export const ENEMY_STATS: Record<number, { hp: number; dmg: [number, number]; exp: number; gold: [number, number]; speed: number }> = {
