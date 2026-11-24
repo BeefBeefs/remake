@@ -43,3 +43,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `epitems.mjs ep [out.json]` - fires every handler of an episode's scenarios and records the quest items the scripts ask for and the chest drop levels used; compare with Tables 30/31 (see PROGRESS "Quest item sources"). Needs the server on :8123.
 - `giveitem.mjs` - sentence 75 (reward item) puts quest items into the bag.
 - `blackjack.mjs` - Tower of Ordeal Black Jack: hand values, win/lose spread, and the script round trip in 99000023 (pay, hand, result block, win counter).
+- `questsent.mjs` - sentences 67-71: quest spell grant, exp percentage, offered profession read/write.

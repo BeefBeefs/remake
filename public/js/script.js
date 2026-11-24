@@ -210,6 +210,21 @@ export class ScriptVM {
             case 59:
                 this.hooks?.takeItem(ev(0), ev(1));
                 return true;
+            case 67:
+                this.hooks?.learnSpell?.(ev(0));
+                return true;
+            case 68:
+                this.hooks?.expPct?.(ev(0));
+                return true;
+            case 69:
+                this.set(o[1][0], o[1][1], this.hooks?.hasSpell?.(ev(0)) ? 1 : 0);
+                return true;
+            case 70:
+                this.hooks?.offerClass?.(ev(0));
+                return true;
+            case 71:
+                this.set(o[0][0], o[0][1], this.hooks?.offeredClass?.() ?? 0);
+                return true;
             case 73:
                 if (this.hooks?.blackjack) {
                     this.hooks.blackjack(this.lastPaid);

@@ -48,6 +48,14 @@ export interface ScriptHooks {
   addGold(delta: number): void;
   /** Sentence 73: play a Black Jack hand for the bet in script variable the last amount paid with sentence 54; the game calls `ScriptVM.finishBlackjack` when it is over. */
   blackjack?(bet: number): void;
+  /** Sentences 67 / 69 (exe 0x4340e7 / 0x43412b): mark spell row `n` (id 600 + n) as granted by a quest / is it granted. */
+  learnSpell?(n: number): void;
+  hasSpell?(n: number): boolean;
+  /** Sentence 68 (exe 0x4342de): add `pct` percent of the experience the current level needs. */
+  expPct?(pct: number): void;
+  /** Sentences 71 / 70 (exe 0x434186 / 0x4341da): the offered profession as script index (0 Mercenary, 1 Warrior, 2 Hunter, 3 Wizard) / set it (1-3). */
+  offeredClass?(): number;
+  offerClass?(idx: number): void;
   /** Sentence 75: reward item (category, id) goes into the inventory (it is put on the ground when the bag is full). */
   giveItem?(cat: number, id: number): void;
   /** Sentences 58/59: does the player carry item (category, id) / remove one copy of it. */
@@ -154,6 +162,11 @@ export class ScriptVM {
       case 54: this.lastPaid = ev(0); this.hooks?.addGold(-ev(0)); return true;
       case 58: this.set(o[2][0], o[2][1], this.hooks?.hasItem(ev(0), ev(1)) ? 1 : 0); return true;   // quest hand-in check (no selection UI: any matching item counts)
       case 59: this.hooks?.takeItem(ev(0), ev(1)); return true;
+      case 67: this.hooks?.learnSpell?.(ev(0)); return true;
+      case 68: this.hooks?.expPct?.(ev(0)); return true;
+      case 69: this.set(o[1][0], o[1][1], this.hooks?.hasSpell?.(ev(0)) ? 1 : 0); return true;
+      case 70: this.hooks?.offerClass?.(ev(0)); return true;
+      case 71: this.set(o[0][0], o[0][1], this.hooks?.offeredClass?.() ?? 0); return true;
       case 73: if (this.hooks?.blackjack) { this.hooks.blackjack(this.lastPaid); return false; } return true;   // Tower of Ordeal Black Jack (99000018 / 99000023): the hand is a modal game, the script resumes at the block that reads the result
       case 74: this.set(o[0][0], o[0][1], this.bjResult); return true;   // result of the last hand: 0 draw, 1 win, 2 lose (as the branches in block 35 of 99000023 read it)
       case 75: this.hooks?.giveItem?.(ev(0), ev(1)); return true;   // reward item: used by the Ep3/Ep4 quest givers (Sacred Wing, Antidote, Demon Fang ...); signature taken from the call sites, same operands as 59
