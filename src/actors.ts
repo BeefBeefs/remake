@@ -15,7 +15,7 @@ export const ENEMY_STATS: Record<number, { hp: number; dmg: [number, number]; ex
   2: { hp: 45, dmg: [4, 9], exp: 12, gold: [8, 30], speed: 0.075 },
   5: { hp: 200, dmg: [8, 16], exp: 120, gold: [200, 400], speed: 0.09 },
 };
-export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; }
+export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; /** Ranged attack: a bolt from the monster's ground position toward (tx, ty). */ shoot?(x: number, y: number, tx: number, ty: number, dmg: number): void; }
 type State = 'idle' | 'walk' | 'attack' | 'die';
 const ANIM: Record<State, number> = { idle: 0, walk: 1, attack: 2, die: 3 };
 /** Draw order of CAF layers (1 and 0 are the body for the player; higher ones are optional equipment/overlay variants). */
@@ -24,7 +24,12 @@ const LAYERS = [1, 0, 2, 3, 4, 5, 6];
 /** Static/idle actor placed from Scenario.Mct (NPCs and partners). */
 export class Actor implements Drawable {
   x: number; y: number; dir: number; t = Math.random() * 1000;
-  hp = 0; maxHp = 0; state: State = 'idle'; deadT = 0; private hitDone = false;
+  hp = 0; maxHp = 0; state: State = 'idle'; deadT = 0; private hitDone = false; private shot = false;
+  /** Hit reaction (GUESS: the CAF hit animation is not identified): a short stagger that interrupts a wind-up and pushes the monster back. */
+  stun = 0; private kx = 0; private ky = 0; private shootT = 0;
+  /** Shamans (model 5) cast bolts from a distance (GUESS from their cast sounds/animation set; the exact range and rate are not decoded). */
+  get ranged() { return this.enemy && this.rec.model === 5; }
+  hurt(fromX: number, fromY: number) { const dx = this.x - fromX, dy = this.y - fromY, n = Math.hypot(dx, dy) || 1; this.stun = 240; this.kx = dx / n; this.ky = dy / n; if (this.state === 'attack' && !this.hitDone) this.set('idle'); }
   stats: { hp: number; dmg: [number, number]; exp: number; gold: [number, number]; speed: number; goldChance?: number; defense?: number } = ENEMY_STATS[1];
   private constructor(public rec: ActorRec, private set_: SpriteSet, private sdw: SpriteSet, private caf: Caf) {
     [this.x, this.y] = worldToReal(rec.a, rec.b); this.dir = rec.dir % 9;
@@ -62,7 +67,7 @@ export class Actor implements Drawable {
     const [set, sdw, caf] = await Promise.all([app.set(base), app.set(base + '_sdw'), loadCaf(base + '.caf.json')]);
     return new Actor(r, set, sdw, caf);
   }
-  private set(st: State) { if (this.state !== st) { this.state = st; this.t = 0; this.hitDone = false; } }
+  private set(st: State) { if (this.state !== st) { this.state = st; this.t = 0; this.hitDone = false; this.shot = false; } }
   /** Bring a dormant/dead slot monster into the world at real position (x, y). */
   revive(x: number, y: number) { this.x = x; this.y = y; this.hp = this.maxHp; this.hidden = false; this.deadT = 0; this.set('idle'); this.state = 'idle'; }
   /** A slot is free when its monster is hidden or dead (sentence 32). */
@@ -72,14 +77,24 @@ export class Actor implements Drawable {
     this.t += dt;
     if (this.hidden || !this.enemy || !c || this.gen) return;
     if (this.state === 'die') { this.deadT += dt; return; }
+    if (this.stun > 0) {   // staggered: slide back a little, no action
+      this.stun -= dt; const k = Math.max(0, this.stun) / 240 * 0.09 * dt, nx = this.x + this.kx * k, ny = this.y + this.ky * k * 0.6;
+      if (!c.blocked(nx, ny)) { this.x = nx; this.y = ny; }
+      this.set('idle'); return;
+    }
+    this.shootT -= dt;
     let tx = c.px, ty = c.py, onPet = false;
     if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) * 0.9) { tx = c.pet.x; ty = c.pet.y; onPet = true; }
     const dx = tx - this.x, dy = (ty - this.y) * 1.6, d = Math.hypot(dx, dy);
     const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
     if (this.state === 'attack') {
+      if (this.shot) { if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); c.shoot?.(this.x, this.y, tx, ty, dm); } if (this.t >= frames * FRAME_MS) { this.shot = false; this.set('idle'); } return; }
       if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70 * this.scale) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm); } }
       if (this.t >= frames * FRAME_MS) this.set('idle');
       return;
+    }
+    if (this.ranged && !onPet && d >= 120 && d < 380 && this.shootT <= 0 && c.shoot) {
+      this.dir = dirIndex(dx, ty - this.y); this.set('attack'); this.shootT = 1900; this.shot = true; return;
     }
     if (d < 46 * this.scale) { this.dir = dirIndex(dx, ty - this.y); this.set('attack'); }
     else if (d < 300) {
@@ -94,10 +109,12 @@ export class Actor implements Drawable {
     const anim = this.enemy ? ANIM[this.state] : 0;
     const d = this.caf.anims[anim]?.dirs[this.dir]; if (!d) return;
     const raw = Math.floor(this.t / FRAME_MS), fi = d.frames ? (this.state === 'die' ? Math.min(raw, d.frames - 1) : raw % d.frames) : 0;
+    const flash = this.stun > 120;
     for (const s of [this.sdw, this.set_]) for (const l of LAYERS) {
       const seq = d.layers[l]; if (!seq || !seq.length) continue;
       const f = s.pattern(seq[Math.min(fi, seq.length - 1)][1]); if (!f) continue;
       c.drawImage(f.canvas, Math.round(this.x - camX + f.ox), Math.round(this.y - camY + f.oy));
+      if (flash && s === this.set_) { c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.55; c.drawImage(f.canvas, Math.round(this.x - camX + f.ox), Math.round(this.y - camY + f.oy)); c.restore(); }
     }
     this.bar(c, camX, camY, -72);
   }

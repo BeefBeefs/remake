@@ -409,7 +409,7 @@ export class GameScene {
         const p = this.player;
         this.spawnPos = { x: p.x, y: p.y };
         const self = this;
-        this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d), get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
+        this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d), shoot: (x, y, tx, ty, dmg) => { const dx = tx - x, dy = ty - y, n = Math.hypot(dx, dy) || 1; this.bullets.push({ x, y, vx: dx / n, vy: dy / n, t: 0, dmg }); }, get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
         this.petCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), enemies: () => this.actors.filter(a => a.enemy && !a.gen && a.alive), hit: (a, d) => this.damage(a, d) };
         this.drawPlayer = {
             get y() { return p.y; },
@@ -759,6 +759,8 @@ export class GameScene {
     /** Apply final damage to a monster: floater, sound, and the death rewards (experience, gold, item drop, kill script event). */
     damage(a, dmg) {
         a.hp -= dmg;
+        if (a.hp > 0)
+            a.hurt(this.player.x, this.player.y);
         this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) });
         audio.sfx(a.hp <= 0 ? SFX.kill : SFX.hit, 0.8);
         if (a.hp <= 0) {

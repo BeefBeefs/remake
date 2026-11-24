@@ -16,3 +16,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `repair.mjs` — Malse identify/repair services, durability wear.
 - `heal.mjs` — Syria healing (HP/MP/dog).
 - `equipsets.mjs` — I/II equipment sets, unidentified equip block.
+- `shaman.mjs` — shaman bolts + stagger.

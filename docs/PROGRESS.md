@@ -228,3 +228,8 @@ Exe: 42 (0x432990) writes (HP, maxHP), 43 (0x4329e8) (MP, maxMP), 63 (0x432a40) 
 ## Change Equipment I / II, unidentified items unusable
 From the original help (item.htm): two sword+shield configurations, switched with the "I"/"II" buttons or Shift+CapsLock (right-clicking II = same sword/shield for both: not done); an item with a "?" must be identified by a merchant "before players can see their details and use them" -> unidentified items now cannot be equipped (earlier note said they could). The exe keeps the second configuration in two extra slots (player+0x50c weapon, +0x510 shield), armor is shared. `Inventory.set` + `InvEntry.alt` (equipped in the other configuration; blue frame), saved as eq bit 1 and `SaveData.invSet`. The I/II button positions (540,394)/(566,394) are a PLACEHOLDER; the original icons live in Status.njp (not located). Also from the help, not yet done: accessories go in four slots beside the Warehouse Transfer Box icon; two-handed weapons (Ep. 3+) hide the shield.
 Test: `tools/playtest/equipsets.mjs`.
+
+## Monster hit reaction and shaman bolts
+- Hit reaction: `Actor.hurt()` staggers a monster for 240 ms (interrupts a wind-up, slides it back ~10 px, brief additive flash). GUESS: the CAF hit animation is not identified, so there is no separate hurt animation.
+- Shamans (model 5: Goblin/Phantom Shaman, Wild Earth) now cast from 120-380 px away every ~1.9 s using the attack animation; the bolt reuses the trap-bolt projectile (0.2 px/ms, hits the hero only, damage = the monster's Mct damage minus defence). GUESS: range, rate, speed; gargoyle/golem special attacks (anims 5/7/8) are still melee-only.
+- Test: `tools/playtest/shaman.mjs` (scenario 01000004).

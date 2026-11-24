@@ -16,6 +16,10 @@ const ANIM = { idle: 0, walk: 1, attack: 2, die: 3 };
 const LAYERS = [1, 0, 2, 3, 4, 5, 6];
 /** Static/idle actor placed from Scenario.Mct (NPCs and partners). */
 export class Actor {
+    /** Shamans (model 5) cast bolts from a distance (GUESS from their cast sounds/animation set; the exact range and rate are not decoded). */
+    get ranged() { return this.enemy && this.rec.model === 5; }
+    hurt(fromX, fromY) { const dx = this.x - fromX, dy = this.y - fromY, n = Math.hypot(dx, dy) || 1; this.stun = 240; this.kx = dx / n; this.ky = dy / n; if (this.state === 'attack' && !this.hitDone)
+        this.set('idle'); }
     constructor(rec, set_, sdw, caf) {
         this.rec = rec;
         this.set_ = set_;
@@ -27,6 +31,12 @@ export class Actor {
         this.state = 'idle';
         this.deadT = 0;
         this.hitDone = false;
+        this.shot = false;
+        /** Hit reaction (GUESS: the CAF hit animation is not identified): a short stagger that interrupts a wind-up and pushes the monster back. */
+        this.stun = 0;
+        this.kx = 0;
+        this.ky = 0;
+        this.shootT = 0;
         this.stats = ENEMY_STATS[1];
         /** Hidden by script sentence 23 (e.g. partner NPCs that are following the player). */
         this.hidden = false;
@@ -70,6 +80,7 @@ export class Actor {
         this.state = st;
         this.t = 0;
         this.hitDone = false;
+        this.shot = false;
     } }
     /** Bring a dormant/dead slot monster into the world at real position (x, y). */
     revive(x, y) { this.x = x; this.y = y; this.hp = this.maxHp; this.hidden = false; this.deadT = 0; this.set('idle'); this.state = 'idle'; }
@@ -84,6 +95,17 @@ export class Actor {
             this.deadT += dt;
             return;
         }
+        if (this.stun > 0) { // staggered: slide back a little, no action
+            this.stun -= dt;
+            const k = Math.max(0, this.stun) / 240 * 0.09 * dt, nx = this.x + this.kx * k, ny = this.y + this.ky * k * 0.6;
+            if (!c.blocked(nx, ny)) {
+                this.x = nx;
+                this.y = ny;
+            }
+            this.set('idle');
+            return;
+        }
+        this.shootT -= dt;
         let tx = c.px, ty = c.py, onPet = false;
         if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) * 0.9) {
             tx = c.pet.x;
@@ -93,6 +115,18 @@ export class Actor {
         const dx = tx - this.x, dy = (ty - this.y) * 1.6, d = Math.hypot(dx, dy);
         const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
         if (this.state === 'attack') {
+            if (this.shot) {
+                if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) {
+                    this.hitDone = true;
+                    const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1));
+                    c.shoot?.(this.x, this.y, tx, ty, dm);
+                }
+                if (this.t >= frames * FRAME_MS) {
+                    this.shot = false;
+                    this.set('idle');
+                }
+                return;
+            }
             if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) {
                 this.hitDone = true;
                 if (d < 70 * this.scale) {
@@ -105,6 +139,13 @@ export class Actor {
             }
             if (this.t >= frames * FRAME_MS)
                 this.set('idle');
+            return;
+        }
+        if (this.ranged && !onPet && d >= 120 && d < 380 && this.shootT <= 0 && c.shoot) {
+            this.dir = dirIndex(dx, ty - this.y);
+            this.set('attack');
+            this.shootT = 1900;
+            this.shot = true;
             return;
         }
         if (d < 46 * this.scale) {
@@ -139,6 +180,7 @@ export class Actor {
         if (!d)
             return;
         const raw = Math.floor(this.t / FRAME_MS), fi = d.frames ? (this.state === 'die' ? Math.min(raw, d.frames - 1) : raw % d.frames) : 0;
+        const flash = this.stun > 120;
         for (const s of [this.sdw, this.set_])
             for (const l of LAYERS) {
                 const seq = d.layers[l];
@@ -148,6 +190,13 @@ export class Actor {
                 if (!f)
                     continue;
                 c.drawImage(f.canvas, Math.round(this.x - camX + f.ox), Math.round(this.y - camY + f.oy));
+                if (flash && s === this.set_) {
+                    c.save();
+                    c.globalCompositeOperation = 'lighter';
+                    c.globalAlpha = 0.55;
+                    c.drawImage(f.canvas, Math.round(this.x - camX + f.ox), Math.round(this.y - camY + f.oy));
+                    c.restore();
+                }
             }
         this.bar(c, camX, camY, -72);
     }
