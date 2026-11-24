@@ -1,6 +1,7 @@
 import { App, put, Text } from './app.js';
 import { SpriteSet } from './sprites.js';
 import { HudState } from './gui.js';
+import { PlayerStats } from './pstats.js';
 import { ItemDb, ItemDef, Inventory, InvEntry, SECTION_NAMES, drawTooltip } from './items.js';
 
 export interface CombatStats { atkMin: number; atkMax: number; defense: number; speed: number; }
@@ -9,7 +10,7 @@ const GRID_X = 335, GRID_Y = 71, CELL = 32;
 
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
 export class Windows {
-  status = false; item = false;
+  status = false; item = false; ps?: PlayerStats;
   inv = new Inventory(); gold = 0;
   /** Set while a shop is open: clicking an inventory item sells it for this price (tooltip hint). */
   sellValue: ((it: ItemDef) => number) | null = null;
@@ -37,11 +38,12 @@ export class Windows {
       v(`${h.hp}/${h.hpMax}`, 60, 90);
       // Attack / Defense / Attack Speed come from the equipped items; the rest is not decoded yet -> placeholders
       const cs = this.stats(); const rng = cs.atkMax ? (cs.atkMin === cs.atkMax ? `${cs.atkMax}` : `${cs.atkMin}-${cs.atkMax}`) : '0';
-      v('--', 66, 115); v(rng, 152, 115); v(cs.defense, 262, 115);
-      v('--', 68, 139); v('--', 252, 139);
+      const ps = this.ps, n = (x?: number) => x === undefined ? '--' : x;
+      v(n(ps?.strength), 66, 115); v(rng, 152, 115); v(cs.defense, 262, 115);
+      v(n(ps?.hit), 68, 139); v(n(ps?.eva), 252, 139);
       v('--', 96, 163); v(`${cs.speed}%`, 252, 163);
       v(`${h.mp}/${h.mpMax}`, 60, 194);
-      v('--', 70, 218); v('--', 240, 218); v('--', 80, 242); v('--', 270, 242);
+      v('--', 70, 218); v('--', 240, 218); v(n(ps?.mhit), 80, 242); v(n(ps?.meva), 270, 242);
       for (let i = 0; i < 8; i++) v('0', 262, 267 + i * 16);
     }
     if (this.item) {

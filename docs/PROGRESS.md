@@ -143,3 +143,9 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 - Remaining 404s are only optional `objects/N_sdw.json` shadow sprites (the loader treats them as optional).
 - `public/` is now about 270 MB (limit for Pages is 1 GB).
 - Open: the Pages deploy time and size should be watched; the player stat builder (previous section) is still partial.
+
+## Player stats wired in (step: stat tables)
+- Decoded more of exe 0x44e34c / 0x413060 (level-up): level-up copies the character's class byte (`player+0x2c`) to `player+0xec+level` and increments the level counter (`+0x34`); the stat builder then walks those bytes. Class codes map to class tables: 7 -> 902/903, 10 -> 904/905, 6 -> 906/907, 17 -> 900/901 itself (5 columns). Column = how many times that class has been chosen so far, so one row of the class table is added per level.
+- Row meanings (from the Status window labels Strength/Attack/Defense, Hit Rate, Evasion Rate, Walking/Attack Speed, MP and the class tables): row 0 walking speed 100, row 1 attack speed 128, row 2 HP, row 3 MP, row 4 strength, rows 5-8 physical hit/evasion and magic hit/evasion; rows 9-12 (40 each) unidentified, probably element resistances.
+- `src/pstats.ts` computes them; the hero uses the fighter table (guess). Level 1: male HP 150 / MP 150 / strength 140, female HP 140 / MP 160; fighter gains +50 HP, +10 MP, +10 strength per level (slowing later). The status window now shows strength, hit and evasion rates, and HP/MP maxima replace the placeholder +12/+6.
+- Player attack power is now `weapon attack * strength / 100` (fists count as 10) - a GUESS, since the attack builder is still unknown.

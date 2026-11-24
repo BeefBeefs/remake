@@ -44,18 +44,19 @@ export class Windows {
             // Attack / Defense / Attack Speed come from the equipped items; the rest is not decoded yet -> placeholders
             const cs = this.stats();
             const rng = cs.atkMax ? (cs.atkMin === cs.atkMax ? `${cs.atkMax}` : `${cs.atkMin}-${cs.atkMax}`) : '0';
-            v('--', 66, 115);
+            const ps = this.ps, n = (x) => x === undefined ? '--' : x;
+            v(n(ps?.strength), 66, 115);
             v(rng, 152, 115);
             v(cs.defense, 262, 115);
-            v('--', 68, 139);
-            v('--', 252, 139);
+            v(n(ps?.hit), 68, 139);
+            v(n(ps?.eva), 252, 139);
             v('--', 96, 163);
             v(`${cs.speed}%`, 252, 163);
             v(`${h.mp}/${h.mpMax}`, 60, 194);
             v('--', 70, 218);
             v('--', 240, 218);
-            v('--', 80, 242);
-            v('--', 270, 242);
+            v(n(ps?.mhit), 80, 242);
+            v(n(ps?.meva), 270, 242);
             for (let i = 0; i < 8; i++)
                 v('0', 262, 267 + i * 16);
         }
