@@ -16,14 +16,19 @@ def convert_actor(kind, n):
     convert.convert_caf(os.path.join(s, 'Animation.Caf'), os.path.join(o, f'{n}.caf.json'))
     return True
 def convert_object_model(n):
+    """OBJECT/<n>/Pattern.(njp|Njp) [+ Pattern.(sdw|Sdw) shadow, optional] -> objects/<n>[_sdw]; n = the Mct object record's type field."""
     o = os.path.join(out, 'objects'); os.makedirs(o, exist_ok=True)
-    convert.convert_njp(os.path.join(src, 'Character', 'OBJECT', '%08d' % n, 'Pattern.njp'), o, str(n))
-    convert.convert_njp(os.path.join(src, 'Character', 'OBJECT', '%08d' % n, 'Pattern.sdw'), o, f'{n}_sdw')
+    d = os.path.join(src, 'Character', 'OBJECT', '%08d' % n)
+    for f in os.listdir(d):
+        low = f.lower()
+        if low == 'pattern.njp': convert.convert_njp(os.path.join(d, f), o, str(n))
+        elif low == 'pattern.sdw': convert.convert_njp(os.path.join(d, f), o, f'{n}_sdw')
 if __name__ == '__main__':
-    convert_object_model(0)
     for sc in sys.argv[1:]:
         recs = mct.parse(os.path.join(src, 'Scenario', sc, 'Scenario.Mct'))
-        recs = [r for r in recs if convert_actor(r['kind'], r['model']) or print('skip (no model):', r['name'], r['kind'], r['model'])]
+        recs = [r for r in recs if (r['model'] < 0 and r['kind'] == 'enemy') or convert_actor(r['kind'], r['model']) or print('skip (no model):', r['name'], r['kind'], r['model'])]
         os.makedirs(os.path.join(out, 'scenario'), exist_ok=True)
         objs = mct.parse_objects(os.path.join(src, 'Scenario', sc, 'Scenario.Mct'))
+        for t in sorted({o['type'] for o in objs if o['type'] >= 0}):
+            if os.path.isdir(os.path.join(src, 'Character', 'OBJECT', '%08d' % t)): convert_object_model(t)
         json.dump(dict(map=mct.map_name(os.path.join(src, 'Scenario', sc, 'Scenario.Mct')), actors=recs, objects=objs), open(os.path.join(out, 'scenario', sc + '.actors.json'), 'w'))

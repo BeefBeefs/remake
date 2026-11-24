@@ -32,9 +32,12 @@ export class Actor implements Drawable {
       // PLACEHOLDER scaling of the per-model base by the Mct strength multiplier; bosses get a flat bonus.
       const b = ENEMY_STATS[rec.model] ?? ENEMY_STATS[1], k = rec.power ?? 1, bs = rec.boss !== undefined, r = Math.round;
       this.stats = { hp: r(b.hp * k * (bs ? 5 : 1)), dmg: [r(b.dmg[0] * Math.sqrt(k) * (bs ? 1.6 : 1)), r(b.dmg[1] * Math.sqrt(k) * (bs ? 1.6 : 1))], exp: r(b.exp * k * (bs ? 8 : 1)), gold: bs ? [b.gold[0] * 4, b.gold[1] * 4] : b.gold, speed: b.speed };
+      if (this.gen) this.stats = { hp: 80, dmg: [0, 0], exp: 30, gold: [0, 0], speed: 0 };   // PLACEHOLDER hp for the Enemy Hole generators
       this.hp = this.maxHp = this.stats.hp;
     }
   }
+  /** "Enemy Hole" monster generator (Mct boss-A record with model -1): no sprite of its own (the room's zone objects draw the hole), just a killable hit box that scripts read via operand 3. */
+  get gen() { return this.rec.model < 0; }
   get name() { return this.rec.name; }
   get enemy() { return this.rec.kind === 'enemy'; }
   /** Hidden by script sentence 23 (e.g. partner NPCs that are following the player). */
@@ -46,6 +49,7 @@ export class Actor implements Drawable {
   /** Collision radius in real pixels (the Mct radius is in world units). */
   get radius() { return 22; }
   static async load(app: App, r: ActorRec) {
+    if (r.model < 0) return new Actor(r, null as unknown as SpriteSet, null as unknown as SpriteSet, null as unknown as Caf);
     const base = `data/ep1/actors/${r.kind}/${r.model}`;
     const [set, sdw, caf] = await Promise.all([app.set(base), app.set(base + '_sdw'), loadCaf(base + '.caf.json')]);
     return new Actor(r, set, sdw, caf);
@@ -58,7 +62,7 @@ export class Actor implements Drawable {
   die() { this.set('die'); this.deadT = 0; }
   update(dt: number, c?: ActorCtx) {
     this.t += dt;
-    if (this.hidden || !this.enemy || !c) return;
+    if (this.hidden || !this.enemy || !c || this.gen) return;
     if (this.state === 'die') { this.deadT += dt; return; }
     const dx = c.px - this.x, dy = (c.py - this.y) * 1.6, d = Math.hypot(dx, dy);
     const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
@@ -76,6 +80,7 @@ export class Actor implements Drawable {
   }
   draw(c: CanvasRenderingContext2D, camX: number, camY: number) {
     if (this.hidden) return;
+    if (this.gen) { this.bar(c, camX, camY, -40); return; }
     const anim = this.enemy ? ANIM[this.state] : 0;
     const d = this.caf.anims[anim]?.dirs[this.dir]; if (!d) return;
     const raw = Math.floor(this.t / FRAME_MS), fi = d.frames ? (this.state === 'die' ? Math.min(raw, d.frames - 1) : raw % d.frames) : 0;
@@ -84,12 +89,14 @@ export class Actor implements Drawable {
       const f = s.pattern(seq[Math.min(fi, seq.length - 1)][1]); if (!f) continue;
       c.drawImage(f.canvas, Math.round(this.x - camX + f.ox), Math.round(this.y - camY + f.oy));
     }
-    if (this.enemy && this.alive && this.hp < this.maxHp) {
-      const bx = Math.round(this.x - camX) - 16, by = Math.round(this.y - camY) - 72;
-      c.fillStyle = '#000'; c.fillRect(bx - 1, by - 1, 34, 5); c.fillStyle = '#c02020'; c.fillRect(bx, by, Math.round(32 * this.hp / this.maxHp), 3);
-    }
+    this.bar(c, camX, camY, -72);
   }
-  hit(px: number, py: number) { return this.alive && Math.abs(px - this.x) < 20 && py < this.y + 6 && py > this.y - 70; }
+  private bar(c: CanvasRenderingContext2D, camX: number, camY: number, dy: number) {
+    if (!this.enemy || !this.alive || this.hp >= this.maxHp) return;
+    const bx = Math.round(this.x - camX) - 16, by = Math.round(this.y - camY) + dy;
+    c.fillStyle = '#000'; c.fillRect(bx - 1, by - 1, 34, 5); c.fillStyle = '#c02020'; c.fillRect(bx, by, Math.round(32 * this.hp / this.maxHp), 3);
+  }
+  hit(px: number, py: number) { if (this.gen) return this.alive && Math.abs(px - this.x) < 55 && Math.abs(py - this.y) < 40; return this.alive && Math.abs(px - this.x) < 20 && py < this.y + 6 && py > this.y - 70; }
 }
 export async function loadScenarioActors(app: App, scenario: string): Promise<{ map: string | null; actors: Actor[]; zones: Zone[] }> {
   const d: { map: string | null; actors: ActorRec[]; objects?: ZoneRec[] } = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();

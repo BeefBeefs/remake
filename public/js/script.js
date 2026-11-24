@@ -24,6 +24,11 @@ export class ScriptVM {
             return 0; // operand 8 = game mode of the exe (0x482db0): 0 offline; scripts only compare it with 0/2 (always [8,0])
         if (kind >= 10 && kind <= 12)
             return this.globals.get(`${kind}:${val}`) ?? 0;
+        if (kind === 3) {
+            const e = this.hooks?.entity?.(val);
+            if (e !== undefined)
+                return e;
+        }
         if (kind >= 3 && kind <= 5)
             return this.vars.get(this.key(kind, val)) ?? 0;
         if (kind === 6 || kind === 7)

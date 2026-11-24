@@ -10,7 +10,7 @@ def parse(path):
         if not 3 <= L <= 16 or not re.fullmatch(rb"[A-Za-z][A-Za-z ']*", d[i+4:i+4+L]): continue
         j = i + 4 + L
         pre = struct.unpack_from('<4i', d, i - 16); w = struct.unpack_from('<9i', d, j + 4)
-        if w[3:7] != (-80, -80, 79, 79): continue
+        if w[3:7] != (-80, -80, 79, 79) and d[i+4:i+4+L] != b'Enemy Hole': continue   # Enemy Hole generators have a bigger hit rect
         ident = pre[2]
         head = struct.unpack_from('<8i', d, i - 32)
         kind, model = ('partner', ident - 10000) if ident >= 10000 else ('people', pre[3])

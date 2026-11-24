@@ -28,10 +28,14 @@ export class Zone {
         return px >= x && px < x + f.canvas.width && py >= y && py < y + f.canvas.height;
     }
 }
+/** Sprites come from Character/OBJECT/<record type>/Pattern (the Mct record's type field is the model number); types without a model are invisible trigger zones. */
 export async function loadZones(app, recs) {
-    if (!recs.some(r => r.pat >= 0))
-        return recs.map(r => new Zone(r, null, null));
-    const [set, sdw] = await Promise.all([app.set('data/ep1/objects/0'), app.set('data/ep1/objects/0_sdw')]);
-    return recs.map(r => new Zone(r, set, sdw));
+    const types = [...new Set(recs.filter(r => r.pat >= 0 && r.type >= 0).map(r => r.type))];
+    const sets = new Map();
+    await Promise.all(types.map(async (t) => {
+        const get = (n) => app.set(`data/ep1/objects/${n}`).catch(() => null);
+        sets.set(t, [await get(String(t)), await get(`${t}_sdw`)]);
+    }));
+    return recs.map(r => { const [a, b] = sets.get(r.type) ?? [null, null]; return new Zone(r, a, b); });
 }
 //# sourceMappingURL=zones.js.map

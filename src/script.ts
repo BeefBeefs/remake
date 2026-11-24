@@ -5,6 +5,8 @@
 export interface ScriptData { flags: [number, number][]; messages: Record<string, string>; status: number[][]; blocks: [number, [number, number][]][][]; }
 /** Game-side callbacks used by script sentences. Positions are world units (see docs/FORMATS.md, Maps). */
 export interface ScriptHooks {
+  /** Operand kind 3: state of a spawn-numbered monster record (1 alive, 0 dead); undefined when the scenario has no such record. */
+  entity?(spawn: number): number | undefined;
   charPos(char: number): [number, number] | null;
   /** Sentence 10: create an item (cat 0 weapon, 1 armor, 2 accessory, 3 consumable, 4 misc; cat 4 id 0 = gold with amount) on the ground. */
   drop(cat: number, id: number, a: number, b: number, min: number, max: number): void;
@@ -55,6 +57,7 @@ export class ScriptVM {
     if (kind <= 2) return val;
     if (kind === 8) return 0;   // operand 8 = game mode of the exe (0x482db0): 0 offline; scripts only compare it with 0/2 (always [8,0])
     if (kind >= 10 && kind <= 12) return this.globals.get(`${kind}:${val}`) ?? 0;
+    if (kind === 3) { const e = this.hooks?.entity?.(val); if (e !== undefined) return e; }
     if (kind >= 3 && kind <= 5) return this.vars.get(this.key(kind, val)) ?? 0;
     if (kind === 6 || kind === 7) return Math.round(this.hooks?.charPos(val)?.[kind - 6] ?? 0);
     return 0;

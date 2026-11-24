@@ -221,6 +221,7 @@ export class GameScene implements Scene {
       partner: () => this.partner,
       gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
       openShop: i => this.openShop(i),
+      entity: spawn => { const a = this.actors.find(a => a.enemy && a.rec.id === spawn); return a ? (a.alive ? 1 : 0) : undefined; },
       findSlot: (a, b, alive) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id >= a && 14000000 + m.rec.id <= b && (alive ? !m.free : m.free)); return m ? 14000000 + m.rec.id : -1; },
       spawnSlot: (slot, a, b) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id === slot); if (m) { const [x, y] = worldToReal(a, b); m.revive(x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 60); } },
       sound: id => { audio.sfx(id); },
