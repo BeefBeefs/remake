@@ -158,7 +158,47 @@ export class GameScene {
             this.win.gold += g.gold;
         this.ground.splice(this.ground.indexOf(g), 1);
     }
+    questList() { return [...this.vm?.globals ?? savedGlobals].filter(([k, v]) => k.startsWith('q:') && v > 0).map(([k, v]) => [Number(k.slice(2)), v]).sort((a, b) => a[0] - b[0]); }
+    toggleQuestLog() {
+        if (this.qlog) {
+            this.qlog = null;
+            this.win.panel = null;
+            return;
+        }
+        if (this.shop)
+            return;
+        this.qlog = { sel: 0 };
+        this.win.panel = (x, y) => x < 320 && y < 416;
+    }
+    qlogClick(x, y) {
+        const i = Math.floor((y - 40) / 14);
+        if (x >= 8 && x < 310 && i >= 0 && i < this.questList().length)
+            this.qlog.sel = i;
+    }
+    drawQuestLog(ctx) {
+        ctx.fillStyle = 'rgba(8,8,24,0.92)';
+        ctx.fillRect(0, 0, 318, 416);
+        ctx.strokeStyle = '#a89868';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, 316, 414);
+        this.text.draw(ctx, 'Quests (Q to close)', 10, 12);
+        const list = this.questList(), clean = (t) => t.replace(/\u3000/g, ' ').replace(/[^\x20-\x7e]/g, '?');
+        if (!list.length) {
+            this.text.draw(ctx, 'No quests yet.', 10, 40);
+            return;
+        }
+        list.forEach(([q, st], i) => {
+            if (i === this.qlog.sel) {
+                ctx.fillStyle = 'rgba(255,255,255,0.18)';
+                ctx.fillRect(8, 40 + i * 14, 302, 14);
+            }
+            this.text.draw(ctx, clean(`${st === 2 ? '[Done] ' : ''}${this.titles[q] ?? `Quest ${q}`}`).slice(0, 48), 12, 42 + i * 14);
+        });
+        const q = list[Math.min(this.qlog.sel, list.length - 1)][0], desc = this.tables[String(700 + q)]?.s ?? [];
+        desc.forEach((l, i) => this.text.draw(ctx, clean(l).slice(0, 50), 12, 60 + list.length * 14 + i * 13));
+    }
     openShop(index) {
+        this.qlog = null;
         this.shop = new Shop(shopStock(this.win.db, index));
         this.dlg = null;
         this.win.item = true;
@@ -255,6 +295,8 @@ export class GameScene {
         this.groundDraw = { get y() { return 0; }, draw: () => { } };
         /** Open message window: text lines and clickable ~option~ regions (line, col0, col1). */
         this.dlg = null;
+        /** Quest log (Q): lists quests set by sentence 62 (state 1 accepted, 2 done); text from Table.Tbd 41 (titles) and 700+q (description lines). */
+        this.qlog = null;
         this.shop = null;
         const mk = map.markerReal();
         this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
@@ -462,7 +504,11 @@ export class GameScene {
             this.win.status = !this.win.status;
         if (inp.pressed.has('i'))
             this.win.item = !this.win.item;
-        if (inp.pressed.has('escape')) {
+        if (inp.pressed.has('q'))
+            this.toggleQuestLog();
+        if (inp.pressed.has('escape') && this.qlog)
+            this.toggleQuestLog();
+        else if (inp.pressed.has('escape')) {
             if (this.win.status || this.win.item)
                 this.win.status = this.win.item = false;
             else
@@ -470,7 +516,9 @@ export class GameScene {
         }
         if (inp.clicked) {
             const b = this.gui.button(inp.x, inp.y);
-            if (this.paused) {
+            if (this.qlog && inp.x < 320 && inp.y < 416)
+                this.qlogClick(inp.x, inp.y);
+            else if (this.paused) {
                 if (inp.y > 215 && inp.y < 235) {
                     this.save();
                     TitleScene.create(this.app).then(t => this.app.go(t));
@@ -648,6 +696,8 @@ export class GameScene {
         this.win.draw(ctx, this.hud, this.name, inp.x, inp.y);
         this.gui.draw(ctx, this.hud);
         this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y);
+        if (this.qlog)
+            this.drawQuestLog(ctx);
         if (this.dlg)
             this.drawDialog(ctx);
         if (this.dead) {
