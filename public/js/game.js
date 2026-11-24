@@ -244,8 +244,7 @@ export class GameScene {
         const q = list[Math.min(this.qlog.sel, list.length - 1)][0], desc = this.tables[String(700 + q)]?.s ?? [];
         desc.forEach((l, i) => this.text.draw(ctx, clean(l).slice(0, 50), 12, 60 + list.length * 14 + i * 13));
     }
-    /** Background track for a scenario (PLACEHOLDER mapping by area type: town 'city', fields 'field', Dusty Ruins 'dungeon'; the original choice is not decoded). */
-    musicFor(scenario) { return scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
+    musicFor(scenario) { return this.musicIdx !== undefined ? `bgm${this.musicIdx}` : scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
     openShop(index) {
         this.qlog = null;
         this.shop = new Shop(shopStock(this.win.db, index, this.tables));
@@ -453,7 +452,7 @@ export class GameScene {
                 savedZones.set(k, v);
         }
         const scenario = opts?.scenario ?? SCENARIO;
-        const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null, actors: [], zones: [] }));
+        const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null, music: undefined, actors: [], zones: [] }));
         const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
         const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm, scenario, gender);
         if (vm) {
@@ -506,6 +505,7 @@ export class GameScene {
                 }
         }
         g.zones = sc.zones;
+        g.musicIdx = sc.music;
         if (vm)
             for (const [, st, ch] of vm.data.status)
                 if (st === 3)

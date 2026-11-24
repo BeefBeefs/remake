@@ -183,7 +183,9 @@ export class GameScene implements Scene {
     desc.forEach((l, i) => this.text.draw(ctx, clean(l).slice(0, 50), 12, 60 + list.length * 14 + i * 13));
   }
   /** Background track for a scenario (PLACEHOLDER mapping by area type: town 'city', fields 'field', Dusty Ruins 'dungeon'; the original choice is not decoded). */
-  musicFor(scenario: string) { return scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
+  /** Music number from the scenario's Mct header (exe 0x4275e0); falls back to a guess when the data lacks it. */
+  musicIdx: number | undefined;
+  musicFor(scenario: string) { return this.musicIdx !== undefined ? `bgm${this.musicIdx}` : scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
   private shop: Shop | null = null;
   private openShop(index: number) {
     this.qlog = null; this.shop = new Shop(shopStock(this.win.db, index, this.tables as unknown as Record<string, Tbl>)); this.dlg = null; this.win.item = true;
@@ -285,7 +287,7 @@ export class GameScene implements Scene {
     const ld = opts?.load;
     if (ld) { savedGlobals = new Map(ld.globals); savedVars.clear(); for (const [k, v] of Object.entries(ld.vars)) savedVars.set(k, new Map(v)); savedGround.clear(); for (const [k, v] of Object.entries(ld.ground)) savedGround.set(k, v); savedZones.clear(); for (const [k, v] of Object.entries(ld.zones ?? {})) savedZones.set(k, v); }
     const scenario = opts?.scenario ?? SCENARIO;
-    const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null as string | null, actors: [] as Actor[], zones: [] as Zone[] }));
+    const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null as string | null, music: undefined as number | undefined, actors: [] as Actor[], zones: [] as Zone[] }));
     const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
     const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm, scenario, gender);
     if (vm) { vm.globals = savedGlobals; const sv = savedVars.get(scenario); if (sv) vm.vars = sv; }
@@ -300,7 +302,7 @@ export class GameScene implements Scene {
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
     // monsters addressed by script slot ranges (sentences 31/32) start dormant: the script summons them (trap rooms, waves)
     if (vm) { const ranges: [number, number][] = []; for (const b of vm.data.blocks) for (const [sid, ops] of b) if ((sid === 31 || sid === 32) && ops[0][0] < 3 && ops[1][0] < 3) ranges.push([ops[0][1], ops[1][1]]); for (const a of g.actors) if (a.enemy && ranges.some(([lo, hi]) => 14000000 + a.rec.id >= lo && 14000000 + a.rec.id <= hi)) { a.slot = true; a.hidden = true; } }
-    g.zones = sc.zones;
+    g.zones = sc.zones; g.musicIdx = sc.music;
     if (vm) for (const [, st, ch] of vm.data.status) if (st === 3) g.enterIds.add(ch);
     if (opts?.entry !== undefined) { const pt = g.entryPoint(opts.entry); if (pt) { g.player.x = pt[0]; g.player.y = pt[1]; g.spawnPos = { x: pt[0], y: pt[1] }; } }
     g.checkZones(true);   // zones already under the player (arrival point) only fire once he has left and re-entered

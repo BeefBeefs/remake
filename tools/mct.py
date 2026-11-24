@@ -45,6 +45,10 @@ def parse_objects(path):
             out.append(dict(id=10000000 + v[0], type=v[1], a=v[4], b=v[5], rect=list(v[6:10]), vis=v[12], pat=v[18]))
     return out
 
+def music_index(path):
+    """BGM number (System/Game/Music/BGMnn.Voc) of the scenario: int at byte 0x220 of Scenario.Mct (exe 0x4275e0 reads it as scenario-info +0x1c)."""
+    return struct.unpack_from('<i', open(path, 'rb').read(0x224), 0x220)[0]
+
 def map_name(path):
     m = re.search(rb'Map\\([A-Za-z0-9_\-]+)\.map', open(path, 'rb').read(), re.I)
     return m.group(1).decode() if m else None

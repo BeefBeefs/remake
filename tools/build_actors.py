@@ -31,4 +31,4 @@ if __name__ == '__main__':
         objs = mct.parse_objects(os.path.join(src, 'Scenario', sc, 'Scenario.Mct'))
         for t in sorted({o['type'] for o in objs if o['type'] >= 0}):
             if os.path.isdir(os.path.join(src, 'Character', 'OBJECT', '%08d' % t)): convert_object_model(t)
-        json.dump(dict(map=mct.map_name(os.path.join(src, 'Scenario', sc, 'Scenario.Mct')), actors=recs, objects=objs), open(os.path.join(out, 'scenario', sc + '.actors.json'), 'w'))
+        json.dump(dict(map=mct.map_name(os.path.join(src, 'Scenario', sc, 'Scenario.Mct')), music=mct.music_index(os.path.join(src, 'Scenario', sc, 'Scenario.Mct')), actors=recs, objects=objs), open(os.path.join(out, 'scenario', sc + '.actors.json'), 'w'))

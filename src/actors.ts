@@ -104,7 +104,7 @@ export class Actor implements Drawable {
   }
   hit(px: number, py: number) { if (this.gen) return this.alive && Math.abs(px - this.x) < 55 && Math.abs(py - this.y) < 40; return this.alive && Math.abs(px - this.x) < 20 && py < this.y + 6 && py > this.y - 70; }
 }
-export async function loadScenarioActors(app: App, scenario: string): Promise<{ map: string | null; actors: Actor[]; zones: Zone[] }> {
-  const d: { map: string | null; actors: ActorRec[]; objects?: ZoneRec[] } = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
-  return { map: d.map, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))), zones: await loadZones(app, d.objects ?? []) };
+export async function loadScenarioActors(app: App, scenario: string): Promise<{ map: string | null; music?: number; actors: Actor[]; zones: Zone[] }> {
+  const d: { map: string | null; music?: number; actors: ActorRec[]; objects?: ZoneRec[] } = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
+  return { map: d.map, music: d.music, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))), zones: await loadZones(app, d.objects ?? []) };
 }

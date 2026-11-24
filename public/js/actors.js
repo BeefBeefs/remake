@@ -152,6 +152,6 @@ export class Actor {
 }
 export async function loadScenarioActors(app, scenario) {
     const d = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
-    return { map: d.map, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))), zones: await loadZones(app, d.objects ?? []) };
+    return { map: d.map, music: d.music, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))), zones: await loadZones(app, d.objects ?? []) };
 }
 //# sourceMappingURL=actors.js.map
