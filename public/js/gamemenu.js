@@ -7,6 +7,8 @@ export const HELP = [
     ['S or C', 'Status window'], ['I', 'Item window'], ['Q', 'Mission List'], ['H', 'This help'], ['Esc', 'Game menu / close windows'],
     ['1 - 8', 'Use belt pocket item (or right click)'], ['M', 'Magic window'], ['N', 'Map'],
     ['F1 - F8', 'Select a magic for the right mouse button'], ['F9', 'Select attack for right click'], ['Right click', 'Cast / attack (items: use)'],
+    ['B', 'Lay a mine'], ['P', 'Power-up mode (when blinking)'], ['Space', 'Companion ACTIVE / INACTIVE'],
+    ['Tab + click', 'Companion: jump / fetch / switch / status'], ['Tab + right click', 'Companion dash'],
     ['F12', 'Mute sound'], ['G', 'Debug overlay'],
 ];
 /** Game Menu (MENU button / Esc): frame from Game/Status pattern 119, entries from the manual: Settings, Mission List, Map, Help, Save and Return to Title, Save and Exit. */
@@ -30,7 +32,7 @@ export class GameMenu {
                 { id: 'dark', label: `Display Darkness    ${settings.darkness ? 'ON' : 'OFF'}`, x: 120, y: 178, w: 400, h: 30 },
                 { id: 'back', label: 'Back', x: 250, y: 300, w: 140, h: 30 },
             ];
-        return [{ id: 'back', label: 'Back', x: 250, y: 330, w: 140, h: 30 }];
+        return [{ id: 'back', label: 'Back', x: 250, y: 372, w: 140, h: 30 }];
     }
     update(dt, x, y, clicked, esc) {
         this.noteT = Math.max(0, this.noteT - dt);
@@ -96,7 +98,7 @@ export class GameMenu {
         if (this.page === 'settings')
             this.text.drawCenter(ctx, 'Click the left half of a bar to lower, the right half to raise', 320, 240);
         if (this.page === 'help')
-            HELP.forEach(([k, d], i) => { this.text.draw(ctx, k, 90, 84 + i * 24); this.text.draw(ctx, d, 250, 84 + i * 24); });
+            HELP.forEach(([k, d], i) => { this.text.draw(ctx, k, 90, 70 + i * 15); this.text.draw(ctx, d, 250, 70 + i * 15); });
         if (this.noteT > 0)
             this.text.drawCenter(ctx, this.note, 320, 336);
     }

@@ -3,6 +3,9 @@ import { SpriteSet } from './sprites.js';
 export const SCREEN_W = 640, SCREEN_H = 480, HUD_Y = 412;
 /** Belt pocket slot rectangles of the HUD (the frames are part of the panel image): 1-4 on the upper row, 5-8 on the lower one. */
 export const BELT = Array.from({ length: 8 }, (_, k) => ({ x: (k < 4 ? 360 : 408) + (k % 4) * 32, y: k < 4 ? 417 : 449, w: 26, h: 23 }));
+/** Clickable HUD areas: MINE button, power-up button (crossed swords at the left of the panel) and the companion HP gauge (click = attack mode). */
+export const MINE_BTN = { x: 494, y: 422, w: 20, h: 20 }, POWER_BTN = { x: 25, y: 408, w: 34, h: 23 }, PET_GAUGE = { x: 0, y: 391, w: 112, h: 18 };
+export const inBox = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
 /** HUD built from System/Game/Pattern/Bar.njp (+ Font00 / System cursor). Pattern numbers per docs/FORMATS.md. */
 export class Gui {
     constructor(bar, font, sys) {
@@ -63,6 +66,16 @@ export class Gui {
             return f.canvas.getContext('2d').getImageData(Math.floor(x - f.ox), Math.floor(y - f.oy), 1, 1).data[3] > 0;
         };
         return test(17) ? 'menu' : test(16) ? 'item' : test(18) ? 'status' : null;
+    }
+    /** Companion HP gauge ("PARTNER HP", Bar patterns 29-32) with the ACTIVE / INACTIVE label. */
+    partner(ctx, frac, active) {
+        this.put(ctx, this.bar.pattern(30));
+        this.put(ctx, this.bar.pattern(29), Math.max(0, Math.min(1, frac)));
+        this.put(ctx, this.bar.pattern(active ? 31 : 32));
+    }
+    /** Power-up button: dim when unavailable, blinking when it can be used, steady bright while the power mode lasts. */
+    power(ctx, state, t) {
+        this.put(ctx, this.bar.pattern(state === 'on' || (state === 'ready' && Math.floor(t / 350) % 2 === 0) ? 12 : 13));
     }
     cursor(ctx, x, y, pressed = false) {
         const f = this.sys.pattern(pressed ? 1 : 0);

@@ -6,8 +6,9 @@ import { Shop, shopStock, sellPrice } from './shop.js';
 import { loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
 import { Magic } from './magic.js';
+import { Pet } from './companion.js';
 import { MapWindow } from './mapwin.js';
-import { Gui, SCREEN_W, SCREEN_H, HUD_Y, BELT } from './gui.js';
+import { Gui, SCREEN_W, SCREEN_H, HUD_Y, BELT, MINE_BTN, POWER_BTN, PET_GAUGE, inBox } from './gui.js';
 import { Text } from './app.js';
 import { Windows } from './windows.js';
 import { ItemDb } from './items.js';
@@ -34,6 +35,7 @@ const ANIM_IDLE = 0, ANIM_WALK = 1, ANIM_RUN = 2;
 const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
 const dirIndex = (vx, vy) => FACING[(Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 8];
 export class GameScene {
+    get partner() { return this.petIdx ?? this.pet?.idx ?? -1; }
     /** Remember per-scenario script flags and ground items (used for transitions and saving). */
     stash() {
         if (this.vm) {
@@ -50,7 +52,7 @@ export class GameScene {
             v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
             inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0]),
             vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
-            magic: this.magic.save(), explored: this.mapwin.encode(),
+            magic: this.magic.save(), explored: this.mapwin.encode(), pet: this.pet?.save(this.petKills),
         };
         if (this.slot >= 0)
             writeSlot(this.slot, d);
@@ -207,8 +209,8 @@ export class GameScene {
         d.lines.forEach((l, i) => this.text.draw(ctx, l, b.x + 12, b.y + 12 + i * 13));
     }
     groundAt(px, py) { return this.ground.find(g => Math.abs(px - g.x) < 18 && py > g.y - 30 && py < g.y + 8); }
-    pickUp(g) {
-        if (Math.hypot(g.x - this.player.x, (g.y - this.player.y) * 1.6) > 140)
+    pickUp(g, force = false) {
+        if (!force && Math.hypot(g.x - this.player.x, (g.y - this.player.y) * 1.6) > 140)
             return;
         if (g.item) {
             if (!this.win.inv.add(g.item))
@@ -268,8 +270,8 @@ export class GameScene {
     }
     closeShop() { this.shop = null; this.win.sellValue = null; this.win.panel = null; }
     /** Click a scripted object (chest, barrel...): runs its status-0 block when the player is close enough. */
-    useZone(z) {
-        if (!this.vm || Math.hypot(z.x - this.player.x, (z.y - this.player.y) * 1.6) > 200)
+    useZone(z, force = false) {
+        if (!this.vm || (!force && Math.hypot(z.x - this.player.x, (z.y - this.player.y) * 1.6) > 200))
             return;
         this.vm.talk(z.rec.id);
         this.openDialog();
@@ -325,8 +327,8 @@ export class GameScene {
         return lists[k][lists[k].length - 1] ?? null;
     }
     talkTo(a) {
-        if (!this.vm || a.rec.kind !== 'people')
-            return;
+        if (!this.vm || a.enemy)
+            return; // people and the dog keepers' dogs (kind 'partner') talk through their script object
         if (Math.hypot(a.x - this.player.x, (a.y - this.player.y) * 1.6) > 260)
             return;
         this.vm.talk(12000000 + a.rec.id);
@@ -356,7 +358,15 @@ export class GameScene {
         /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
         this.titles = [];
         this.banner = null;
-        this.partner = -1;
+        /** Companion dog (null = none). `petIdx` is set while a swapped-in dog is still loading so the scripts already see it. */
+        this.pet = null;
+        this.petIdx = null;
+        this.petKills = new Map();
+        this.statusReq = null;
+        this.mines = [];
+        this.blasts = [];
+        this.fightT = 0;
+        this.powerT = 0;
         this.pollT = 0;
         this.musicT = 0;
         this.zones = [];
@@ -394,7 +404,9 @@ export class GameScene {
         this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
         const p = this.player;
         this.spawnPos = { x: p.x, y: p.y };
-        this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d) };
+        const self = this;
+        this.actorCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), hitPlayer: d => this.hitPlayer(d), get pet() { return self.pet && !self.pet.dead ? self.pet : null; }, hitPet: d => this.hitPet(d) };
+        this.petCtx = { get px() { return p.x; }, get py() { return p.y; }, blocked: (x, y) => this.map.blockedReal(x, y), enemies: () => this.actors.filter(a => a.enemy && !a.gen && a.alive), hit: (a, d) => this.damage(a, d) };
         this.drawPlayer = {
             get y() { return p.y; },
             draw: (c, camX, camY) => {
@@ -425,7 +437,7 @@ export class GameScene {
                 show: (id, v) => { const z = this.zones.find(z => z.rec.id === id); if (z)
                     z.visible = v; const a = this.actors.find(a => 12000000 + a.rec.id === id); if (a)
                     a.hidden = !v; },
-                partner: () => this.partner,
+                partner: () => this.partner, swapPartner: i => this.swapPet(i), partnerStatus: i => { this.statusReq = i; },
                 gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
                 openShop: i => this.openShop(i),
                 exit: (idx, entry) => { void this.exit(idx, entry); },
@@ -507,7 +519,7 @@ export class GameScene {
                 g.mapwin.decode(ld.explored);
             }
         }
-        g.win.hudOver = (x, y) => g.magic.barHit(x, y) >= 0;
+        g.win.hudOver = (x, y) => g.magic.barHit(x, y) >= 0 || inBox(MINE_BTN, x, y) || inBox(POWER_BTN, x, y) || (!!g.pet && inBox(PET_GAUGE, x, y));
         if (isDarkMap(map.m.name))
             g.dark = await DarkLayer.load(app);
         g.slot = opts?.carry ? opts.carry.slot : ld ? (opts?.slot ?? ld.slot ?? 0) : firstFree();
@@ -560,6 +572,20 @@ export class GameScene {
                 g.spawnPos = { x: pt[0], y: pt[1] };
             }
         }
+        if (cr?.pet) {
+            g.pet = cr.pet;
+            g.petKills = cr.petKills;
+            Object.assign(g.pet, { x: g.player.x + 50, y: g.player.y + 20, state: 'idle', t: 0 });
+        }
+        else if (ld?.pet) {
+            g.petKills = new Map(ld.pet.others);
+            const pet = await Pet.load(app, tables, ld.pet.idx, g.player.x + 50, g.player.y + 20);
+            pet.kills = ld.pet.kills;
+            pet.heroLevel = g.hud.level;
+            pet.hp = ld.pet.hp;
+            pet.mode = ld.pet.mode;
+            g.pet = pet;
+        }
         g.checkZones(true); // zones already under the player (arrival point) only fire once he has left and re-entered
         g.tables = tables;
         g.expTable = tables['13'].v;
@@ -574,8 +600,24 @@ export class GameScene {
     /** Use a consumable: tablets restore HP (field 27), capsules MP (28); Vitality/Mental Source and the fruits raise max HP/MP for good (29/30). Meat is companion food. */
     useItem(e) {
         const it = e.item, fx = ItemDb.effect(it), h = this.hud;
+        if (it.sec === 3 && it.f['31']) { // Meat: companion food (heals field / 10 HP, guess)
+            const pet = this.pet;
+            if (!pet) {
+                this.banner = { text: 'You have no companion', t: 0 };
+                return;
+            }
+            if (!pet.dead && pet.hp >= pet.maxHp) {
+                this.banner = { text: `${pet.name} is not hungry`, t: 0 };
+                return;
+            }
+            this.win.inv.remove(e);
+            const hp = Math.round(it.f['31'] / 10);
+            pet.feed(hp);
+            this.floaters.push({ x: pet.x, y: pet.y - 60, t: 0, s: `+${hp}` });
+            return;
+        }
         if (it.sec !== 3 || (!fx.hp && !fx.mp && !fx.maxHp && !fx.maxMp)) {
-            this.banner = { text: it.f['31'] ? 'Meat is food for your companion' : 'This item cannot be used', t: 0 };
+            this.banner = { text: 'This item cannot be used', t: 0 };
             return;
         }
         if (this.dead)
@@ -668,7 +710,7 @@ export class GameScene {
         // power = weapon attack (item field 26; fists = 10) * strength% (stat table row 4: 140 at level 1, +10 per fighter level). The real player attack builder was not found, so using strength as a multiplier is a GUESS.
         // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
         const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
-        const raw = power * (9 + Math.floor(Math.random() * 3)) / 10;
+        const raw = power * (this.powerT > 0 ? 1.5 : 1) * (9 + Math.floor(Math.random() * 3)) / 10;
         this.damage(a, Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0)))));
     }
     /** Apply final damage to a monster: floater, sound, and the death rewards (experience, gold, item drop, kill script event). */
@@ -680,6 +722,8 @@ export class GameScene {
             a.die();
             this.totalExp += a.stats.exp;
             this.syncExp();
+            if (this.pet && !this.pet.dead)
+                this.pet.addKill();
             if (this.vm?.event(4, 14000000 + a.rec.id))
                 this.openDialog();
             const [g0, g1] = a.stats.gold, gold = Math.random() * 100 < (a.stats.goldChance ?? 100) ? Math.max(1, g0 + Math.floor(Math.random() * (g1 - g0 + 1))) : 0; // exe 0x45a030: chance%, then min + rand%(max-min+1)
@@ -692,6 +736,131 @@ export class GameScene {
                 this.randomDrop(st.dlv, wa, wb);
             }
         }
+    }
+    /** Sentence 45 ("Swap Dogs"): the chosen dog joins, the previous one returns to its keeper (the scripts' polls show / hide the keepers' dogs by `partner`). */
+    swapPet(i) {
+        if (this.partner === i)
+            return;
+        if (this.pet)
+            this.petKills.set(this.pet.idx, this.pet.kills);
+        this.petIdx = i;
+        const p = this.player;
+        Pet.load(this.app, this.tables, i, p.x + 50, p.y + 20).then(pet => {
+            pet.kills = this.petKills.get(i) ?? 0;
+            pet.heroLevel = this.hud.level;
+            pet.hp = pet.maxHp;
+            this.pet = pet;
+            this.petIdx = null;
+            this.banner = { text: `${pet.name} joined you`, t: 0 };
+        }).catch(() => { this.petIdx = null; });
+    }
+    hitPet(d) {
+        const pet = this.pet;
+        if (!pet || pet.dead)
+            return;
+        const dm = pet.take(Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10));
+        this.floaters.push({ x: pet.x, y: pet.y - 60, t: 0, s: `-${dm}` });
+        if (pet.dead)
+            this.banner = { text: `${pet.name} has fallen - feed it Meat`, t: 0 };
+    }
+    /** Sentence 3 ("Check Status" in a dog keeper's menu): that dog's status; the active dog shows its real numbers, a resting one level 1 (levels of resting dogs are kept as kills). */
+    showDogStatus(i) {
+        const t = this.tables['60'];
+        if (!t)
+            return;
+        if (this.pet?.idx === i) {
+            this.setDialog(this.pet.statusLines());
+            this.dlgPick = () => { };
+            return;
+        }
+        const kills = this.petKills.get(i) ?? 0, lv = Math.max(1, Math.min(this.hud.level, 1 + Math.floor(kills / 6))), m = t.v.slice(i * t.cols + 2, i * t.cols + 5);
+        this.setDialog([`${t.s?.[i * t.cols] ?? `Dog ${i}`}   Lv.${lv}`, ' ', `HP ${Math.round((100 + 30 * (lv - 1)) * m[0] / 1000)}`, `Attack ${Math.round((10 + 3 * (lv - 1)) * m[1] / 1000)}   Defense ${Math.round((2 + 1.5 * (lv - 1)) * m[2] / 1000)}`, `Monsters defeated ${kills}`, ' ', '  ~OK~']);
+        this.dlgPick = () => { };
+    }
+    togglePetMode() { if (!this.pet)
+        return; this.banner = { text: `${this.pet.name}: ${this.pet.toggleMode().toUpperCase()}`, t: 0 }; }
+    /** TAB + left click: click the dog = its status; an item = fetch it; a switch / button = press it; otherwise jump (kicking an enemy there). */
+    petCommand(wx, wy, hov, gh, zov) {
+        const pet = this.pet;
+        if (pet.dead) {
+            this.banner = { text: `${pet.name} cannot move`, t: 0 };
+            return;
+        }
+        if (pet.hit(wx, wy)) {
+            if (!pet.busy) {
+                this.setDialog(pet.statusLines());
+                this.dlgPick = () => { };
+            }
+            return;
+        }
+        if (gh) {
+            pet.fetch(gh.x, gh.y, () => { if (this.ground.includes(gh))
+                this.pickUp(gh, true); });
+            return;
+        }
+        if (zov) {
+            pet.jumpTo(zov.x, zov.y + 10, null, () => this.useZone(zov, true));
+            return;
+        }
+        const e = hov?.enemy ? hov : null;
+        if (!pet.jumpTo(e ? e.x : wx, e ? e.y : wy + 30, e, undefined, e ? undefined : (x, y) => this.map.blockedReal(x, y)) && !pet.busy)
+            this.banner = { text: `${pet.name} cannot jump there`, t: 0 };
+    }
+    // ---- mines (B / MINE button) ----
+    mineEntry() { return this.win.inv.entries.find(e => e.item.sec === 4 && (e.item.f['1'] ?? 0) === 1); }
+    /** Mines are Mine items (section 4, id 1) of the inventory. GUESSES: arms after 0.6 s, a monster within 44 px or 8 s triggers it, blast radius 110 px, damage 60 + 6 per hero level. */
+    layMine() {
+        if (this.dead)
+            return;
+        const e = this.mineEntry();
+        if (!e) {
+            this.banner = { text: 'You have no mines', t: 0 };
+            return;
+        }
+        this.win.inv.remove(e);
+        this.mines.push({ x: this.player.x, y: this.player.y + 4, t: 0 });
+    }
+    updateMines(dt) {
+        this.win.mineStock = this.win.inv.entries.filter(e => e.item.sec === 4 && (e.item.f['1'] ?? 0) === 1).length;
+        for (const b of this.blasts)
+            b.t += dt;
+        this.blasts = this.blasts.filter(b => b.t < 450);
+        this.mines = this.mines.filter(m => {
+            m.t += dt;
+            const trig = (m.t > 600 && this.actors.some(a => a.enemy && !a.gen && a.alive && Math.hypot(a.x - m.x, (a.y - m.y) * 1.6) < 44)) || m.t > 8000;
+            if (!trig)
+                return true;
+            this.blasts.push({ x: m.x, y: m.y, t: 0 });
+            audio.sfx(SFX.kill, 0.9);
+            const pw = 60 + 6 * (this.hud.level - 1);
+            for (const a of this.actors)
+                if (a.enemy && !a.gen && a.alive && Math.hypot(a.x - m.x, (a.y - m.y) * 1.6) < 110)
+                    this.damage(a, Math.max(1, Math.round(pw * (9 + Math.floor(Math.random() * 3)) / 10)));
+            return false;
+        });
+    }
+    // ---- power-up (P / button) ----
+    /** GUESSES: the button starts blinking after 12 s of fighting; the mode lasts 15 s: +25 % speed, +50 % melee damage, +30 % magic damage, +50 % Heal. */
+    powerState() { return this.powerT > 0 ? 'on' : this.fightT >= 12000 ? 'ready' : 'off'; }
+    activatePower() {
+        if (this.powerState() !== 'ready') {
+            if (this.powerT <= 0)
+                this.banner = { text: 'Power is not ready yet', t: 0 };
+            return;
+        }
+        this.powerT = 15000;
+        this.fightT = 0;
+        this.banner = { text: 'Power up!', t: 0 };
+    }
+    updatePower(dt) {
+        if (this.powerT > 0) {
+            this.powerT -= dt;
+            if (this.powerT <= 0)
+                this.banner = { text: 'Power returned to normal', t: 0 };
+            return;
+        }
+        const p = this.player, near = !this.dead && this.actors.some(a => a.enemy && !a.gen && a.alive && Math.hypot(a.x - p.x, (a.y - p.y) * 1.6) < 380);
+        this.fightT = near ? Math.min(12000, this.fightT + dt) : Math.max(0, this.fightT - dt * 0.5);
     }
     /** The Status / Magic / Map windows share the left half of the screen: opening one closes the others (and the mission list). */
     showLeft(w, keep = false) {
@@ -731,7 +900,7 @@ export class GameScene {
                 this.banner = { text: 'HP is already full', t: 0 };
                 return;
             }
-            const g = Math.min(h.hpMax - h.hp, Math.max(1, Math.round(h.hpMax * m.healPct(sp.id) / 100)));
+            const g = Math.min(h.hpMax - h.hp, Math.max(1, Math.round(h.hpMax * m.healPct(sp.id) * (this.powerT > 0 ? 1.5 : 1) / 100)));
             h.hp += g;
             this.floaters.push({ x: p.x, y: p.y - 90, t: 0, s: `+${g}` });
         }
@@ -740,7 +909,7 @@ export class GameScene {
             const tx = hov ? hov.x : wx, ty = hov ? hov.y : wy + 30, dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
             if (this.atkT < 0)
                 p.dir = dirIndex(dx, dy);
-            this.shots.push({ x: p.x, y: p.y, vx: dx / d, vy: dy / d, t: 0, spell: sp, dmg: (24 + 3 * (h.level - 1)) * m.power(sp.id) });
+            this.shots.push({ x: p.x, y: p.y, vx: dx / d, vy: dy / d, t: 0, spell: sp, dmg: (24 + 3 * (h.level - 1)) * m.power(sp.id) * (this.powerT > 0 ? 1.3 : 1) });
         }
         h.mp -= sp.mp;
         this.castT = 400;
@@ -798,12 +967,22 @@ export class GameScene {
             this.warpMenu = false;
             this.showWarpMenu();
         }
+        if (this.statusReq !== null && !this.dlg) {
+            const i = this.statusReq;
+            this.statusReq = null;
+            this.showDogStatus(i);
+        }
         if ((this.saveT += dt) > 10000 && !this.dead && !this.leaving) {
             this.saveT = 0;
             this.save();
         }
         for (const a of this.actors)
             a.update(dt, this.actorCtx);
+        if (this.pet) {
+            this.pet.heroLevel = this.hud.level;
+            this.pet.update(dt, this.petCtx);
+        }
+        this.updateMines(dt);
         for (const a of this.actors)
             if (a.slot && a.state === 'die' && a.deadT > 3000)
                 a.hidden = true;
@@ -827,6 +1006,16 @@ export class GameScene {
         for (let k = 0; k < 9; k++)
             if (inp.pressed.has(`f${k + 1}`))
                 this.magic.sel = k;
+        if (!this.dlg && !this.shop && !this.dead) {
+            if (inp.pressed.has('b'))
+                this.layMine();
+            if (inp.pressed.has('p'))
+                this.activatePower();
+            if (inp.pressed.has(' '))
+                this.togglePetMode();
+        }
+        if (!this.dead)
+            this.updatePower(dt);
         this.mapwin.reveal(this.scenario, this.map, p.x, p.y);
         this.mapwin.update(dt, keys, inp.pressed);
         this.updateShots(dt);
@@ -845,7 +1034,10 @@ export class GameScene {
                 if (e)
                     this.useItem(e);
             }
-        if (inp.rclicked) { // right click: belt slot, or a consumable in the item window
+        if (inp.rclicked && keys.has('tab') && this.pet && !this.dead && !this.dlg && !this.shop && inp.y < HUD_Y) {
+            this.pet.dash(inp.x + this.camX - this.pet.x, inp.y + this.camY + 30 - this.pet.y);
+        }
+        else if (inp.rclicked) { // right click: belt slot, or a consumable in the item window
             const k = BELT.findIndex(r => inp.x >= r.x && inp.x < r.x + r.w && inp.y >= r.y && inp.y < r.y + r.h), e = k >= 0 ? this.belt()[k] : this.win.entryAt(inp.x, inp.y);
             if (e)
                 this.useItem(e);
@@ -868,6 +1060,12 @@ export class GameScene {
             const bk = this.magic.barHit(inp.x, inp.y);
             if (bk >= 0)
                 this.magic.sel = bk;
+            else if (inBox(MINE_BTN, inp.x, inp.y))
+                this.layMine();
+            else if (inBox(POWER_BTN, inp.x, inp.y))
+                this.activatePower();
+            else if (this.pet && inBox(PET_GAUGE, inp.x, inp.y))
+                this.togglePetMode();
             else if ((this.win.status || this.win.magic) && inp.x < 320 && inp.y >= 4 && inp.y < 36 && inp.x >= 40 && inp.x < 280)
                 this.showLeft(inp.x < 165 ? 'status' : 'magic', true);
             else if (this.win.magic && inp.x < 320 && inp.y < 416)
@@ -919,7 +1117,11 @@ export class GameScene {
         const hov = inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
         const gh = !hov && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
         const zov = !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.zones.find(z => z.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
-        if (hov?.enemy && (inp.clicked || inp.down))
+        const tab = keys.has('tab') && !!this.pet;
+        if (tab && inp.clicked && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y))
+            this.petCommand(inp.x + this.camX, inp.y + this.camY, hov, gh, zov);
+        else if (tab && inp.down) { /* TAB held: the mouse commands the dog, the hero stays */ }
+        else if (hov?.enemy && (inp.clicked || inp.down))
             this.target = hov;
         else if (inp.clicked && hov)
             this.talkTo(hov);
@@ -942,7 +1144,7 @@ export class GameScene {
         if (keys.has('s') || (ar && keys.has('arrowdown')))
             dy++;
         let vx = dx, vy = dy;
-        if (!dx && !dy && inp.down && !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y)) {
+        if (!dx && !dy && inp.down && !tab && !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) && !this.gui.button(inp.x, inp.y)) {
             // walk towards the mouse pointer (screen space, relative to the player)
             const mx = inp.x - (p.x - this.camX), my = inp.y - (p.y - this.camY), d = Math.hypot(mx, my);
             if (d > 6) {
@@ -975,7 +1177,7 @@ export class GameScene {
             vx = vy = 0;
         }
         if (vx || vy) {
-            const run = keys.has('shift') || hud.running, n = Math.hypot(vx, vy), sp = (run ? 0.30 : 0.16) * dt;
+            const run = keys.has('shift') || hud.running, n = Math.hypot(vx, vy), sp = (run ? 0.30 : 0.16) * dt * (this.powerT > 0 ? 1.25 : 1);
             p.dir = dirIndex(vx, vy);
             const nx = p.x + vx / n * sp, ny = p.y + vy / n * sp;
             // slide along obstacles: try both axes, then each alone
@@ -1026,7 +1228,34 @@ export class GameScene {
                 else
                     this.text.drawCenter(c, `${g.gold}G`, g.x - cx, g.y - cy - 14);
             } }));
-        map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...this.zones.filter(z => z.drawn), ...gd]);
+        map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...(this.pet ? [this.pet] : []), ...this.actors, ...this.zones.filter(z => z.drawn), ...gd]);
+        for (const m of this.mines) { // laid mines: dark disc with a blinking red light
+            const x = m.x - this.camX, y = m.y - this.camY;
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.beginPath();
+            ctx.ellipse(x, y, 11, 6, 0, 0, 7);
+            ctx.fill();
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.ellipse(x, y - 2, 8, 4, 0, 0, 7);
+            ctx.fill();
+            if (Math.floor(m.t / 250) % 2 === 0) {
+                ctx.fillStyle = '#ff3030';
+                ctx.fillRect(Math.round(x) - 1, Math.round(y) - 4, 3, 3);
+            }
+        }
+        for (const b of this.blasts) { // mine explosions
+            const x = b.x - this.camX, y = b.y - this.camY - 10, r = 20 + b.t / 450 * 100, g = ctx.createRadialGradient(x, y, 0, x, y, r);
+            g.addColorStop(0, 'rgba(255,240,160,0.9)');
+            g.addColorStop(0.5, 'rgba(255,120,30,0.6)');
+            g.addColorStop(1, 'rgba(120,20,0,0)');
+            ctx.globalAlpha = 1 - b.t / 450;
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.ellipse(x, y, r, r * 0.62, 0, 0, 7);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
         if (this.dark && settings.darkness)
             this.dark.draw(ctx, p.x - this.camX, p.y - this.camY - 30);
         for (const s of this.shots) { // bolts: glowing orb with a short trail
@@ -1058,6 +1287,8 @@ export class GameScene {
             this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2);
         }
         const hov = inp.y < HUD_Y ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
+        if (this.pet && inp.y < HUD_Y && this.pet.hit(inp.x + this.camX, inp.y + this.camY))
+            this.text.drawCenter(ctx, `${this.pet.name} Lv.${this.pet.level}`, Math.round(this.pet.x - this.camX), Math.round(this.pet.y - this.camY - 60));
         const gh = !hov && inp.y < HUD_Y ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
         if (gh)
             this.text.drawCenter(ctx, gh.item ? gh.item.name : `${gh.gold} Gold`, Math.round(gh.x - this.camX), Math.round(gh.y - this.camY - 30));
@@ -1071,6 +1302,9 @@ export class GameScene {
         if (this.mapwin.open)
             this.mapwin.draw(ctx, this.text, this.scenario, this.map, this.areaName(), p.x, p.y);
         this.gui.draw(ctx, this.hud);
+        this.gui.power(ctx, this.powerState(), performance.now());
+        if (this.pet)
+            this.gui.partner(ctx, this.pet.hp / this.pet.maxHp, this.pet.mode === 'active');
         this.magic.drawBar(ctx, this.text, inp.x, inp.y);
         this.belt().forEach((e, k) => this.win.drawIcon(ctx, e.item, BELT[k].x + BELT[k].w / 2, BELT[k].y + BELT[k].h / 2, 0.7));
         this.shop?.draw(ctx, this.text, this.win, inp.x, inp.y);

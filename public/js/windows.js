@@ -8,6 +8,7 @@ export class Windows {
         this.icons = icons;
         this.text = text;
         this.db = db;
+        this.mineStock = 0;
         this.status = false;
         this.item = false;
         this.magic = false;
@@ -80,6 +81,7 @@ export class Windows {
                 }
             }
             this.text.draw(ctx, `Gold: ${this.gold}`, 340, 398);
+            this.text.draw(ctx, `Mines: ${this.mineStock}`, 450, 398);
             const hover = this.inv.at(Math.floor((mx - GRID_X) / CELL), Math.floor((my - GRID_Y) / CELL));
             if (hover && mx >= GRID_X) {
                 const it = hover.item, lines = [it.name, `${it.type} (${SECTION_NAMES[it.sec]})`];

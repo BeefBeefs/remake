@@ -114,6 +114,12 @@ export class ScriptVM {
                 this.set(o[2][0], o[2][1], lo + Math.floor(Math.random() * Math.max(1, hi - lo + 1)));
                 return true;
             } // random in [lo, hi]
+            case 3:
+                this.hooks?.partnerStatus?.(ev(0));
+                return true;
+            case 45:
+                this.hooks?.swapPartner?.(ev(0));
+                return true;
             case 44:
                 this.set(o[0][0], o[0][1], this.hooks?.partner() ?? -1);
                 return true;
@@ -219,7 +225,6 @@ export class ScriptVM {
             case 26:
             case 40:
             case 41:
-            case 45:
             case 60:
             case 64:
             case 72: return true;

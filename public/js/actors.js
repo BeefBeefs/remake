@@ -82,26 +82,37 @@ export class Actor {
             this.deadT += dt;
             return;
         }
-        const dx = c.px - this.x, dy = (c.py - this.y) * 1.6, d = Math.hypot(dx, dy);
+        let tx = c.px, ty = c.py, onPet = false;
+        if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) * 0.9) {
+            tx = c.pet.x;
+            ty = c.pet.y;
+            onPet = true;
+        }
+        const dx = tx - this.x, dy = (ty - this.y) * 1.6, d = Math.hypot(dx, dy);
         const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
         if (this.state === 'attack') {
             if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) {
                 this.hitDone = true;
-                if (d < 70)
-                    c.hitPlayer(this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)));
+                if (d < 70) {
+                    const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1));
+                    if (onPet)
+                        c.hitPet?.(dm);
+                    else
+                        c.hitPlayer(dm);
+                }
             }
             if (this.t >= frames * FRAME_MS)
                 this.set('idle');
             return;
         }
         if (d < 46) {
-            this.dir = dirIndex(dx, c.py - this.y);
+            this.dir = dirIndex(dx, ty - this.y);
             this.set('attack');
         }
         else if (d < 300) {
-            this.dir = dirIndex(dx, c.py - this.y);
+            this.dir = dirIndex(dx, ty - this.y);
             this.set('walk');
-            const sp = this.stats.speed * dt, nx = this.x + dx / d * sp, ny = this.y + (c.py - this.y) / Math.hypot(dx, c.py - this.y) * sp;
+            const sp = this.stats.speed * dt, nx = this.x + dx / d * sp, ny = this.y + (ty - this.y) / Math.hypot(dx, ty - this.y) * sp;
             if (!c.blocked(nx, ny)) {
                 this.x = nx;
                 this.y = ny;

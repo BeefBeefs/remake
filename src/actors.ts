@@ -15,7 +15,7 @@ export const ENEMY_STATS: Record<number, { hp: number; dmg: [number, number]; ex
   2: { hp: 45, dmg: [4, 9], exp: 12, gold: [8, 30], speed: 0.075 },
   5: { hp: 200, dmg: [8, 16], exp: 120, gold: [200, 400], speed: 0.09 },
 };
-export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number): void; }
+export interface ActorCtx { px: number; py: number; blocked(x: number, y: number): boolean; hitPlayer(dmg: number): void; /** The companion dog while it is standing (monsters go for whichever of the two is closer). */ pet?: { x: number; y: number } | null; hitPet?(dmg: number): void; }
 type State = 'idle' | 'walk' | 'attack' | 'die';
 const ANIM: Record<State, number> = { idle: 0, walk: 1, attack: 2, die: 3 };
 /** Draw order of CAF layers (1 and 0 are the body for the player; higher ones are optional equipment/overlay variants). */
@@ -70,17 +70,19 @@ export class Actor implements Drawable {
     this.t += dt;
     if (this.hidden || !this.enemy || !c || this.gen) return;
     if (this.state === 'die') { this.deadT += dt; return; }
-    const dx = c.px - this.x, dy = (c.py - this.y) * 1.6, d = Math.hypot(dx, dy);
+    let tx = c.px, ty = c.py, onPet = false;
+    if (c.pet && Math.hypot(c.pet.x - this.x, (c.pet.y - this.y) * 1.6) < Math.hypot(c.px - this.x, (c.py - this.y) * 1.6) * 0.9) { tx = c.pet.x; ty = c.pet.y; onPet = true; }
+    const dx = tx - this.x, dy = (ty - this.y) * 1.6, d = Math.hypot(dx, dy);
     const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
     if (this.state === 'attack') {
-      if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70) c.hitPlayer(this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1))); }
+      if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm); } }
       if (this.t >= frames * FRAME_MS) this.set('idle');
       return;
     }
-    if (d < 46) { this.dir = dirIndex(dx, c.py - this.y); this.set('attack'); }
+    if (d < 46) { this.dir = dirIndex(dx, ty - this.y); this.set('attack'); }
     else if (d < 300) {
-      this.dir = dirIndex(dx, c.py - this.y); this.set('walk');
-      const sp = this.stats.speed * dt, nx = this.x + dx / d * sp, ny = this.y + (c.py - this.y) / Math.hypot(dx, c.py - this.y) * sp;
+      this.dir = dirIndex(dx, ty - this.y); this.set('walk');
+      const sp = this.stats.speed * dt, nx = this.x + dx / d * sp, ny = this.y + (ty - this.y) / Math.hypot(dx, ty - this.y) * sp;
       if (!c.blocked(nx, ny)) { this.x = nx; this.y = ny; } else if (!c.blocked(nx, this.y)) this.x = nx; else if (!c.blocked(this.x, ny)) this.y = ny;
     } else this.set('idle');
   }

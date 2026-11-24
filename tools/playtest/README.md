@@ -8,3 +8,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `gamemenu.mjs` opens the Game Menu with Esc in a dungeon, toggles settings, checks darkness and closing.
 - `belt.mjs` uses belt items with keys 1-8 / right click (Tablet, Capsule, Vitality Source, Apple).
 - `magic.mjs` casts Fire Bolt-style spells at a goblin with a clear line of fire; `tabs.mjs` checks F-keys, M, tab clicks and Esc for the Status/Magic windows; `mapsave.mjs` also opens the map and checks the saved magic/explored data.
+- `companion.mjs` hires Kerberos through the keeper's dialog (Check Status / Swap Dogs), then fights, Space mode, Meat, a mine, power-up, TAB jump/dash/status and the save data. `companion-tab.mjs` checks TAB+click jump and TAB+right click dash on open ground.

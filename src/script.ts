@@ -14,6 +14,10 @@ export interface ScriptHooks {
   show(id: number, visible: boolean): void;
   /** Sentence 44: index of the current partner (0 Kerberos, 1 Gravity, 2 Dune, 3 Fang ...), -1 = none. */
   partner(): number;
+  /** Sentence 45: take dog `index` as the companion (the previous one goes back to its keeper). */
+  swapPartner?(index: number): void;
+  /** Sentence 3: show the status of dog `index`. */
+  partnerStatus?(index: number): void;
   /** Sentence 24: random item drop of tier `tier` at world position (a, b). */
   randomDrop(tier: number, a: number, b: number): void;
   /** Sentence 62: quest `q` (Table.Tbd table 41 row) changed to `state` (1 accepted, 2 completed). */
@@ -99,6 +103,8 @@ export class ScriptVM {
       case 14: { const d = ev(1); this.set(o[0][0], o[0][1], d ? Math.trunc(ev(0) / d) : 0); return true; }
       case 15: { const d = ev(1); this.set(o[0][0], o[0][1], d ? ev(0) % d : 0); return true; }
       case 39: { const lo = ev(0), hi = ev(1); this.set(o[2][0], o[2][1], lo + Math.floor(Math.random() * Math.max(1, hi - lo + 1))); return true; }   // random in [lo, hi]
+      case 3: this.hooks?.partnerStatus?.(ev(0)); return true;
+      case 45: this.hooks?.swapPartner?.(ev(0)); return true;
       case 44: this.set(o[0][0], o[0][1], this.hooks?.partner() ?? -1); return true;
       case 34: this.set(o[1][0], o[1][1], -1); return true;   // zone/player interaction state: -1 = not applicable (the town gate is hard-wired in game.ts)
       // Decoded but not simulated yet: 27 named warp zone, 46/56 object state fields, 36/30/33 spawn hazard/effect objects, 65 ambient colour.
@@ -128,7 +134,7 @@ export class ScriptVM {
       // 42/43/63 (a, b): per-player checks run before NPC quest talk (party / network conditions); the script then tests a != b. Offline they always pass.
       case 42: case 43: case 63: this.set(o[0][0], o[0][1], 0); this.set(o[1][0], o[1][1], 0); return true;
       // No offline effect / visual only: 7 8 (talk begin/end markers), 20 (partner hire dialog), 26 (loot burst effect), 40 (object move effect), 41 (unused town object), 45 (partner candidate), 60 (effect), 64, 72.
-      case 7: case 8: case 20: case 26: case 40: case 41: case 45: case 60: case 64: case 72: return true;
+      case 7: case 8: case 20: case 26: case 40: case 41: case 60: case 64: case 72: return true;
       case 12: this.set(o[0][0], o[0][1], ev(0) - ev(1)); return true;
       case 62: { const q = ev(0), st = ev(1); if (st === 2) { if (this.globals.get(`q:${q}`) === 2) return true; }   // a quest completes only once (exe keeps a done flag per quest)
         this.globals.set(`q:${q}`, st); this.hooks?.quest(q, st); return true; }

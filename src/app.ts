@@ -29,7 +29,7 @@ export class App {
     addEventListener('keydown', e => {
       const k = e.key.toLowerCase(); if (!i.keys.has(k)) i.pressed.add(k);
       i.keys.add(k); if (e.key.length === 1 || e.key === 'Backspace') i.typed.push(e.key);
-      if (e.key.startsWith('Arrow') || e.key === 'F1' || e.key === ' ') e.preventDefault();
+      if (e.key.startsWith('Arrow') || e.key === 'F1' || e.key === ' ' || e.key === 'Tab') e.preventDefault();
     });
     addEventListener('keyup', e => i.keys.delete(e.key.toLowerCase()));
     (window as any).app = this;

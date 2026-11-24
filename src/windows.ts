@@ -10,7 +10,7 @@ const GRID_X = 335, GRID_Y = 71, CELL = 32;
 
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
 export class Windows {
-  status = false; item = false; magic = false; mapOpen = false; ps?: PlayerStats;
+  mineStock = 0; status = false; item = false; magic = false; mapOpen = false; ps?: PlayerStats;
   /** HUD elements that sit above the world view (the magic bar) and must swallow clicks. */
   hudOver: ((x: number, y: number) => boolean) | null = null;
   inv = new Inventory(); gold = 0;
@@ -56,7 +56,7 @@ export class Windows {
         ctx.drawImage(f.canvas, Math.round(cx), Math.round(cy));
         if (e.eq) { ctx.strokeStyle = '#60e060'; ctx.lineWidth = 2; ctx.strokeRect(GRID_X + e.x * CELL + 1, GRID_Y + e.y * CELL + 1, e.w * CELL - 2, e.h * CELL - 2); }
       }
-      this.text.draw(ctx, `Gold: ${this.gold}`, 340, 398);
+      this.text.draw(ctx, `Gold: ${this.gold}`, 340, 398); this.text.draw(ctx, `Mines: ${this.mineStock}`, 450, 398);
       const hover = this.inv.at(Math.floor((mx - GRID_X) / CELL), Math.floor((my - GRID_Y) / CELL));
       if (hover && mx >= GRID_X) {
         const it = hover.item, lines = [it.name, `${it.type} (${SECTION_NAMES[it.sec]})`];

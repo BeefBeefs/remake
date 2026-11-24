@@ -42,7 +42,7 @@ export class App {
             i.keys.add(k);
             if (e.key.length === 1 || e.key === 'Backspace')
                 i.typed.push(e.key);
-            if (e.key.startsWith('Arrow') || e.key === 'F1' || e.key === ' ')
+            if (e.key.startsWith('Arrow') || e.key === 'F1' || e.key === ' ' || e.key === 'Tab')
                 e.preventDefault();
         });
         addEventListener('keyup', e => i.keys.delete(e.key.toLowerCase()));
