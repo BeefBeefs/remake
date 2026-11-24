@@ -21,8 +21,6 @@ const savedVars = new Map<string, Map<string, number>>(); let savedGlobals = new
 interface GroundSave { x: number; y: number; sec: number; idx: number; gold: number; }
 const savedGround = new Map<string, GroundSave[]>();
 /** Zone ids whose visibility differs from the Mct default (opened chests ...), per scenario. */
-/** Quest-item drops by `scenario:actor id` (see hurtEnemy). */
-const QUEST_DROPS: Record<string, number> = { '00000004:0': 99000000, '00010001:0': 99000001 };
 /** PLACEHOLDER combat sound ids (indices into Voice00.Voc; script-driven sounds use the real ids, e.g. chest 77/78, Black Hammer's taunts 40-43). */
 const SFX = { hit: 1, hurt: 2, kill: 10 };
 const savedZones = new Map<string, Record<number, boolean>>();
@@ -197,19 +195,39 @@ export class GameScene implements Scene {
     if (!this.vm || Math.hypot(z.x - this.player.x, (z.y - this.player.y) * 1.6) > 200) return;
     this.vm.talk(z.rec.id); this.openDialog();
   }
-  /** Sentence 24 / monster drops: `level` is the drop level (chests use 4, 15, 20, 22 in the scripts; monsters 0-23 in their Mct record). The real generator is not decoded
-   *  (Table.Tbd 900-907 turned out to be the player stat tables), so PLACEHOLDER: pick a category, then an item whose price is within the band of that level
-   *  (cap grows 1.2x per level from 300 gold: level 4 ~600, 15 ~4500, 22 ~16000), weighted towards the expensive end. */
+  /** Sentence 24 / monster drops (exe 0x417550). `level` = row of Table.Tbd 30: `(tries, chance %, 10 x (table-31 row, grade code))`.
+   *  tries 0 = one per player; each try succeeds when rand%100 <= chance, then one of the 10 slots is picked at random. A table-31 row is either a fixed item
+   *  `(category, -, -, id, mask)` or, with category -1, a window `(-1, max, min, -1, mask)`: a random weapon/armor/accessory whose power lies in [min, max], chosen by
+   *  the item weight (Item.Ibn field 4, 15000 plain ... 1000 unique). The grade code is 3 decimal digits (units: plain items, tens: magic, hundreds: rare allowed;
+   *  grade 3 always allowed). Not decoded: the item mask (`mask` & col 4). */
   private randomDrop(level: number, a: number, b: number) {
-    const [x, y] = worldToReal(a, b), cap = 300 * Math.pow(1.2, Math.max(0, level));
-    const cats: [number, number][] = [[0, 35], [1, 35], [2, 15], [3, 15]];
-    let r = Math.random() * 100, sec = 0; for (const [s, w] of cats) { if (r < w) { sec = s; break; } r -= w; }
-    const all = this.win.db.sections[sec].filter(i => ItemDb.price(i) > 0 && ItemDb.price(i) <= cap && (i.name === i.type || Math.random() < 0.5));
-    const pool = all.filter(i => ItemDb.price(i) >= cap / 6).length ? all.filter(i => ItemDb.price(i) >= cap / 6) : all;
-    if (!pool.length) { this.ground.push({ x, y, gold: Math.round(cap * (0.05 + Math.random() * 0.1)) + 5 }); return; }
-    const wt = (i: ItemDef) => Math.sqrt(ItemDb.price(i)), tot = pool.reduce((p, i) => p + wt(i), 0); let r2 = Math.random() * tot, item = pool[0];
-    for (const i of pool) { r2 -= wt(i); if (r2 <= 0) { item = i; break; } }
-    this.ground.push({ x, y, item, gold: 0 });
+    const t30 = this.tables['30'], t31 = this.tables['31']; if (!t30 || !t31 || level < 0 || level >= t30.v.length / t30.cols) return;
+    const row = t30.v.slice(level * t30.cols, (level + 1) * t30.cols), [x, y] = worldToReal(a, b), tries = row[0] > 0 ? row[0] : 1;
+    for (let n = 0; n < tries; n++) {
+      if (Math.floor(Math.random() * 100) > row[1]) continue;
+      const slot = Math.floor(Math.random() * 10), ref = row[2 + 2 * slot], code = row[3 + 2 * slot]; if (ref < 0) continue;
+      const r = t31.v.slice(ref * t31.cols, (ref + 1) * t31.cols);
+      const item = r[0] !== -1 ? this.win.db.find(r[0], r[3]) : this.windowItem(r[1], r[2], code);
+      if (!item) continue;
+      if (item.sec === 4 && (item.f['1'] ?? 0) >= 99000000 && this.hasQuestItem(item)) continue;   // quest items drop until you hold one / the quest is done
+      this.ground.push({ x: x + (n ? (Math.random() - .5) * 40 : 0), y, item, gold: 0 });
+    }
+  }
+  private hasQuestItem(it: ItemDef) {
+    const id = it.f['1'] ?? 0, quest = id === 99000000 ? 1 : id === 99000001 ? 2 : 0;
+    return this.win.inv.entries.some(e => e.item.sec === 4 && (e.item.f['1'] ?? 0) === id) || (quest > 0 && this.vm?.globals.get(`q:${quest}`) === 2);
+  }
+  /** Random weapon/armor/accessory with power in [min, max] (field 36 for weapons/armor, 25 for accessories), weighted by field 4; the list is picked by its total weight. */
+  private windowItem(max: number, min: number, code: number): ItemDef | null {
+    const ok = [true, Math.floor(code / 10) % 10 !== 0, Math.floor(code / 100) % 10 !== 0], g0 = code % 10 !== 0;
+    const lists = [0, 1, 2].map(sec => this.win.db.sections[sec].filter(i => {
+      const g = i.f['2'] ?? 0, grade = g === 0 ? g0 : g === 3 ? true : ok[g], v = i.f[sec === 2 ? '25' : '36'];
+      return grade && v !== undefined && (max < 0 || v <= max) && (min < 0 || v >= min);
+    }));
+    const w = (i: ItemDef) => i.f['4'] ?? 0, tot = lists.map(l => l.reduce((p, i) => p + w(i), 0)), sum = tot[0] + tot[1] + tot[2]; if (sum <= 0) return null;
+    let pick = Math.random() * sum, k = 0; while (k < 2 && pick >= tot[k]) pick -= tot[k++];
+    for (const i of lists[k]) { pick -= w(i); if (pick < 0) return i; }
+    return lists[k][lists[k].length - 1] ?? null;
   }
   private talkTo(a: Actor) {
     if (!this.vm || a.rec.kind !== 'people') return;
@@ -325,12 +343,6 @@ export class GameScene implements Scene {
       const [g0, g1] = a.stats.gold, gold = g0 + Math.floor(Math.random() * (g1 - g0 + 1));
       if (gold > 0) this.ground.push({ x: a.x, y: a.y, gold });
       // item drop: chance (percent) and level come from the monster's Mct record; level picks the PLACEHOLDER table row (Table.Tbd 902-907 rows 2-8)
-      // quest items (the town script wants item section 4: Malse's Gem 99000000, Syria's Spirit Stone 99000001). No script grants them, so the exe must drop them from the
-      // thief monsters: Black Hammer (scenario 4 boss, "snatched a gem") and the goblin boss of the ruins ("stolen by Goblins at the ruins"). The second one is a GUESS.
-      const qd = QUEST_DROPS[`${this.scenario}:${a.rec.id}`];
-      if (qd && !this.win.inv.entries.some(e => e.item.sec === 4 && (e.item.f['1'] ?? 0) === qd) && this.vm?.globals.get(`q:${qd === 99000000 ? 1 : 2}`) !== 2) {
-        const it = this.win.db.find(4, qd); if (it) this.ground.push({ x: a.x + 20, y: a.y + 10, item: it, gold: 0 });
-      }
       const st = a.rec.st; if (st && st.dlv >= 0 && Math.random() * 100 < st.drop) { const [wa, wb] = realToWorld(a.x, a.y); this.randomDrop(st.dlv, wa, wb); }
     }
   }
