@@ -22,7 +22,7 @@ const savedGround = new Map<string, GroundSave[]>();
 const SAVE_KEY = 'shadowflare_save_v1';
 export interface SaveData {
   v: 1; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
-  inv: [number, number, number, number][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>;
+  inv: [number, number, number, number, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>;
 }
 export function readSave(): SaveData | null { try { const t = localStorage.getItem(SAVE_KEY); return t ? JSON.parse(t) : null; } catch { return null; } }
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
@@ -55,7 +55,7 @@ export class GameScene implements Scene {
     this.stash();
     const d: SaveData = {
       v: 1, name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-      inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y]),
+      inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0]),
       vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround),
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch (e) { console.warn('save failed', e); }
@@ -153,7 +153,7 @@ export class GameScene implements Scene {
     if (ld) {
       Object.assign(g.player, { x: ld.x, y: ld.y }); g.spawnPos = { x: map.markerReal()?.[0] ?? ld.x, y: map.markerReal()?.[1] ?? ld.y };
       g.hud = ld.hud; g.totalExp = ld.totalExp; g.syncExp(); g.win.gold = ld.gold;
-      for (const [sec, idx, x, y] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h }); } }
+      for (const [sec, idx, x, y, eq] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h, eq: !!eq }); } }
     }
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
     g.expTable = tables['13'].v; g.syncExp();
@@ -178,12 +178,14 @@ export class GameScene implements Scene {
     }
   }
   private hitPlayer(d: number) {
-    if (this.dead) return; const h = this.hud; h.hp = Math.max(0, h.hp - d);
+    if (this.dead) return; const h = this.hud; d = Math.max(1, d - Math.floor(this.win.stats().defense * 0.5)); h.hp = Math.max(0, h.hp - d);
     this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` });
     if (h.hp <= 0) { this.dead = true; this.target = null; this.atkT = -1; this.player.anim = 23; this.player.t = 0; }
   }
   private hurtEnemy(a: Actor) {
-    const dmg = Math.max(1, Math.round((8 + this.hud.level * 2) * (0.8 + Math.random() * 0.4)));
+    // placeholder formula: base from level + a roll of the equipped weapon's attack range (fists when none)
+    const st = this.win.stats(), roll = st.atkMin + Math.random() * (st.atkMax - st.atkMin);
+    const dmg = Math.max(1, Math.round((4 + this.hud.level * 2 + (st.atkMax ? roll : 2)) * (0.9 + Math.random() * 0.2)));
     a.hp -= dmg; this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) });
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp();
@@ -209,6 +211,7 @@ export class GameScene implements Scene {
     if (inp.clicked) {
       const b = this.gui.button(inp.x, inp.y);
       if (this.paused) { if (inp.y > 215 && inp.y < 235) { this.save(); TitleScene.create(this.app).then(t => this.app.go(t)); } else this.paused = false; }
+      else if (this.win.entryAt(inp.x, inp.y)) this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y)!);
       else if (b === 'status') this.win.status = !this.win.status;
       else if (b === 'item') this.win.item = !this.win.item;
       else if (b === 'menu') this.paused = true;
@@ -256,9 +259,9 @@ export class GameScene implements Scene {
     } else if (this.atkT < 0 && p.anim !== ANIM_IDLE) { p.anim = ANIM_IDLE; p.t = 0; }
     p.t += dt;
     if (this.atkT >= 0) {
-      const fr = this.caf.anims[3].dirs[p.dir].frames || 11;
-      if (!this.atkHit && p.t >= fr * FRAME_MS * 0.45) { this.atkHit = true; if (this.target?.alive) this.hurtEnemy(this.target); }
-      if (p.t >= fr * FRAME_MS) { this.atkT = -1; p.anim = ANIM_IDLE; p.t = 0; }
+      const fr = this.caf.anims[3].dirs[p.dir].frames || 11, dur = fr * FRAME_MS * 100 / Math.max(30, this.win.stats().speed);
+      if (!this.atkHit && p.t >= dur * 0.45) { this.atkHit = true; if (this.target?.alive) this.hurtEnemy(this.target); }
+      if (p.t >= dur) { this.atkT = -1; p.anim = ANIM_IDLE; p.t = 0; }
     }
   }
 

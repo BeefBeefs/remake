@@ -43,7 +43,7 @@ export class GameScene {
         this.stash();
         const d = {
             v: 1, name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-            inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y]),
+            inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0]),
             vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround),
         };
         try {
@@ -238,11 +238,11 @@ export class GameScene {
             g.totalExp = ld.totalExp;
             g.syncExp();
             g.win.gold = ld.gold;
-            for (const [sec, idx, x, y] of ld.inv) {
+            for (const [sec, idx, x, y, eq] of ld.inv) {
                 const item = win.db.get(sec, idx);
                 if (item) {
                     const [w, h] = ItemDb.size(item);
-                    g.win.inv.entries.push({ item, x, y, w, h });
+                    g.win.inv.entries.push({ item, x, y, w, h, eq: !!eq });
                 }
             }
         }
@@ -290,6 +290,7 @@ export class GameScene {
         if (this.dead)
             return;
         const h = this.hud;
+        d = Math.max(1, d - Math.floor(this.win.stats().defense * 0.5));
         h.hp = Math.max(0, h.hp - d);
         this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` });
         if (h.hp <= 0) {
@@ -301,7 +302,9 @@ export class GameScene {
         }
     }
     hurtEnemy(a) {
-        const dmg = Math.max(1, Math.round((8 + this.hud.level * 2) * (0.8 + Math.random() * 0.4)));
+        // placeholder formula: base from level + a roll of the equipped weapon's attack range (fists when none)
+        const st = this.win.stats(), roll = st.atkMin + Math.random() * (st.atkMax - st.atkMin);
+        const dmg = Math.max(1, Math.round((4 + this.hud.level * 2 + (st.atkMax ? roll : 2)) * (0.9 + Math.random() * 0.2)));
         a.hp -= dmg;
         this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) });
         if (a.hp <= 0) {
@@ -353,6 +356,8 @@ export class GameScene {
                 else
                     this.paused = false;
             }
+            else if (this.win.entryAt(inp.x, inp.y))
+                this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y));
             else if (b === 'status')
                 this.win.status = !this.win.status;
             else if (b === 'item')
@@ -454,13 +459,13 @@ export class GameScene {
         }
         p.t += dt;
         if (this.atkT >= 0) {
-            const fr = this.caf.anims[3].dirs[p.dir].frames || 11;
-            if (!this.atkHit && p.t >= fr * FRAME_MS * 0.45) {
+            const fr = this.caf.anims[3].dirs[p.dir].frames || 11, dur = fr * FRAME_MS * 100 / Math.max(30, this.win.stats().speed);
+            if (!this.atkHit && p.t >= dur * 0.45) {
                 this.atkHit = true;
                 if (this.target?.alive)
                     this.hurtEnemy(this.target);
             }
-            if (p.t >= fr * FRAME_MS) {
+            if (p.t >= dur) {
                 this.atkT = -1;
                 p.anim = ANIM_IDLE;
                 p.t = 0;

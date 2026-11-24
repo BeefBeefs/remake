@@ -18,10 +18,19 @@ export class ItemDb {
   /** Footprint in inventory cells (fields 7 x 8). */
   static size(it: ItemDef): [number, number] { return [it.f['7'] || 1, it.f['8'] || 1]; }
   static price(it: ItemDef) { return it.f['5'] ?? 0; }
+  /** Equipment slot: weapons/accessories by section, armor by field 0 (0 head, 1 body, 2 shield/book, 3 boots). Null for consumables/misc. */
+  static slot(it: ItemDef): Slot | null { return it.sec === 0 ? 'weapon' : it.sec === 1 ? ARMOR_SLOTS[it.f['0'] ?? 1] ?? null : it.sec === 2 ? 'accessory' : null; }
+  /** Weapon damage range (fields 36/37) and attack speed in percent (field 27). */
+  static attack(it: ItemDef): [number, number] { const a = it.f['36'] ?? 0, b = it.f['37'] ?? a; return [Math.min(a, b), Math.max(a, b)]; }
+  static speed(it: ItemDef) { return it.f['27'] ?? 100; }
+  /** Armor defense (field 36). */
+  static defense(it: ItemDef) { return it.f['36'] ?? 0; }
 }
 
 export const INV_COLS = 9, INV_ROWS = 10;
-export interface InvEntry { item: ItemDef; x: number; y: number; w: number; h: number; }
+export interface InvEntry { item: ItemDef; x: number; y: number; w: number; h: number; eq?: boolean; }
+export type Slot = 'weapon' | 'head' | 'body' | 'shield' | 'boots' | 'accessory';
+const ARMOR_SLOTS: Slot[] = ['head', 'body', 'shield', 'boots'];
 
 /** Grid inventory with first-fit placement. */
 export class Inventory {
@@ -38,6 +47,14 @@ export class Inventory {
   }
   at(cx: number, cy: number) { return this.entries.find(e => cx >= e.x && cx < e.x + e.w && cy >= e.y && cy < e.y + e.h); }
   remove(e: InvEntry) { this.entries.splice(this.entries.indexOf(e), 1); }
+  /** Toggle equipping; equipping replaces whatever occupies the same slot. Returns false for non-equipment. */
+  toggleEquip(e: InvEntry) {
+    const slot = ItemDb.slot(e.item); if (!slot) return false;
+    if (e.eq) { e.eq = false; return true; }
+    for (const o of this.entries) if (o.eq && ItemDb.slot(o.item) === slot) o.eq = false;
+    e.eq = true; return true;
+  }
+  equipped(slot?: Slot) { return this.entries.filter(e => e.eq && (!slot || ItemDb.slot(e.item) === slot)); }
 }
 
 export function drawTooltip(ctx: CanvasRenderingContext2D, text: Text, lines: string[], x: number, y: number) {
