@@ -10,6 +10,8 @@ export class ItemDb {
     this.sections = raw.map((s, sec) => s.map((it, idx) => ({ ...it, sec, idx })));
   }
   static async load() { return new ItemDb(await (await fetch('data/ep1/items.json')).json()); }
+  /** Script item reference: category = section, id = field 1 (0 when absent). */
+  find(cat: number, id: number) { return this.sections[cat]?.find(it => (it.f['1'] ?? 0) === id); }
   get(sec: number, idx: number) { return this.sections[sec]?.[idx]; }
   /** Icon = pattern index in System/Game/Pattern/Item0000.njp (field 11). */
   static icon(it: ItemDef) { return it.f['11'] ?? 0; }

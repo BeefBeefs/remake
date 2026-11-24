@@ -1,16 +1,18 @@
 import { App, put, Text } from './app.js';
 import { SpriteSet } from './sprites.js';
 import { HudState } from './gui.js';
-import { ItemDb, Inventory, SECTION_NAMES, drawTooltip } from './items.js';
+import { ItemDb, ItemDef, Inventory, SECTION_NAMES, drawTooltip } from './items.js';
 
 const GRID_X = 335, GRID_Y = 71, CELL = 32;
 
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
 export class Windows {
   status = false; item = false;
-  inv = new Inventory();
+  inv = new Inventory(); gold = 0;
   private constructor(private st: SpriteSet, private icons: SpriteSet, private text: Text, public db: ItemDb) {}
   static async load(app: App) { const [st, icons, text, db] = await Promise.all([app.gui('Game_Status'), app.gui('Game_Item0000'), Text.load(app), ItemDb.load()]); return new Windows(st, icons, text, db); }
+  /** Draw an item's inventory icon centred on (cx, cy). */
+  drawIcon(ctx: CanvasRenderingContext2D, it: ItemDef, cx: number, cy: number, scale = 1) { const f = this.icons.pattern(ItemDb.icon(it)); if (f) { const w = f.canvas.width * scale, h = f.canvas.height * scale; ctx.drawImage(f.canvas, Math.round(cx - w / 2), Math.round(cy - h / 2), Math.round(w), Math.round(h)); } }
   overUI(x: number, y: number) { return (this.status && x < 320 && y < 416) || (this.item && x >= 320 && y < 416); }
   draw(ctx: CanvasRenderingContext2D, h: HudState, name: string, mx = -1, my = -1) {
     if (this.status) {
@@ -34,6 +36,7 @@ export class Windows {
         const cx = GRID_X + e.x * CELL + (e.w * CELL - f.canvas.width) / 2, cy = GRID_Y + e.y * CELL + (e.h * CELL - f.canvas.height) / 2;
         ctx.drawImage(f.canvas, Math.round(cx), Math.round(cy));
       }
+      this.text.draw(ctx, `Gold: ${this.gold}`, 340, 398);
       const hover = this.inv.at(Math.floor((mx - GRID_X) / CELL), Math.floor((my - GRID_Y) / CELL));
       if (hover && mx >= GRID_X) drawTooltip(ctx, this.text, [hover.item.name, `${hover.item.type} (${SECTION_NAMES[hover.item.sec]})`, `Price: ${ItemDb.price(hover.item)}`], mx + 12, my + 12);
     }
