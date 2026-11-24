@@ -78,6 +78,33 @@ export class GameScene {
                 this.openDialog();
         }
     }
+    warp(cmd) {
+        const idx = Number(this.scenario);
+        if (cmd === 38) {
+            if (this.vm && !this.vm.globals.get(`w:${idx}`)) {
+                this.vm.globals.set(`w:${idx}`, 1);
+                this.banner = { text: 'Warp gate opened', t: 0 };
+            }
+        }
+        else
+            this.warpMenu = true;
+    }
+    showWarpMenu() {
+        const t = this.tables['40'], here = Number(this.scenario), list = [];
+        if (t)
+            for (let r = 0; r < t.v.length / 3; r++) {
+                const idx = t.v[r * 3 + 1];
+                if (t.s?.[r * 3] && idx !== here && (idx === 0 || this.vm?.globals.get(`w:${idx}`)))
+                    list.push([t.s?.[r * 3] ?? String(idx), idx]);
+            }
+        if (!list.length) {
+            this.banner = { text: 'No other warp gate is open', t: 0 };
+            return;
+        }
+        this.dlgPick = i => { if (i < list.length)
+            void this.exit(list[i][1], 200); };
+        this.setDialog(['Where do you want to go?', '', ...list.map(l => `  ~${l[0].replace(/[^\x20-\x7e]/g, '?')}~`), '', '  ~Cancel~']);
+    }
     /** Sentence 17: leave for scenario `idx` (folder = index zero-padded to 8 digits) and arrive in its exit zone number `entry`. */
     async exit(idx, entry) {
         if (this.leaving)
@@ -316,6 +343,8 @@ export class GameScene {
         /** Map exits: Mct zone records 10000000+n fire status 3 when the player walks into their rect; the script block runs sentence 17 (destination scenario index, entry zone number). */
         this.inside = new Set();
         this.enterIds = new Set();
+        /** Warp gates (sentences 37/38, Table.Tbd 40 = list of gates: name + scenario index). Opened gates are kept in the script globals as `w:<scenario index>`; the town gate starts open. */
+        this.warpMenu = false;
         this.dlgPick = null;
         /** Items lying on the ground (real-pixel coordinates). gold > 0 for gold piles. */
         this.ground = [];
@@ -364,6 +393,7 @@ export class GameScene {
                 gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
                 openShop: i => this.openShop(i),
                 exit: (idx, entry) => { void this.exit(idx, entry); },
+                warp: cmd => this.warp(cmd),
                 entity: spawn => { const a = this.actors.find(a => a.enemy && a.rec.id === spawn); return a ? (a.alive ? 1 : 0) : undefined; },
                 findSlot: (a, b, alive) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id >= a && 14000000 + m.rec.id <= b && (alive ? !m.free : m.free)); return m ? 14000000 + m.rec.id : -1; },
                 spawnSlot: (slot, a, b) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id === slot); if (m) {
@@ -554,6 +584,10 @@ export class GameScene {
     update(dt) {
         this.dev();
         this.checkZones();
+        if (this.warpMenu && !this.dlg) {
+            this.warpMenu = false;
+            this.showWarpMenu();
+        }
         if ((this.saveT += dt) > 10000 && !this.dead && !this.leaving) {
             this.saveT = 0;
             this.save();

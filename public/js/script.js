@@ -198,6 +198,31 @@ export class ScriptVM {
             case 11:
                 this.set(o[0][0], o[0][1], ev(0) + ev(1));
                 return true;
+            case 13:
+                this.set(o[0][0], o[0][1], ev(0) * ev(1));
+                return true; // multiply: used with 14 to scale a door/lift animation to 0-1000
+            case 37:
+            case 38:
+                this.hooks?.warp(type);
+                return true;
+            // 42/43/63 (a, b): per-player checks run before NPC quest talk (party / network conditions); the script then tests a != b. Offline they always pass.
+            case 42:
+            case 43:
+            case 63:
+                this.set(o[0][0], o[0][1], 0);
+                this.set(o[1][0], o[1][1], 0);
+                return true;
+            // No offline effect / visual only: 7 8 (talk begin/end markers), 20 (partner hire dialog), 26 (loot burst effect), 40 (object move effect), 41 (unused town object), 45 (partner candidate), 60 (effect), 64, 72.
+            case 7:
+            case 8:
+            case 20:
+            case 26:
+            case 40:
+            case 41:
+            case 45:
+            case 60:
+            case 64:
+            case 72: return true;
             case 12:
                 this.set(o[0][0], o[0][1], ev(0) - ev(1));
                 return true;

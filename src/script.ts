@@ -28,6 +28,8 @@ export interface ScriptHooks {
   sound(id: number, a: number, b: number): void;
   /** Sentence 17: go to scenario index `scenario`, arriving in its exit zone `entry`. */
   exit(scenario: number, entry: number): void;
+  /** Sentences 37 (use the warp gate: destination menu) and 38 (switch this gate on). */
+  warp(cmd: 37 | 38): void;
   /** Sentences 31/32: first monster slot (script char number) in [a, b] that is alive / free (dead or not yet summoned), -1 if none. */
   findSlot(a: number, b: number, alive: boolean): number;
   /** Sentence 25: summon the monster of slot `slot` at world position (a, b). */
@@ -121,6 +123,12 @@ export class ScriptVM {
       case 16: this.hooks?.sound(ev(0), ev(2), ev(3)); return true;   // (sound id, 0, x, y)
       case 24: this.hooks?.randomDrop(ev(0), ev(1), ev(2)); return true;
       case 11: this.set(o[0][0], o[0][1], ev(0) + ev(1)); return true;
+      case 13: this.set(o[0][0], o[0][1], ev(0) * ev(1)); return true;   // multiply: used with 14 to scale a door/lift animation to 0-1000
+      case 37: case 38: this.hooks?.warp(type as 37 | 38); return true;
+      // 42/43/63 (a, b): per-player checks run before NPC quest talk (party / network conditions); the script then tests a != b. Offline they always pass.
+      case 42: case 43: case 63: this.set(o[0][0], o[0][1], 0); this.set(o[1][0], o[1][1], 0); return true;
+      // No offline effect / visual only: 7 8 (talk begin/end markers), 20 (partner hire dialog), 26 (loot burst effect), 40 (object move effect), 41 (unused town object), 45 (partner candidate), 60 (effect), 64, 72.
+      case 7: case 8: case 20: case 26: case 40: case 41: case 45: case 60: case 64: case 72: return true;
       case 12: this.set(o[0][0], o[0][1], ev(0) - ev(1)); return true;
       case 62: { const q = ev(0), st = ev(1); if (st === 2) { if (this.globals.get(`q:${q}`) === 2) return true; }   // a quest completes only once (exe keeps a done flag per quest)
         this.globals.set(`q:${q}`, st); this.hooks?.quest(q, st); return true; }
