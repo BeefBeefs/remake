@@ -3,7 +3,7 @@ import { loadCaf, Caf } from './caf.js';
 import { Drawable, worldToReal } from './map.js';
 import type { App } from './app.js';
 
-export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; }
+export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; }
 const FRAME_MS = 80;
 /** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
 const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
@@ -27,7 +27,12 @@ export class Actor implements Drawable {
   stats = ENEMY_STATS[1];
   private constructor(public rec: ActorRec, private set_: SpriteSet, private sdw: SpriteSet, private caf: Caf) {
     [this.x, this.y] = worldToReal(rec.a, rec.b); this.dir = rec.dir % 9;
-    if (rec.kind === 'enemy') { this.stats = ENEMY_STATS[rec.model] ?? ENEMY_STATS[1]; this.hp = this.maxHp = this.stats.hp; }
+    if (rec.kind === 'enemy') {
+      // PLACEHOLDER scaling of the per-model base by the Mct strength multiplier; bosses get a flat bonus.
+      const b = ENEMY_STATS[rec.model] ?? ENEMY_STATS[1], k = rec.power ?? 1, bs = rec.boss !== undefined, r = Math.round;
+      this.stats = { hp: r(b.hp * k * (bs ? 5 : 1)), dmg: [r(b.dmg[0] * Math.sqrt(k) * (bs ? 1.6 : 1)), r(b.dmg[1] * Math.sqrt(k) * (bs ? 1.6 : 1))], exp: r(b.exp * k * (bs ? 8 : 1)), gold: bs ? [b.gold[0] * 4, b.gold[1] * 4] : b.gold, speed: b.speed };
+      this.hp = this.maxHp = this.stats.hp;
+    }
   }
   get name() { return this.rec.name; }
   get enemy() { return this.rec.kind === 'enemy'; }

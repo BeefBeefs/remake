@@ -10,7 +10,13 @@ import { TitleScene } from './title.js';
 const q = new URLSearchParams(location.search);
 const SCENARIO = q.get('scenario') ?? '00000000';
 /** PROVISIONAL scene links (the real exit table is not decoded yet): flagged zone / spawn circle -> scenario. */
-const LINKS = { '00000000': '00000001', '00000001': '00000000' };
+/** Episode 1 map graph (PROVISIONAL): the town's exit opens an area list; every other map returns to the town at its arrival point.
+ *  Names are message 1000000 of each Scenario.Scs. The real game picks the destination on a world map. */
+const HOME = '00000000';
+const AREAS = [
+    ['00000001', 'Near the Remote Town'], ['00000003', 'Wasteland of Hesitation'], ['00000004', 'Iron Boundary Line'], ['00000005', 'Frosty Forest'], ['00000006', 'Wasteland of Pillars'],
+    ['00010000', 'Dusty Ruins, B1F'], ['00010001', 'Dusty Ruins, B3F'], ['00010002', 'Dusty Ruins, B4F'], ['00010003', 'Dusty Ruins, B5F'], ['00010004', 'Dusty Ruins, Room of Judgment'], ['00010005', 'Dusty Ruins, Continued Room'],
+];
 /** Script state kept per scenario so quests are not replayed when re-entering a map. */
 const savedVars = new Map();
 let savedGlobals = new Map();
@@ -55,23 +61,39 @@ export class GameScene {
     }
     atExit() {
         const p = this.player;
-        if (this.map.hasMarkerZone)
+        if (this.scenario === HOME && this.map.hasMarkerZone)
             return this.map.inMarker(p.x, p.y, 5);
         return Math.hypot(p.x - this.spawnPos.x, (p.y - this.spawnPos.y) * 1.6) < 90;
     }
     checkExit() {
-        if (this.leaving || !LINKS[this.scenario])
+        if (this.leaving || this.dlg)
             return;
         const at = this.atExit(), far = Math.hypot(this.player.x - this.spawnPos.x, this.player.y - this.spawnPos.y) > 220;
         if (far)
             this.armed = true;
         if (!at || !this.armed)
             return;
+        if (this.scenario !== HOME)
+            return this.travel(HOME);
+        this.armed = false;
+        this.target = null;
+        this.dlgPick = i => { if (i < AREAS.length)
+            this.travel(AREAS[i][0]); };
+        this.setDialog(['Where do you want to go?', '', ...AREAS.map(a => `  ~${a[1]}~`), '', '  ~Stay in town~']);
+    }
+    travel(scenario) {
         this.leaving = true;
         this.save();
-        GameScene.create(this.app, this.gender, this.name, { scenario: LINKS[this.scenario], carry: this }).then(g => this.app.go(g));
+        GameScene.create(this.app, this.gender, this.name, { scenario, carry: this }).then(g => this.app.go(g));
+    }
+    setDialog(lines) {
+        const opts = [];
+        lines.forEach((l, i) => { const re = /~([^~]*)~/g; let m; while ((m = re.exec(l)))
+            opts.push([i, m.index, m.index + m[0].length]); });
+        this.dlg = { lines: lines.map(l => l.replace(/~/g, ' ')), opts };
     }
     openDialog() {
+        this.dlgPick = null;
         const p = this.vm?.pending;
         if (!p) {
             this.dlg = null;
@@ -95,8 +117,16 @@ export class GameScene {
         else if (inp.clicked || inp.pressed.has('enter') || inp.pressed.has(' '))
             pick = 0;
         if (pick >= 0) {
-            this.vm.advance(pick);
-            this.openDialog();
+            if (this.dlgPick) {
+                const f = this.dlgPick;
+                this.dlgPick = null;
+                this.dlg = null;
+                f(pick);
+            }
+            else {
+                this.vm.advance(pick);
+                this.openDialog();
+            }
         }
     }
     drawDialog(ctx) {
@@ -163,6 +193,7 @@ export class GameScene {
         this.armed = false;
         this.leaving = false;
         this.saveT = 0;
+        this.dlgPick = null;
         /** Items lying on the ground (real-pixel coordinates). gold > 0 for gold piles. */
         this.ground = [];
         this.groundDraw = { get y() { return 0; }, draw: () => { } };

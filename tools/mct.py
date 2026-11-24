@@ -14,9 +14,16 @@ def parse(path):
         ident = pre[2]
         head = struct.unpack_from('<8i', d, i - 32)
         kind, model = ('partner', ident - 10000) if ident >= 10000 else ('people', pre[3])
-        if head[0] in (0, 4) and head[5] in (0, 127):      # goblins etc. (people have other values here)
-            kind, model = 'enemy', (5 if d[i+4:i+4+L] == b'Red Goblin' else head[7])   # Red Goblin -> ENEMY/5 is a guess
-        out.append(dict(name=d[i+4:i+4+L].decode(), kind=kind, model=model, id=ident, a=w[1], b=w[2], dir=w[7], radius=w[0]))
+        col = d[j:j + 4]
+        rec_extra = {}
+        # Monster record shapes (head = 8 x i32 before the length-prefixed name):
+        #   normal : (4|6, 4, 4, tier, power*1000, 0, spawn#, model)
+        #   boss A : (0, 1000, 1000, 1000, 0, bossId, spawn#, model)      e.g. Red Goblin, Black Hammer
+        #   boss B : (200, 200, 0, 1, -65, bossId, 0, model)              e.g. Spike Centinel
+        if head[1] == 4 and head[2] == 4: kind, model, rec_extra = 'enemy', head[7], dict(power=head[4] / 1000)
+        elif head[0] == 0 and head[1:4] == (1000, 1000, 1000): kind, model, rec_extra = 'enemy', head[7], dict(power=1.0, boss=head[5])
+        elif head[0] == 200 and head[1] == 200 and head[4] == -65: kind, model, rec_extra = 'enemy', head[7], dict(power=1.0, boss=head[5])
+        out.append(dict(name=d[i+4:i+4+L].decode(), kind=kind, model=model, id=ident, a=w[1], b=w[2], dir=w[7], radius=w[0], col=col[:3].hex(), **rec_extra))
     return out
 if __name__ == '__main__': print(json.dumps(parse(sys.argv[1]), indent=1))
 

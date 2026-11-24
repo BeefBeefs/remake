@@ -30,7 +30,9 @@ export class Actor {
         [this.x, this.y] = worldToReal(rec.a, rec.b);
         this.dir = rec.dir % 9;
         if (rec.kind === 'enemy') {
-            this.stats = ENEMY_STATS[rec.model] ?? ENEMY_STATS[1];
+            // PLACEHOLDER scaling of the per-model base by the Mct strength multiplier; bosses get a flat bonus.
+            const b = ENEMY_STATS[rec.model] ?? ENEMY_STATS[1], k = rec.power ?? 1, bs = rec.boss !== undefined, r = Math.round;
+            this.stats = { hp: r(b.hp * k * (bs ? 5 : 1)), dmg: [r(b.dmg[0] * Math.sqrt(k) * (bs ? 1.6 : 1)), r(b.dmg[1] * Math.sqrt(k) * (bs ? 1.6 : 1))], exp: r(b.exp * k * (bs ? 8 : 1)), gold: bs ? [b.gold[0] * 4, b.gold[1] * 4] : b.gold, speed: b.speed };
             this.hp = this.maxHp = this.stats.hp;
         }
     }

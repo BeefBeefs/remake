@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "assets": "python3 tools/build_assets.py && python3 tools/build_gui.py && python3 tools/build_data.py && python3 tools/convert_map.py 3rd_2-1 && python3 tools/convert_map.py f00_01 && python3 tools/build_scripts.py && python3 tools/build_actors.py 00000000 00000001 && python3 tools/convert_map.py f00_02",
+    "assets": "python3 tools/build_assets.py && python3 tools/build_gui.py && python3 tools/build_data.py && python3 tools/convert_map.py 3rd_2-1 && python3 tools/convert_map.py f00_01 && python3 tools/build_scripts.py && python3 tools/build_actors.py 00000000 00000001 00000003 00000004 00000005 00000006 00010000 00010001 00010002 00010003 00010004 00010005 && python3 tools/convert_map.py f00_02 f00_04 f00_05 f00_06 f00_07 d01_01 d01_02 d01_03 d01_04 d01_05 d01_06",
     "build": "tsc -p .",
     "serve": "npx http-server public -c-1"
   },
-  "devDependencies": { "typescript": "^5.4.0" }
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
 }
