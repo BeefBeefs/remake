@@ -129,3 +129,17 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 - The function's final clamp applies to every branch: **minimum damage 1**.
 - Remake: `hitPlayer` now rolls `(9 + rand%3) / 10` and subtracts the equipped armor defence (item field 28); monsters hit with exactly their Mct attack (index 655, scaled by sqrt of the strength multiplier) instead of a 0.7-1.3 spread.
 - Unknown: where the player's base defence (stat/level term) and element resistances come from, and what the monster-side `+0x2c4` bonus adds to power.
+
+## Player stat builder (exe 0x44e34c) - partial decode
+- Loads Table.Tbd 900-907 as four gender pairs (even = male `[esi+0x28]`=0, odd = female): **900/901 base** (13 rows x 5 cols), **902/903** (13 x 150), **904/905** and **906/907** (13 x 100) = per-level additions. The 13 rows fill player struct fields `+0x38,+0x3c,+0x40,+0x48,+0x50,+0x54,+0x58,+0x64,+0x68,+0x5c,+0x60,+0x6c` (row 12 overwrites `+0x60`).
+- Level loop (`[esi+0x34]` iterations): each level reads a class byte at `[esi+0xed+level]` (0-4), keeps a per-class counter, and adds `Table[900 + gender + 2*k][row][counter]` per row.
+- Base rows: row 0 = 100 (matches starting HP), row 1 = 128, row 2 = 150 (+40 per class column), row 3 = 150/160, row 4 = 140 (+10), rows 5-8 = four attributes (male 10/10/10/10, female 8/12/10/10; class columns add 4,4,2,2 male / 3,5,2,2 female), rows 9-12 = 40.
+- Not yet known: which row is attack/defence/MP, what the class byte means (stat focus chosen per level?), and which player-struct field feeds the attack builder. The remake keeps its placeholder HP +12 / MP +6 per level and `weapon + 4 + 2*level` attack until those are pinned down.
+
+## Missing scenario data filled in (quest-flow check)
+- The 36-scenario smoke test only counted 404s, and all 43 were missing data, not script errors (no unimplemented sentence types remain in any scenario). Two gaps found and fixed:
+  - 24 scenarios (all `01xxxxxx` and `99xxxxxx`) had no `*.actors.json`, so they had no monsters, NPCs or breakable objects. `python3 tools/build_actors.py <all 36 ids>` now generates them (e.g. 01000001 has 98 monsters, 99000006 has 30 monsters + 3 NPCs).
+  - 24 maps those scenarios use (`d02_*`..`d05_*`, `f01_*`, `y00_*`) were never converted; `python3 tools/convert_map.py <names>` now produces all 37 maps.
+- Remaining 404s are only optional `objects/N_sdw.json` shadow sprites (the loader treats them as optional).
+- `public/` is now about 270 MB (limit for Pages is 1 GB).
+- Open: the Pages deploy time and size should be watched; the player stat builder (previous section) is still partial.
