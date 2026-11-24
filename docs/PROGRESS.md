@@ -89,3 +89,6 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 - Exe 0x412a40 kind 0 = `((9 + rand%3) * attackPower / 10) - (defense * Table 11[resist+10] / 10)`. Remake now uses the discrete `(9 + rand%3)/10` variance on its attack value; the defence/resistance term is not modelled yet (monster defence field not located in the Mct block).
 - Fixed a bogus Mct object record in scenario 00000000 (type 538994035 -> 404s for object sprites): `tools/mct.py parse_objects` now requires `0 <= id < 100000` and `0 <= type < 10000`; `src/zones.ts` ignores types >= 10000. Actors regenerated for 00000000.
 - Smoke test: all 36 scenarios load; remaining console warnings are 404s for optional `_sdw` shadow sprites.
+
+## Deployment
+- `.github/workflows/pages.yml`: on push to main (or manual run) builds with tsc and deploys `public/` to GitHub Pages (Settings > Pages > Source = GitHub Actions). Play at `https://beefbeefs.github.io/remake/play.html?skip=male`.
