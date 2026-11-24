@@ -1,0 +1,12 @@
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+const b = await chromium.launch({args:['--no-sandbox']}); const p = await (await b.newContext({viewport:{width:640,height:480}})).newPage();
+const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+await p.addInitScript(()=>{ if(!localStorage.getItem('seeded')){ const d={v:1,slot:0,at:1,area:'x',name:'OLD',gender:'male',scenario:'00000001',x:12967,y:9457,hud:{hp:150,hpMax:150,mp:150,mpMax:150,level:2,exp:1,expMax:50,running:false},totalExp:30,gold:5,inv:[],vars:{},globals:[],ground:{}}; localStorage.setItem('shadowflare_save_v1',JSON.stringify(d)); localStorage.setItem('seeded','1'); } });
+await p.goto('http://localhost:8123/play.html'); await p.waitForFunction(()=>window.app?.scene?.t,null,{timeout:30000}); await p.waitForTimeout(600);
+const click=async(x,y)=>{ await p.mouse.move(x,y); await p.waitForTimeout(100); await p.mouse.down(); await p.waitForTimeout(60); await p.mouse.up(); await p.waitForTimeout(400); };
+console.log('migrated slot0:',await p.evaluate(()=>[!!localStorage.getItem('shadowflare_save_slot0'),!!localStorage.getItem('shadowflare_save_v1')]));
+await click(300,376); console.log('after NEW GAME:',await p.evaluate(()=>window.app.scene.constructor.name));
+await click(600,458); await p.waitForTimeout(300); await p.screenshot({path:'/tmp/m_newmode.png'}); await click(320,247);
+await p.waitForFunction(()=>window.app.scene.constructor.name==='GameScene'&&window.app.scene.win,null,{timeout:40000}); await p.waitForTimeout(500);
+console.log('new game:',JSON.stringify(await p.evaluate(()=>{const s=window.app.scene; s.save(); return {name:s.name,slot:s.slot,level:s.hud.level, slots:[0,1,2].map(i=>JSON.parse(localStorage.getItem('shadowflare_save_slot'+i)||'null')?.name)};})));
+console.log('errors',errs); await b.close();

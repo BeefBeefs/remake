@@ -10,6 +10,7 @@ import { Text } from './app.js';
 import { Windows } from './windows.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
+import { writeSlot, firstFree } from './saves.js';
 const q = new URLSearchParams(location.search);
 const SCENARIO = q.get('scenario') ?? '00000000';
 /** Script state kept per scenario so quests are not replayed when re-entering a map. */
@@ -20,14 +21,6 @@ const savedGround = new Map();
 /** PLACEHOLDER combat sound ids (indices into Voice00.Voc; script-driven sounds use the real ids, e.g. chest 77/78, Black Hammer's taunts 40-43). */
 const SFX = { hit: 1, hurt: 2, kill: 10 };
 const savedZones = new Map();
-const SAVE_KEY = 'shadowflare_save_v1';
-export function readSave() { try {
-    const t = localStorage.getItem(SAVE_KEY);
-    return t ? JSON.parse(t) : null;
-}
-catch {
-    return null;
-} }
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
 const FRAME_MS = 60;
@@ -45,19 +38,16 @@ export class GameScene {
         savedZones.set(this.scenario, Object.fromEntries(this.zones.filter(z => z.visible !== (z.rec.vis !== 0)).map(z => [z.rec.id, z.visible])));
         savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold })));
     }
+    areaName() { return (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); }
     save() {
         this.stash();
         const d = {
-            v: 1, name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
+            v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
             inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0]),
             vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
         };
-        try {
-            localStorage.setItem(SAVE_KEY, JSON.stringify(d));
-        }
-        catch (e) {
-            console.warn('save failed', e);
-        }
+        if (this.slot >= 0)
+            writeSlot(this.slot, d);
     }
     zoneRect(z, wa, wb) { const r = z.rec.rect; return (r[0] || r[1] || r[2] || r[3]) !== 0 && wa >= z.rec.a + r[0] && wa <= z.rec.a + r[2] && wb >= z.rec.b + r[1] && wb <= z.rec.b + r[3]; }
     checkZones(init = false) {
@@ -375,6 +365,8 @@ export class GameScene {
         this.armed = false;
         this.leaving = false;
         this.saveT = 0;
+        /** Slot (0-5) this character is saved to; -1 = none free. */
+        this.slot = -1;
         /** Map exits: Mct zone records 10000000+n fire status 3 when the player walks into their rect; the script block runs sentence 17 (destination scenario index, entry zone number). */
         this.inside = new Set();
         this.enterIds = new Set();
@@ -457,6 +449,12 @@ export class GameScene {
     }
     static async create(app, gender, name, opts) {
         const ld = opts?.load;
+        if (!ld && !opts?.carry) {
+            savedVars.clear();
+            savedGround.clear();
+            savedZones.clear();
+            savedGlobals = new Map();
+        } // a new game must not inherit the previous character's world state
         if (ld) {
             savedGlobals = new Map(ld.globals);
             savedVars.clear();
@@ -487,6 +485,7 @@ export class GameScene {
         const sg = savedGround.get(scenario);
         if (sg)
             g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0 }] : []; })());
+        g.slot = opts?.carry ? opts.carry.slot : ld ? (opts?.slot ?? ld.slot ?? 0) : firstFree();
         if (ld) {
             Object.assign(g.player, { x: ld.x, y: ld.y });
             g.spawnPos = { x: map.markerReal()?.[0] ?? ld.x, y: map.markerReal()?.[1] ?? ld.y };

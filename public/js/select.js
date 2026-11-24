@@ -1,6 +1,7 @@
 import { put, inRect, Text } from './app.js';
 import { GameScene } from './game.js';
 import { TitleScene } from './title.js';
+import { ModeWindow } from './modewin.js';
 /** New-character screen: Select.njp portraits (7/8 male, 9/10 female), OK 4/5, BACK 2/3, NAME label 34. */
 export class SelectScene {
     constructor(app, s, t, text) {
@@ -11,10 +12,22 @@ export class SelectScene {
         this.gender = 'male';
         this.name = 'SHADOW';
         this.busy = false;
+        this.mode = null;
     }
     static async create(app) { return new SelectScene(app, await app.gui('Select_Select'), await app.gui('Title_Title'), await Text.load(app)); }
-    update() {
+    update(dt = 16) {
         const i = this.app.input;
+        if (this.mode) {
+            const r = this.mode.update(dt);
+            if (r === 'back')
+                this.mode = null;
+            else if (r === 'single') {
+                this.busy = true;
+                this.mode = null;
+                GameScene.create(this.app, this.gender, this.name.trim()).then(g => this.app.go(g));
+            }
+            return;
+        }
         for (const k of i.typed) {
             if (k === 'Backspace')
                 this.name = this.name.slice(0, -1);
@@ -28,8 +41,7 @@ export class SelectScene {
         else if (inRect(this.s.pattern(9), i.x, i.y))
             this.gender = 'female';
         else if (inRect(this.s.pattern(4), i.x, i.y) && this.name.trim()) {
-            this.busy = true;
-            GameScene.create(this.app, this.gender, this.name.trim()).then(g => this.app.go(g));
+            this.mode = new ModeWindow(this.app, this.s, this.text);
         }
         else if (inRect(this.s.pattern(2), i.x, i.y))
             TitleScene.create(this.app).then(t => this.app.go(t));
@@ -47,6 +59,7 @@ export class SelectScene {
         put(ctx, s, hov(2) ? 3 : 2);
         put(ctx, s, 34);
         this.text.draw(ctx, this.name + (Math.floor(performance.now() / 500) % 2 ? '_' : ''), 190, 412);
+        this.mode?.draw(ctx);
         if (this.busy)
             this.text.drawCenter(ctx, 'Loading...', 320, 440);
     }
