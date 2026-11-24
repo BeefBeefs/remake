@@ -15,10 +15,11 @@ export class ItemDb {
     /** Equipment slot: weapons/accessories by section, armor by field 0 (0 head, 1 body, 2 shield/book, 3 boots). Null for consumables/misc. */
     static slot(it) { return it.sec === 0 ? 'weapon' : it.sec === 1 ? ARMOR_SLOTS[it.f['0'] ?? 1] ?? null : it.sec === 2 ? 'accessory' : null; }
     /** Weapon damage range (fields 36/37) and attack speed in percent (field 27). */
-    static attack(it) { const a = it.f['36'] ?? 0, b = it.f['37'] ?? a; return [Math.min(a, b), Math.max(a, b)]; }
+    /** Weapon attack power = field 26 (20 Short Sword ... 4800 Stinger; scales with price, the Glass Sword has 460 power but only 100 durability = field 25). Fields 36/37 are the power RANK used by the drop generator, not damage. */
+    static attack(it) { const a = it.f['26'] ?? 0; return [a, a]; }
     static speed(it) { return it.f['27'] ?? 100; }
-    /** Armor defense (field 36). */
-    static defense(it) { return it.f['36'] ?? 0; }
+    /** Armor defense = field 28 (6 boots ... 170 Knight Plate; field 25 is durability, 36/37 the drop rank). */
+    static defense(it) { return it.f['28'] ?? 0; }
 }
 export const INV_COLS = 9, INV_ROWS = 10;
 const ARMOR_SLOTS = ['head', 'body', 'shield', 'boots'];

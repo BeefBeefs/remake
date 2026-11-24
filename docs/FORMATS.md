@@ -136,7 +136,7 @@ Table 32 row n = shop n: up to 20 row numbers of table 33 (-1 = end). A table-33
 ## Player stat tables (Table.Tbd 900-907) - NOT drop tables
 The exe function at 0x44e34c builds the player's stats from these: tables come in pairs selected by the character's gender (`[esi+0x28]`: 900/901 base values 13 rows x 5, 902/903 150 columns, 904/905 and 906/907 100 columns), then loops over the level (`[esi+0x34]`) adding per-level values. Earlier notes calling them drop tables were wrong.
 Drop level: the 4 / 15 / 20 / 22 that scripts store in the tier variables of sentence 24 and the monster field `[660]` (0-23) are on the same scale; the item generator that consumes them is not found yet (item price/attack grow roughly 1.2x per level).
-Kill exp (exe 0x4134a0): `monster[+0x17c] * share% / 100`, share from Table.Tbd 14 indexed by damage fraction (0-10). Monster HP is `+0xd4`, which is index 654 of the record block, so record index 696 (+0x17c) is the exp value (10 / 20, 98 for Garam Goblin, 0 for Hole Goblins).
+Kill exp (exe 0x4134a0): `monster[+0x17c] * share% / 100`, share from Table.Tbd 14 indexed by damage fraction (0-10). Monster HP is `+0xd4`, which is index 654 of the record block, so exp (+0x17c) is record index 659 (the earlier "696" was wrong; 695-697 are the gold chance/min/max) (10 / 20, 98 for Garam Goblin, 0 for Hole Goblins).
 
 ## Drop tables
 Table.Tbd 30 (343 x 22) = per drop level `[tries, chance%, 10 x (table-31 row, grade code)]`; table 31 (524 x 5) = `(category, -, -, id, mask)` fixed item or `(-1, max, min, -1, mask)` equipment power window; weights = Item.Ibn field 4. Details in docs/PROGRESS.md ("Item generator decoded").

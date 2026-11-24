@@ -336,9 +336,12 @@ export class GameScene implements Scene {
     if (h.hp <= 0) { this.dead = true; this.target = null; this.atkT = -1; this.player.anim = 23; this.player.t = 0; }
   }
   private hurtEnemy(a: Actor) {
-    // placeholder formula: base from level + a roll of the equipped weapon's attack range (fists when none)
-    const st = this.win.stats(), roll = st.atkMin + Math.random() * (st.atkMax - st.atkMin);
-    const dmg = Math.max(1, Math.round((4 + this.hud.level * 2 + (st.atkMax ? roll : 2)) * (9 + Math.floor(Math.random() * 3)) / 10));   // exe 0x412a40: attack * (9 + rand%3) / 10 (minus defence * Table 11 / 10, defence not modelled)
+    // exe 0x412a40 (player->monster): damage = power * (9 + rand%3 | 10 + rand%3) * Table11[neutral=10] / 100 - monster flat defence (+0xe8).
+    // power = weapon attack (item field 26; fists = 2) + a level term; the real player attack builder was not found, so the level term is APPROXIMATE.
+    // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
+    const st = this.win.stats(), power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 2) + 4 + this.hud.level * 2;
+    const raw = power * (9 + Math.floor(Math.random() * 3)) / 10;
+    const dmg = Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0))));
     a.hp -= dmg; this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) }); audio.sfx(a.hp <= 0 ? SFX.kill : SFX.hit, 0.8);
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp();
