@@ -78,12 +78,44 @@ export class ScriptVM {
             case 10:
                 this.hooks?.drop(ev(0), ev(1), ev(2), ev(3), ev(4), o[5] ? ev(5) : ev(4));
                 return true;
+            // 22/23 also set local 0 of the object ("currently shown"), which the partner polls read back through operand kind 5.
             case 22:
+                this.vars.set(`5:${ev(0)}:1000000`, 1);
                 this.hooks?.show(ev(0), true);
                 return true;
             case 23:
+                this.vars.set(`5:${ev(0)}:1000000`, 0);
                 this.hooks?.show(ev(0), false);
                 return true;
+            case 14: {
+                const d = ev(1);
+                this.set(o[0][0], o[0][1], d ? Math.trunc(ev(0) / d) : 0);
+                return true;
+            }
+            case 15: {
+                const d = ev(1);
+                this.set(o[0][0], o[0][1], d ? ev(0) % d : 0);
+                return true;
+            }
+            case 39: {
+                const lo = ev(0), hi = ev(1);
+                this.set(o[2][0], o[2][1], lo + Math.floor(Math.random() * Math.max(1, hi - lo + 1)));
+                return true;
+            } // random in [lo, hi]
+            case 44:
+                this.set(o[0][0], o[0][1], this.hooks?.partner() ?? -1);
+                return true;
+            case 34:
+                this.set(o[1][0], o[1][1], -1);
+                return true; // zone/player interaction state: -1 = not applicable (the town gate is hard-wired in game.ts)
+            // Decoded but not simulated yet: 27 named warp zone, 46/56 object state fields, 36/30/33 spawn hazard/effect objects, 65 ambient colour.
+            case 27:
+            case 46:
+            case 56:
+            case 36:
+            case 30:
+            case 33:
+            case 65: return true;
             case 16: return true; // play sound effect at a position (audio not implemented)
             case 24:
                 this.hooks?.randomDrop(ev(0), ev(1), ev(2));

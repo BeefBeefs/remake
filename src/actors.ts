@@ -37,7 +37,9 @@ export class Actor implements Drawable {
   }
   get name() { return this.rec.name; }
   get enemy() { return this.rec.kind === 'enemy'; }
-  get alive() { return !this.enemy || this.state !== 'die'; }
+  /** Hidden by script sentence 23 (e.g. partner NPCs that are following the player). */
+  hidden = false;
+  get alive() { return !this.hidden && (!this.enemy || this.state !== 'die'); }
   get solid() { return this.alive; }
   /** Collision radius in real pixels (the Mct radius is in world units). */
   get radius() { return 22; }
@@ -67,6 +69,7 @@ export class Actor implements Drawable {
     } else this.set('idle');
   }
   draw(c: CanvasRenderingContext2D, camX: number, camY: number) {
+    if (this.hidden) return;
     const anim = this.enemy ? ANIM[this.state] : 0;
     const d = this.caf.anims[anim]?.dirs[this.dir]; if (!d) return;
     const raw = Math.floor(this.t / FRAME_MS), fi = d.frames ? (this.state === 'die' ? Math.min(raw, d.frames - 1) : raw % d.frames) : 0;

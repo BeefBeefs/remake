@@ -49,7 +49,7 @@ export class GameScene implements Scene {
   private camX = 0; private camY = 0;
   /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
   private titles: string[] = []; private banner: { text: string; t: number } | null = null;
-  private pollT = 0; zones: Zone[] = []; tables: Record<string, { cols: number; v: number[] }> = {};
+  partner = -1; private pollT = 0; zones: Zone[] = []; tables: Record<string, { cols: number; v: number[] }> = {};
   private expTable: number[] = []; private totalExp = 0; private devNext = 0;
   private drawPlayer: Drawable;
   // --- combat ---
@@ -182,7 +182,8 @@ export class GameScene implements Scene {
         const title = (this.titles[q] ?? `Quest ${q}`).replace(/[^\x20-\x7e]/g, '?');
         if (st === 1 || st === 2) this.banner = { text: `${st === 1 ? 'Quest accepted' : 'Quest completed'}: ${title}`, t: 0 };
       },
-      show: (id, v) => { const z = this.zones.find(z => z.rec.id === id); if (z) z.visible = v; },
+      show: (id, v) => { const z = this.zones.find(z => z.rec.id === id); if (z) z.visible = v; const a = this.actors.find(a => 12000000 + a.rec.id === id); if (a) a.hidden = !v; },
+      partner: () => this.partner,
       randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
       drop: (cat, id, a, b, min, max) => {
         const [x, y] = worldToReal(a, b), amount = min + Math.floor(Math.random() * Math.max(1, max - min + 1));

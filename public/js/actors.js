@@ -28,6 +28,8 @@ export class Actor {
         this.deadT = 0;
         this.hitDone = false;
         this.stats = ENEMY_STATS[1];
+        /** Hidden by script sentence 23 (e.g. partner NPCs that are following the player). */
+        this.hidden = false;
         [this.x, this.y] = worldToReal(rec.a, rec.b);
         this.dir = rec.dir % 9;
         if (rec.kind === 'enemy') {
@@ -39,7 +41,7 @@ export class Actor {
     }
     get name() { return this.rec.name; }
     get enemy() { return this.rec.kind === 'enemy'; }
-    get alive() { return !this.enemy || this.state !== 'die'; }
+    get alive() { return !this.hidden && (!this.enemy || this.state !== 'die'); }
     get solid() { return this.alive; }
     /** Collision radius in real pixels (the Mct radius is in world units). */
     get radius() { return 22; }
@@ -95,6 +97,8 @@ export class Actor {
             this.set('idle');
     }
     draw(c, camX, camY) {
+        if (this.hidden)
+            return;
         const anim = this.enemy ? ANIM[this.state] : 0;
         const d = this.caf.anims[anim]?.dirs[this.dir];
         if (!d)

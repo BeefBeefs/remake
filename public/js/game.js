@@ -223,6 +223,7 @@ export class GameScene {
         /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
         this.titles = [];
         this.banner = null;
+        this.partner = -1;
         this.pollT = 0;
         this.zones = [];
         this.tables = {};
@@ -278,7 +279,9 @@ export class GameScene {
                         this.banner = { text: `${st === 1 ? 'Quest accepted' : 'Quest completed'}: ${title}`, t: 0 };
                 },
                 show: (id, v) => { const z = this.zones.find(z => z.rec.id === id); if (z)
-                    z.visible = v; },
+                    z.visible = v; const a = this.actors.find(a => 12000000 + a.rec.id === id); if (a)
+                    a.hidden = !v; },
+                partner: () => this.partner,
                 randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
                 drop: (cat, id, a, b, min, max) => {
                     const [x, y] = worldToReal(a, b), amount = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
