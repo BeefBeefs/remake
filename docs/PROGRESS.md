@@ -356,3 +356,9 @@ Mechanical check, not a hand playthrough: fire every handler in every scenario o
 - `index.html` / `play.html` got a viewport meta (no zoom). Test: `touch.mjs` (emulated touch: stick moves the hero, ATK holds Shift+button, ITEM toggles the window, tap maps to the canvas, fullscreen on / off).
 - Not covered: right-click-only extras (Tab + right click dog dash), two-finger gestures, text entry for the character name uses the on-screen keyboard only if the browser raises it for the canvas (untested on a real phone).
 - Name entry on phones: tapping the name field (new-character screen, `SelectScene.wantsTextAt`) focuses a hidden `<input>` in `App` (inside the touch gesture, which browsers require to raise the keyboard); its `input` events become `Input.typed` characters / Backspace, Enter closes it. Test: `touchname.mjs` (physical keyboard events from Playwright, not a real Gboard).
+
+## Quest sweep, with and without items (`epquests.mjs`, `CHEAT=1`)
+Same mechanical sweep as before (every handler of every scenario in the episode chain, talks answered 0 / 1 / 2, kills, polls, hero level 40), now also run with `CHEAT=1` (hasItem always true, takeItem free, 10 million gold):
+- Ep3 chain (145 scenarios): 17 quests started / 3 completed without items; 21 started / 12 completed with items (still only accepted: 3, 6, 11, 15, 18, 20, 23, 24, 28).
+- Ep4 chain (209 scenarios): 19 started / 4 completed without items; 24 started / 14 completed with items (only accepted: 3, 6, 11, 15, 18, 20, 23, 24, 28, 41).
+- So items are the main blocker for completion (+10 quests), and the item sources are now covered except the ones listed under "Quest item sources". The remaining accepted-only quests wait for something the sweep does not do: kills of specific monsters, a dungeon floor reached through the exits, quest-chain order inside one scenario, partner/dog state or option choices beyond the first three. Not verified by hand.
