@@ -23,6 +23,8 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run build
+      - name: Drop files with non-ASCII names (Pages rejects them)
+        run: find public -type f | LC_ALL=C grep -P '[^\x20-\x7e]' | while IFS= read -r f; do echo "removing $f"; rm -f "$f"; done || true
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
