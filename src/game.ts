@@ -50,8 +50,13 @@ export interface SaveData {
   inv: [number, number, number, number, number?, number?, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>; zones?: Record<string, Record<number, boolean>>;
   magic?: MagicSave; explored?: ExploredSave; pet?: PetSave; invSet?: number; career?: number; attr?: number[]; usage?: Usage; ct?: number; wh?: [number, number, number, number, number?, number?, number?][];
 }
-/** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
-const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
+/** CAF layers of the player file (found by rendering every layer alone): 1 = base, 0 = body, 3 = fire swing effect and 4 = cloud (both left out), 5..8 = four body-armor looks,
+ *  9..11 = round / kite / tower shield, 12..18 = seven weapon looks. GUESS: which item uses which look is chosen from the item name and arms class below (the exe's table was not found).
+ *  Helmets and boots have no layer in the file. */
+const LAYERS = (q.get('layers') ?? '1,0').split(',').map(Number);
+const armorLayer = (name: string) => /plate|mail|steel|iron|knight|astral/i.test(name) ? 6 : /hunter|wind|beast|blast|cardigan|suit|coat|fur/i.test(name) ? 7 : /robe|rune|elemental|wizard|magic|hein/i.test(name) ? 8 : 5;
+const shieldLayer = (name: string) => /tower|gate|board/i.test(name) ? 11 : /kite|knight|alloy|iron|glass/i.test(name) ? 10 : 9;
+const weaponLayer = (name: string, arms: number) => /dagger/i.test(name) ? 13 : arms === 1 ? 18 : arms === 3 ? 14 : arms === 5 ? (/bowgun|gun|cross/i.test(name) ? 16 : 17) : arms === 8 || arms === 9 ? 15 : 12;
 const FRAME_MS = 60;
 const ANIM_IDLE = 0, ANIM_WALK = 1, ANIM_RUN = 2;
 /** Facing index (CAF direction order: 0 down, 1 down-right, 2 right, 3 up-right, 4 up, 5 up-left, 6 left, 7 down-left; left and right were swapped before, found on a phone) for 8 compass sectors starting at "right" going clockwise on screen. */
@@ -333,7 +338,13 @@ export class GameScene implements Scene {
       draw: (c, camX, camY) => {
         const d = this.caf.anims[p.anim].dirs[p.dir];
         const raw = Math.max(0, Math.floor(p.t / FRAME_MS)), fi = d.frames ? (p.anim === 23 ? Math.min(raw, d.frames - 1) : raw % d.frames) : 0;
-        for (const l of LAYERS) {
+        const inv = this.win.inv, eq = inv.equipped().filter(e => !Inventory.broken(e)), look = [...LAYERS];
+        if (!q.get('layers')) {
+          const ar = eq.find(e => e.item.sec === 1 && ItemDb.slot(e.item) === 'body'), sh = eq.find(e => e.item.sec === 1 && ItemDb.slot(e.item) === 'shield' && !this.win.shieldOff(e)), wp = eq.find(e => e.item.sec === 0);
+          if (ar) look.push(armorLayer(ar.item.name)); if (sh) look.push(shieldLayer(sh.item.name));
+          if (wp) { const it = wp.unid ? this.win.db.base(wp.item) : wp.item; look.push(weaponLayer(it.name, ItemDb.arms(it))); }
+        }
+        for (const l of look) {
           const seq = d.layers[l]; if (!seq || !seq.length) continue;
           const f = this.set.pattern(seq[Math.min(fi, seq.length - 1)][1]); if (!f) continue;
           c.drawImage(f.canvas, Math.round(p.x - camX + f.ox), Math.round(p.y - camY + f.oy));
