@@ -132,8 +132,8 @@ export class ScriptVM {
                 return true; // zone/player interaction state: -1 = not applicable (the town gate is hard-wired in game.ts)
             // Decoded but not simulated yet: 27 named warp zone, 46/56 object state fields, 36/30/33 spawn hazard/effect objects, 65 ambient colour.
             case 35:
-                this.set(o[2][0], o[2][1], 0);
-                return true; // (x, y, var): terrain/judge value at a position, not modelled
+                this.set(o[2][0], o[2][1], Math.round(Math.atan2(ev(1), ev(0)) * 180 / Math.PI));
+                return true; // (dx, dy, var): angle in degrees (exe 0x432831: atan2 * 57.2958)
             case 28: {
                 const c = this.char, e = this.ended;
                 this.char = ev(0);
@@ -142,13 +142,25 @@ export class ScriptVM {
                 this.ended = e;
                 return true;
             }
+            case 33: {
+                const t = this.hooks?.nearTarget?.(ev(0), ev(2)) ?? null;
+                this.set(o[3][0], o[3][1], t ? 0 : -1);
+                if (t) {
+                    this.set(o[4][0], o[4][1], Math.round(t[0]));
+                    this.set(o[5][0], o[5][1], Math.round(t[1]));
+                }
+                return true;
+            } // (char, 0, range, outTarget, outX, outY): nearest player within range (exe 0x43288d)
+            case 30: {
+                if (ev(2) === 0 && ev(7) > 0)
+                    this.hooks?.bullet?.(ev(0), ev(1), ev(3), ev(6));
+                return true;
+            } // (x, y, kind, angle, .., power, travel, ..): create an attack object (exe 0x43309b); kind 0 with a travel value = trap projectile, the other kinds are scenery effects
             case 29:
             case 27:
             case 46:
             case 56:
             case 36:
-            case 30:
-            case 33:
             case 65: return true;
             case 31:
                 this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1);

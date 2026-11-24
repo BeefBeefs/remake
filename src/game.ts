@@ -48,7 +48,7 @@ const dirIndex = (vx: number, vy: number) => FACING[(Math.round(Math.atan2(vy, v
 export class GameScene implements Scene {
   player: { x: number; y: number; dir: number; t: number; anim: number };
   hud: HudState = { hp: 100, hpMax: 100, mp: 60, mpMax: 60, level: 1, exp: 0, expMax: 100, running: false };
-  magic!: Magic; mapwin!: MapWindow; private shots: { x: number; y: number; vx: number; vy: number; t: number; spell: Spell; dmg: number }[] = []; private castT = 0;
+  magic!: Magic; mapwin!: MapWindow; private shots: { x: number; y: number; vx: number; vy: number; t: number; spell: Spell; dmg: number }[] = []; private castT = 0; private bullets: { x: number; y: number; vx: number; vy: number; t: number; dmg: number }[] = [];
   debug = false; paused = false; menu!: GameMenu; dark: DarkLayer | null = null;
   private camX = 0; private camY = 0;
   /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
@@ -289,6 +289,14 @@ export class GameScene implements Scene {
     };
     (window as any).game = this;
     if (this.vm) this.vm.hooks = {
+      nearTarget: (char, range) => {
+        const z = this.zones.find(q => q.rec.id === char); if (!z || this.dead) return null;
+        const [wa, wb] = realToWorld(this.player.x, this.player.y); return Math.hypot(wa - z.rec.a, wb - z.rec.b) <= range ? [wa, wb] : null;
+      },
+      bullet: (x, y, angle, power) => {   // GUESS: flat damage power / 25 (350 -> 14), 200 px/s, the exe's projectile model is not decoded
+        const r = angle * Math.PI / 180, ca = Math.cos(r), cb = Math.sin(r), vx = (ca - cb) * 0.15, vy = (ca + cb) * 0.10, n = Math.hypot(vx, vy) || 1, [rx, ry] = worldToReal(x, y);
+        this.bullets.push({ x: rx, y: ry, vx: vx / n, vy: vy / n, t: 0, dmg: Math.max(1, Math.round(power / 25)) });
+      },
       // operand 9: 1 while the hero or the dog stands inside the object's rect (the pressure-plate statues count 90 polls of this before they trigger)
       pressed: id => {
         const z = this.zones.find(q => q.rec.id === id); if (!z) return 0;
@@ -413,7 +421,9 @@ export class GameScene implements Scene {
     }
   }
   private hitPlayer(d: number) {
-    if (this.dead) return; const h = this.hud; d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);   // exe 0x412a40 monster->player: power*(9+rand%3)/10 - defence*Table11[neutral=10]/10, minimum 1 h.hp = Math.max(0, h.hp - d);
+    if (this.dead) return; const h = this.hud; d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
+    // exe 0x412a40 monster->player: power*(9+rand%3)/10 - defence*Table11[neutral=10]/10, minimum 1
+    h.hp = Math.max(0, h.hp - d);
     this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` }); audio.sfx(SFX.hurt, 0.8);
     if (h.hp <= 0) { this.dead = true; this.target = null; this.atkT = -1; this.player.anim = 23; this.player.t = 0; }
   }
@@ -533,6 +543,14 @@ export class GameScene implements Scene {
     h.mp -= sp.mp; this.castT = 400; audio.sfx(SFX.hit, 0.5);
     if (m.use(sp.id)) this.banner = { text: `${sp.name} reached magic level ${m.level(sp.id)}`, t: 0 };
   }
+  private updateBullets(dt: number) {
+    for (const b of this.bullets) {
+      b.t += dt; b.x += b.vx * 0.2 * dt; b.y += b.vy * 0.2 * dt;
+      if (!this.dead && Math.hypot(b.x - this.player.x, (b.y - this.player.y) * 1.6) < 24) { b.t = 9999; this.hitPlayer(b.dmg); }
+      else if (this.map.blockedReal(b.x, b.y)) b.t = 9999;
+    }
+    this.bullets = this.bullets.filter(b => b.t < 2500);
+  }
   private updateShots(dt: number) {
     if (this.castT > 0) this.castT -= dt;
     for (const s of this.shots) {
@@ -581,7 +599,7 @@ export class GameScene implements Scene {
       if (inp.pressed.has(' ')) this.togglePetMode();
     }
     if (!this.dead) this.updatePower(dt);
-    this.mapwin.reveal(this.scenario, this.map, p.x, p.y); this.mapwin.update(dt, keys, inp.pressed); this.updateShots(dt);
+    this.mapwin.reveal(this.scenario, this.map, p.x, p.y); this.mapwin.update(dt, keys, inp.pressed); this.updateShots(dt); this.updateBullets(dt);
     if (inp.pressed.has('i')) this.win.item = !this.win.item;
     if (inp.pressed.has('q')) this.toggleQuestLog();
     if (inp.pressed.has('h')) { this.menu.open('help'); this.paused = true; return; }
@@ -694,6 +712,14 @@ export class GameScene implements Scene {
       for (let k = 3; k >= 0; k--) {
         const x = s.x - s.vx * k * 9 - this.camX, y = s.y - s.vy * k * 9 - this.camY - 36, r = 8 - k * 1.5, g = ctx.createRadialGradient(x, y, 0, x, y, r + 3);
         g.addColorStop(0, '#fff'); g.addColorStop(0.45, s.spell.color); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.globalAlpha = 1 - k * 0.22; ctx.beginPath(); ctx.arc(x, y, r + 3, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    for (const b of this.bullets) {   // trap bolts: orange orb with a trail
+      for (let k = 3; k >= 0; k--) {
+        const x = b.x - b.vx * k * 8 - this.camX, y = b.y - b.vy * k * 8 - this.camY - 36, r = 6 - k, g = ctx.createRadialGradient(x, y, 0, x, y, r + 3);
+        g.addColorStop(0, '#ffe8a0'); g.addColorStop(0.5, '#ff7020'); g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = g; ctx.globalAlpha = 1 - k * 0.22; ctx.beginPath(); ctx.arc(x, y, r + 3, 0, 7); ctx.fill();
       }
       ctx.globalAlpha = 1;

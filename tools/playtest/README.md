@@ -12,3 +12,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `statue.mjs` stands next to a type-5 statue plate in scenario 00010001 and checks that status 6 fires and the plate's switch variable toggles.
 - `bosses.mjs` kills every monster of the boss-room scenarios through the damage path and checks the polled quest completion; `quests.mjs` fires all status-4 kill handlers of each scenario.
 - `commander.mjs` walks the Cold Svalt commander's quest ladder (quests 4-10); `town.mjs` talks to every Remote Town NPC for several quest states; `talkall.mjs [scenarios]` auto-talks to every scripted object and reports stuck dialogs / warnings.
+- `turret.mjs` stands in the Garam Goblin room and checks that the pillar turrets shoot bolts that hurt the hero.

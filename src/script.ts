@@ -8,6 +8,10 @@ export interface ScriptHooks {
   /** Operand kind 3: state of a spawn-numbered monster record (1 alive, 0 dead); undefined when the scenario has no such record. */
   entity?(spawn: number): number | undefined;
   charPos(char: number): [number, number] | null;
+  /** Sentence 33: the hero's world position when within `range` world units of object `char`, else null. */
+  nearTarget?(char: number, range: number): [number, number] | null;
+  /** Sentence 30 (kind 0, travelling): a trap projectile from world (x, y) heading `angle` degrees. */
+  bullet?(x: number, y: number, angle: number, power: number): void;
   /** Operand kind 9: 1 while scripted object `id` has just been struck or clicked. */
   pressed?(id: number): number;
   /** Sentence 10: create an item (cat 0 weapon, 1 armor, 2 accessory, 3 consumable, 4 misc; cat 4 id 0 = gold with amount) on the ground. */
@@ -112,9 +116,11 @@ export class ScriptVM {
       case 44: this.set(o[0][0], o[0][1], this.hooks?.partner() ?? -1); return true;
       case 34: this.set(o[1][0], o[1][1], -1); return true;   // zone/player interaction state: -1 = not applicable (the town gate is hard-wired in game.ts)
       // Decoded but not simulated yet: 27 named warp zone, 46/56 object state fields, 36/30/33 spawn hazard/effect objects, 65 ambient colour.
-      case 35: this.set(o[2][0], o[2][1], 0); return true;   // (x, y, var): terrain/judge value at a position, not modelled
+      case 35: this.set(o[2][0], o[2][1], Math.round(Math.atan2(ev(1), ev(0)) * 180 / Math.PI)); return true;   // (dx, dy, var): angle in degrees (exe 0x432831: atan2 * 57.2958)
       case 28: { const c = this.char, e = this.ended; this.char = ev(0); this.runStatus(6, ev(0)); this.char = c; this.ended = e; return true; }
-      case 29: case 27: case 46: case 56: case 36: case 30: case 33: case 65: return true;
+      case 33: { const t = this.hooks?.nearTarget?.(ev(0), ev(2)) ?? null; this.set(o[3][0], o[3][1], t ? 0 : -1); if (t) { this.set(o[4][0], o[4][1], Math.round(t[0])); this.set(o[5][0], o[5][1], Math.round(t[1])); } return true; }   // (char, 0, range, outTarget, outX, outY): nearest player within range (exe 0x43288d)
+      case 30: { if (ev(2) === 0 && ev(7) > 0) this.hooks?.bullet?.(ev(0), ev(1), ev(3), ev(6)); return true; }   // (x, y, kind, angle, .., power, travel, ..): create an attack object (exe 0x43309b); kind 0 with a travel value = trap projectile, the other kinds are scenery effects
+      case 29: case 27: case 46: case 56: case 36: case 65: return true;
       case 31: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1); return true;
       case 32: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), false) ?? -1); return true;
       case 25: this.hooks?.spawnSlot(ev(0), ev(1), ev(2)); return true;   // (slot, x, y, effect type)
