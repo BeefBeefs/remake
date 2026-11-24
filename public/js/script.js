@@ -4,6 +4,8 @@ export class ScriptVM {
     constructor(data) {
         this.data = data;
         this.vars = new Map();
+        /** Kinds 10-12 (quest switches / counters) are global across scenarios. */
+        this.globals = new Map();
         this.queue = [];
         this.talking = false;
         this.ended = false;
@@ -16,13 +18,17 @@ export class ScriptVM {
     get(kind, val) {
         if (kind <= 2)
             return val;
-        if ([3, 4, 5, 10, 11, 12].includes(kind))
+        if (kind >= 10 && kind <= 12)
+            return this.globals.get(`${kind}:${val}`) ?? 0;
+        if (kind >= 3 && kind <= 5)
             return this.vars.get(`${kind}:${val}`) ?? 0;
         if (kind === 6 || kind === 7)
             return Math.round(this.hooks?.charPos(val)?.[kind - 6] ?? 0);
         return 0;
     }
-    set(kind, val, v) { if ([3, 4, 5, 10, 11, 12].includes(kind))
+    set(kind, val, v) { if (kind >= 10 && kind <= 12)
+        this.globals.set(`${kind}:${val}`, v);
+    else if (kind >= 3 && kind <= 5)
         this.vars.set(`${kind}:${val}`, v); }
     /** Run block n; returns false if a sentence aborted the run. */
     runBlock(n, depth = 0) {

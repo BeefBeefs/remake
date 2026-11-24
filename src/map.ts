@@ -55,6 +55,16 @@ export class GameMap {
     const { judgeCell: C, judgeOrigin: [oa, ob] } = this.m;
     return worldToReal((mk[0] + 0.5) * C - oa, (mk[1] + 0.5) * C - ob);
   }
+  private markerSet: Set<number> | null = null;
+  /** True when the real-pixel point lies within `reach` judge cells of a 0x8000-flagged cell (exit/event zone; on f00_01 the zone is a blocked gate in the wall, so reach > 0 is needed). */
+  inMarker(rx: number, ry: number, reach = 0): boolean {
+    const { judgeCell: C, judgeOrigin: [oa, ob], judgeW: W } = this.m;
+    this.markerSet ??= new Set(this.m.marker.map(([x, y]) => y * W + x));
+    const [a, b] = realToWorld(rx, ry), gx = Math.floor((a + oa) / C), gy = Math.floor((b + ob) / C);
+    for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) if (this.markerSet.has((gy + dy) * W + gx + dx)) return true;
+    return false;
+  }
+  get hasMarkerZone() { return this.m.marker.length > 0; }
   /** Debug overlay: tint judge cells (red blocked, yellow special). */
   drawJudge(ctx: CanvasRenderingContext2D, camX: number, camY: number, vw: number, vh: number) {
     const { judgeW: W, judgeH: H, judgeCell: C, judgeOrigin: [oa, ob] } = this.m;

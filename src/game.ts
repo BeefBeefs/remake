@@ -13,6 +13,10 @@ import type { Gender } from './select.js';
 
 const q = new URLSearchParams(location.search);
 const SCENARIO = q.get('scenario') ?? '00000000';
+/** PROVISIONAL scene links (the real exit table is not decoded yet): flagged zone / spawn circle -> scenario. */
+const LINKS: Record<string, string> = { '00000000': '00000001', '00000001': '00000000' };
+/** Script state kept per scenario so quests are not replayed when re-entering a map. */
+const savedVars = new Map<string, Map<string, number>>(); let savedGlobals = new Map<string, number>();
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
 const FRAME_MS = 60;
@@ -33,6 +37,21 @@ export class GameScene implements Scene {
   private spawnPos = { x: 0, y: 0 };
   floaters: { x: number; y: number; t: number; s: string }[] = [];
   private actorCtx: ActorCtx;
+  private armed = false; private leaving = false;
+  private atExit() {
+    const p = this.player;
+    if (this.map.hasMarkerZone) return this.map.inMarker(p.x, p.y, 5);
+    return Math.hypot(p.x - this.spawnPos.x, (p.y - this.spawnPos.y) * 1.6) < 90;
+  }
+  private checkExit() {
+    if (this.leaving || !LINKS[this.scenario]) return;
+    const at = this.atExit(), far = Math.hypot(this.player.x - this.spawnPos.x, this.player.y - this.spawnPos.y) > 220;
+    if (far) this.armed = true;
+    if (!at || !this.armed) return;
+    this.leaving = true;
+    if (this.vm) { savedVars.set(this.scenario, this.vm.vars); savedGlobals = this.vm.globals; }
+    GameScene.create(this.app, this.gender, this.name, { scenario: LINKS[this.scenario], carry: this }).then(g => this.app.go(g));
+  }
   /** Items lying on the ground (real-pixel coordinates). gold > 0 for gold piles. */
   ground: { x: number; y: number; item?: ItemDef; gold: number }[] = [];
   private groundDraw: Drawable = { get y() { return 0; }, draw: () => {} };
@@ -72,7 +91,7 @@ export class GameScene implements Scene {
     this.vm.talk(12000000 + a.rec.id); this.openDialog();
   }
 
-  private constructor(private app: App, private name: string, private map: GameMap, private set: SpriteSet, private caf: Caf, private gui: Gui, private win: Windows, private text: Text, private actors: Actor[], private vm: ScriptVM | null) {
+  private constructor(private app: App, private name: string, private map: GameMap, private set: SpriteSet, private caf: Caf, private gui: Gui, private win: Windows, private text: Text, private actors: Actor[], private vm: ScriptVM | null, private scenario: string, private gender: Gender) {
     const mk = map.markerReal();
     this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
     const p = this.player; this.spawnPos = { x: p.x, y: p.y };
@@ -99,10 +118,13 @@ export class GameScene implements Scene {
       },
     };
   }
-  static async create(app: App, gender: Gender, name: string) {
-    const sc = await loadScenarioActors(app, SCENARIO).catch(() => ({ map: null as string | null, actors: [] as Actor[] }));
-    const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(SCENARIO).catch(() => null)]);
-    const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm);
+  static async create(app: App, gender: Gender, name: string, opts?: { scenario?: string; carry?: GameScene }) {
+    const scenario = opts?.scenario ?? SCENARIO;
+    const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null as string | null, actors: [] as Actor[] }));
+    const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
+    const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm, scenario, gender);
+    if (vm) { vm.globals = savedGlobals; const sv = savedVars.get(scenario); if (sv) vm.vars = sv; }
+    const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
     g.expTable = tables['13'].v; g.syncExp();
     return g;
   }
@@ -142,6 +164,7 @@ export class GameScene implements Scene {
   }
   update(dt: number) {
     this.dev();
+    this.checkExit();
     for (const a of this.actors) a.update(dt, this.actorCtx);
     this.actors = this.actors.filter(a => !(a.enemy && a.state === 'die' && a.deadT > 6000));
     for (const f of this.floaters) f.t += dt; this.floaters = this.floaters.filter(f => f.t < 900);
