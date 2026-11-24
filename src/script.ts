@@ -22,6 +22,8 @@ export interface ScriptHooks {
   /** Sentences 58/59: does the player carry item (category, id) / remove one copy of it. */
   hasItem(cat: number, id: number): boolean;
   takeItem(cat: number, id: number): void;
+  /** Sentence 49: show a short notice (area name at map start, hints) for a message id. */
+  notice(text: string): void;
   /** Sentence 5: open the trade window of shop `index`. */
   openShop(index: number): void;
   /** Sentence 61: the player's current level. */
@@ -96,6 +98,9 @@ export class ScriptVM {
       case 54: this.hooks?.addGold(-ev(0)); return true;
       case 58: this.set(o[2][0], o[2][1], this.hooks?.hasItem(ev(0), ev(1)) ? 1 : 0); return true;   // quest hand-in check (no selection UI: any matching item counts)
       case 59: this.hooks?.takeItem(ev(0), ev(1)); return true;
+      case 49: { const t = this.data.messages[String(ev(0))]; if (t) this.hooks?.notice(t.replace(/\s+$/, '')); return true; }
+      case 50: case 57: case 66: this.set(o[0][0], o[0][1], 0); return true;   // read player/exe state (arrival id, player+0x28, ...): not modelled, 0
+      case 6: return true;
       case 9: case 4: return true;   // repair an item / coin sound (no durability yet)
       case 16: return true;   // play sound effect at a position (audio not implemented)
       case 24: this.hooks?.randomDrop(ev(0), ev(1), ev(2)); return true;

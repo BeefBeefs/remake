@@ -193,6 +193,7 @@ export class GameScene implements Scene {
       partner: () => this.partner,
       gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
       openShop: i => this.openShop(i),
+      notice: text => { this.banner = { text: text.split('\n')[0].replace(/[^\x20-\x7e]/g, '?'), t: 0 }; },
       hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
       takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e) this.win.inv.remove(e); },
       randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
@@ -221,6 +222,7 @@ export class GameScene implements Scene {
     }
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
     g.zones = sc.zones; g.tables = tables; g.expTable = tables['13'].v; g.titles = tables['41']?.s ?? []; g.syncExp();
+    g.vm?.event(7, 4294967295);   // status 7: map start (area name notice, initial object states)
     return g;
   }
 

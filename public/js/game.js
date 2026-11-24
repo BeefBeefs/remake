@@ -294,6 +294,7 @@ export class GameScene {
                 partner: () => this.partner,
                 gold: () => this.win.gold, addGold: d => { this.win.gold = Math.max(0, this.win.gold + d); },
                 openShop: i => this.openShop(i),
+                notice: text => { this.banner = { text: text.split('\n')[0].replace(/[^\x20-\x7e]/g, '?'), t: 0 }; },
                 hasItem: (cat, id) => this.win.inv.entries.some(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id),
                 takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e)
                     this.win.inv.remove(e); },
@@ -371,6 +372,7 @@ export class GameScene {
         g.expTable = tables['13'].v;
         g.titles = tables['41']?.s ?? [];
         g.syncExp();
+        g.vm?.event(7, 4294967295); // status 7: map start (area name notice, initial object states)
         return g;
     }
     /** Table.Tbd table 13: cumulative EXP needed to leave level n (1-based). */

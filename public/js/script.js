@@ -153,6 +153,18 @@ export class ScriptVM {
             case 59:
                 this.hooks?.takeItem(ev(0), ev(1));
                 return true;
+            case 49: {
+                const t = this.data.messages[String(ev(0))];
+                if (t)
+                    this.hooks?.notice(t.replace(/\s+$/, ''));
+                return true;
+            }
+            case 50:
+            case 57:
+            case 66:
+                this.set(o[0][0], o[0][1], 0);
+                return true; // read player/exe state (arrival id, player+0x28, ...): not modelled, 0
+            case 6: return true;
             case 9:
             case 4: return true; // repair an item / coin sound (no durability yet)
             case 16: return true; // play sound effect at a position (audio not implemented)
