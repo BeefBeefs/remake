@@ -10,3 +10,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `magic.mjs` casts Fire Bolt-style spells at a goblin with a clear line of fire; `tabs.mjs` checks F-keys, M, tab clicks and Esc for the Status/Magic windows; `mapsave.mjs` also opens the map and checks the saved magic/explored data.
 - `companion.mjs` hires Kerberos through the keeper's dialog (Check Status / Swap Dogs), then fights, Space mode, Meat, a mine, power-up, TAB jump/dash/status and the save data. `companion-tab.mjs` checks TAB+click jump and TAB+right click dash on open ground.
 - `statue.mjs` stands next to a type-5 statue plate in scenario 00010001 and checks that status 6 fires and the plate's switch variable toggles.
+- `bosses.mjs` kills every monster of the boss-room scenarios through the damage path and checks the polled quest completion; `quests.mjs` fires all status-4 kill handlers of each scenario.

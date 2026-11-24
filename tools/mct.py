@@ -7,10 +7,11 @@ def parse(path):
     d = open(path, 'rb').read(); out = []
     for i in range(0x300, len(d) - 60):
         L, = struct.unpack_from('<I', d, i)
-        if not 3 <= L <= 16 or not re.fullmatch(rb"[A-Za-z][A-Za-z ']*", d[i+4:i+4+L]): continue
+        if not 3 <= L <= 24 or not re.fullmatch(rb"[A-Za-z][A-Za-z '\-]*", d[i+4:i+4+L]): continue
         j = i + 4 + L
         pre = struct.unpack_from('<4i', d, i - 16); w = struct.unpack_from('<9i', d, j + 4)
-        if w[3:7] != (-80, -80, 79, 79) and d[i+4:i+4+L] != b'Enemy Hole': continue   # Enemy Hole generators have a bigger hit rect
+        # hit rect: (-80,-80,79,79) for goblin-sized monsters; bats use +-40, golems/gargoyles/giants +-160, Enemy Hole generators a bigger one
+        if not (w[3] == w[4] < 0 and w[5] == w[6] and abs(w[5] + w[3]) <= 1) and d[i+4:i+4+L] != b'Enemy Hole': continue
         ident = pre[2]
         head = struct.unpack_from('<8i', d, i - 32)
         kind, model = ('partner', ident - 10000) if ident >= 10000 else ('people', pre[3])
@@ -20,9 +21,9 @@ def parse(path):
         #   normal : (4|6, 4, 4, tier, power*1000, 0, spawn#, model)
         #   boss A : (0, 1000, 1000, 1000, 0, bossId, spawn#, model)      e.g. Red Goblin, Black Hammer
         #   boss B : (200, 200, 0, 1, -65, bossId, 0, model)              e.g. Spike Centinel
-        if head[1] == 4 and head[2] == 4: kind, model, rec_extra = 'enemy', head[7], dict(power=head[4] / 1000)
+        if head[0] in (3, 4, 5, 6) and 4 <= head[1] <= 7 and 4 <= head[2] <= 7 and head[5] == 0: kind, model, rec_extra = 'enemy', head[7], dict(power=head[4] / 1000)
         elif head[0] == 0 and head[1:4] == (1000, 1000, 1000): kind, model, rec_extra = 'enemy', head[7], dict(power=1.0, boss=head[5])
-        elif head[0] == 200 and head[1] == 200 and head[4] == -65: kind, model, rec_extra = 'enemy', head[7], dict(power=1.0, boss=head[5])
+        elif head[3] == 1 and head[4] == -65 and head[0] > 100: kind, model, rec_extra = 'enemy', head[7], dict(power=1.0, boss=head[5])
         if kind == 'enemy': ident = head[6]   # monsters are addressed by their spawn number (script char = 14000000 + spawn#), e.g. 30001-30005 = trap-room group
         if kind == 'enemy' and j + 4 + 36 + 4 * 700 <= len(d) and model >= 0:
             # Per-monster parameter block (719 ints after the 9-int placement block). Fields identified by comparing records

@@ -308,7 +308,7 @@ export class GameScene implements Scene {
       exit: (idx, entry) => { void this.exit(idx, entry); },
       warp: cmd => this.warp(cmd),
       entity: spawn => { const a = this.actors.find(a => a.enemy && a.rec.id === spawn); return a ? (a.alive ? 1 : 0) : undefined; },
-      findSlot: (a, b, alive) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id >= a && 14000000 + m.rec.id <= b && (alive ? !m.free : m.free)); return m ? 14000000 + m.rec.id : -1; },
+      findSlot: (a, b, alive) => { const m = this.actors.find(m => (m.slot || alive) && m.enemy && 14000000 + m.rec.id >= a && 14000000 + m.rec.id <= b && (alive ? !m.free : m.free)); return m ? 14000000 + m.rec.id : -1; },
       spawnSlot: (slot, a, b) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id === slot); if (m) { const [x, y] = worldToReal(a, b); m.revive(x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 60); } },
       sound: id => { audio.sfx(id); },
       notice: text => { this.banner = { text: text.split('\n')[0].replace(/[^\x20-\x7e]/g, '?'), t: 0 }; },
@@ -346,9 +346,11 @@ export class GameScene implements Scene {
       for (const [sec, idx, x, y, eq] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h, eq: !!eq }); } }
     }
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
-    // monsters addressed by script slot ranges (sentences 31/32) start dormant: the script summons them (trap rooms, waves)
-    if (vm) { const ranges: [number, number][] = []; for (const b of vm.data.blocks) for (const [sid, ops] of b) if ((sid === 31 || sid === 32) && ops[0][0] < 3 && ops[1][0] < 3) ranges.push([ops[0][1], ops[1][1]]); for (const a of g.actors) if (a.enemy && ranges.some(([lo, hi]) => 14000000 + a.rec.id >= lo && 14000000 + a.rec.id <= hi)) { a.slot = true; a.hidden = true; } }
+    // monsters addressed by the 'free slot' sentence 32 start dormant: the script summons them (trap rooms, waves). Sentence 31 ranges (alive checks, e.g. 'all monsters of the room are dead') address ordinary monsters
+    if (vm) { const ranges: [number, number][] = []; for (const b of vm.data.blocks) for (const [sid, ops] of b) if (sid === 32 && ops[0][0] < 3 && ops[1][0] < 3) ranges.push([ops[0][1], ops[1][1]]); for (const a of g.actors) if (a.enemy && ranges.some(([lo, hi]) => 14000000 + a.rec.id >= lo && 14000000 + a.rec.id <= hi)) { a.slot = true; a.hidden = true; } }
     g.zones = sc.zones; g.musicIdx = sc.music;
+    // object-local 0 = "currently shown" (sentences 22/23 keep it up to date); objects placed visible start at 1 (the boss-room polls wait for the reward chest 10011000 to read 1)
+    if (vm) for (const z of g.zones) if (z.visible && z.rec.id >= 10000000 && z.rec.id < 11000000 && !vm.vars.has(`5:${z.rec.id}:1000000`)) vm.vars.set(`5:${z.rec.id}:1000000`, 1);
     if (vm) for (const [, st, ch] of vm.data.status) if (st === 3) g.enterIds.add(ch);
     if (opts?.entry !== undefined) { const pt = g.entryPoint(opts.entry); if (pt) { g.player.x = pt[0]; g.player.y = pt[1]; g.spawnPos = { x: pt[0], y: pt[1] }; } }
     if (cr?.pet) { g.pet = cr.pet; g.petKills = cr.petKills; Object.assign(g.pet, { x: g.player.x + 50, y: g.player.y + 20, state: 'idle', t: 0 }); }

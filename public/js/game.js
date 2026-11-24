@@ -451,7 +451,7 @@ export class GameScene {
                 exit: (idx, entry) => { void this.exit(idx, entry); },
                 warp: cmd => this.warp(cmd),
                 entity: spawn => { const a = this.actors.find(a => a.enemy && a.rec.id === spawn); return a ? (a.alive ? 1 : 0) : undefined; },
-                findSlot: (a, b, alive) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id >= a && 14000000 + m.rec.id <= b && (alive ? !m.free : m.free)); return m ? 14000000 + m.rec.id : -1; },
+                findSlot: (a, b, alive) => { const m = this.actors.find(m => (m.slot || alive) && m.enemy && 14000000 + m.rec.id >= a && 14000000 + m.rec.id <= b && (alive ? !m.free : m.free)); return m ? 14000000 + m.rec.id : -1; },
                 spawnSlot: (slot, a, b) => { const m = this.actors.find(m => m.slot && 14000000 + m.rec.id === slot); if (m) {
                     const [x, y] = worldToReal(a, b);
                     m.revive(x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 60);
@@ -553,12 +553,12 @@ export class GameScene {
             g.win.inv = cr.win.inv;
             g.win.gold = cr.win.gold;
         }
-        // monsters addressed by script slot ranges (sentences 31/32) start dormant: the script summons them (trap rooms, waves)
+        // monsters addressed by the 'free slot' sentence 32 start dormant: the script summons them (trap rooms, waves). Sentence 31 ranges (alive checks, e.g. 'all monsters of the room are dead') address ordinary monsters
         if (vm) {
             const ranges = [];
             for (const b of vm.data.blocks)
                 for (const [sid, ops] of b)
-                    if ((sid === 31 || sid === 32) && ops[0][0] < 3 && ops[1][0] < 3)
+                    if (sid === 32 && ops[0][0] < 3 && ops[1][0] < 3)
                         ranges.push([ops[0][1], ops[1][1]]);
             for (const a of g.actors)
                 if (a.enemy && ranges.some(([lo, hi]) => 14000000 + a.rec.id >= lo && 14000000 + a.rec.id <= hi)) {
@@ -568,6 +568,11 @@ export class GameScene {
         }
         g.zones = sc.zones;
         g.musicIdx = sc.music;
+        // object-local 0 = "currently shown" (sentences 22/23 keep it up to date); objects placed visible start at 1 (the boss-room polls wait for the reward chest 10011000 to read 1)
+        if (vm)
+            for (const z of g.zones)
+                if (z.visible && z.rec.id >= 10000000 && z.rec.id < 11000000 && !vm.vars.has(`5:${z.rec.id}:1000000`))
+                    vm.vars.set(`5:${z.rec.id}:1000000`, 1);
         if (vm)
             for (const [, st, ch] of vm.data.status)
                 if (st === 3)
