@@ -32,3 +32,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `episodes.mjs [eps] [limit]` loads every scenario of Episode N's patch with `?ep=N` (fresh page each) and reports 404s / page errors; all of Ep1-4 pass.
 - `fxslots.mjs` checks the full item bonus block (tooltip lines of Recovery / Gamble / Power Bracelet / Gilgamesh / Wildcat Bow ..., life and mental recovery per second, gold, strength).
 - `learn.mjs` walks the spell learning rule (class history x Table.Tbd 100-107): Plasma at 5 Mercenary levels, Wizard spells after the change, etc.
+- `upgrade.mjs` — an Episode-1 save is continued in Episode 3 from the LOAD DATA screen's "Continue in Episode N >" picker (gold and map kept, `Data.ep` = 3).

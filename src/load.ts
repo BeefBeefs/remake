@@ -11,9 +11,11 @@ const boxRect = (i: number) => ({ x: GX + (i % 2) * (BOX_W + GAP_X), y: GY + Mat
 
 /** LOAD DATA screen (manual: "The boxes numbered from 1 to 6 are saved data files. Choose a saved file, then click OK; DELETE erases it"). OK opens the game-mode window. */
 export class LoadScene implements Scene {
-  private slots = listSlots(); private sel = -1; private confirm = false; private mode: ModeWindow | null = null; private busy = false;
+  private slots = listSlots(); private sel = -1; private confirm = false; private mode: ModeWindow | null = null; private busy = false; private epPick = 0;   // episode the selected save continues in (never lower than its own)
   private constructor(private app: App, private s: SpriteSet, private t: SpriteSet, private text: Text) {}
   static async create(app: App) { return new LoadScene(app, await app.gui('Select_Select'), await app.gui('Title_Title'), await Text.load(app)); }
+  private epOf() { const d = this.slots[this.sel]; return d ? Math.max(d.ep ?? 1, this.epPick || 1) : 1; }
+  private epRect = { x: 60, y: 408, w: 300, h: 24 };
   private has() { return this.sel >= 0 && !!this.slots[this.sel]; }
   update(dt: number) {
     const i = this.app.input, s = this.s;
@@ -21,7 +23,7 @@ export class LoadScene implements Scene {
     if (this.mode) {
       const r = this.mode.update(dt);
       if (r === 'back') this.mode = null;
-      else if (r === 'single') { const d = this.slots[this.sel]!; this.busy = true; GameScene.create(this.app, d.gender, d.name, { scenario: d.scenario, load: d, slot: this.sel }).then(g => this.app.go(g)); }
+      else if (r === 'single') { const d = this.slots[this.sel]!; this.busy = true; GameScene.create(this.app, d.gender, d.name, { scenario: d.scenario, load: d, slot: this.sel, ep: this.epOf() }).then(g => this.app.go(g)); }
       return;
     }
     if (this.confirm) {
@@ -34,7 +36,8 @@ export class LoadScene implements Scene {
     }
     if (i.pressed.has('escape')) { TitleScene.create(this.app).then(t => this.app.go(t)); return; }
     if (!i.clicked) return;
-    for (let k = 0; k < SLOTS; k++) { const r = boxRect(k); if (i.x >= r.x && i.x < r.x + r.w && i.y >= r.y && i.y < r.y + r.h) { this.sel = k; return; } }
+    for (let k = 0; k < SLOTS; k++) { const r = boxRect(k); if (i.x >= r.x && i.x < r.x + r.w && i.y >= r.y && i.y < r.y + r.h) { this.sel = k; this.epPick = this.slots[k]?.ep ?? 1; return; } }
+    const e = this.epRect; if (this.has() && i.x >= e.x && i.x < e.x + e.w && i.y >= e.y && i.y < e.y + e.h) { const lo = this.slots[this.sel]!.ep ?? 1, cur = this.epOf(); this.epPick = cur >= 4 ? lo : cur + 1; return; }
     if (inRect(s.pattern(2), i.x, i.y)) TitleScene.create(this.app).then(t => this.app.go(t));
     else if (inRect(s.pattern(4), i.x, i.y) && this.has()) this.mode = new ModeWindow(this.app, s, this.text);
     else if (inRect(s.pattern(6), i.x, i.y) && this.has()) this.confirm = true;
@@ -49,7 +52,7 @@ export class LoadScene implements Scene {
     if (!d) { this.text.drawCenter(ctx, 'No Data', r.x + r.w / 2, r.y + r.h / 2 - 6); return; }
     this.text.draw(ctx, d.name, r.x + 28, r.y + 8);
     this.text.draw(ctx, `Lv ${d.hud.level}   ${d.gender === 'male' ? 'Male' : 'Female'}`, r.x + 28, r.y + 28);
-    this.text.draw(ctx, d.area || 'Remote Town', r.x + 28, r.y + 48);
+    this.text.draw(ctx, d.area && d.area.length <= 24 && !d.area.includes('\n') ? d.area : d.scenario === '00000000' ? 'Remote Town' : `Area ${d.scenario}`, r.x + 28, r.y + 48);
     this.text.draw(ctx, `${d.gold} G`, r.x + 28, r.y + 68);
     if (d.at) this.text.draw(ctx, new Date(d.at).toISOString().slice(0, 16).replace('T', ' '), r.x + r.w - 124, r.y + r.h - 18);
   }
@@ -61,6 +64,7 @@ export class LoadScene implements Scene {
     this.slots.forEach((d, k) => this.box(ctx, k, d));
     put(ctx, s, hov(4) ? 5 : 4); put(ctx, s, hov(2) ? 3 : 2);
     if (this.has()) put(ctx, s, hov(6) ? 13 : 6);
+    if (this.has() && !this.confirm && !this.mode) { const e = this.epRect, lo = this.slots[this.sel]!.ep ?? 1; this.text.draw(ctx, `Continue in Episode ${this.epOf()} >${this.epOf() > lo ? ' (upgrade)' : ''}`, e.x, e.y + 6); }
     if (this.confirm) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, 640, 480); put(ctx, s, 38);
       const d = this.slots[this.sel]!;

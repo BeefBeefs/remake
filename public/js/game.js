@@ -57,7 +57,8 @@ export class GameScene {
         savedZones.set(this.scenario, Object.fromEntries(this.zones.filter(z => z.visible !== (z.rec.vis !== 0)).map(z => [z.rec.id, z.visible])));
         savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold, unid: o.unid, dur: o.dur })));
     }
-    areaName() { return (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); }
+    /** Message 1000000 is only an area name on some maps (on others it is a speech line), so anything long or multi-line is ignored (GUESS: no real area-name table found yet). */
+    areaName() { const t = (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); return t.length <= 24 && !t.includes('\n') ? t : ''; }
     save() {
         this.stash();
         const d = {
@@ -568,7 +569,7 @@ export class GameScene {
     }
     static async create(app, gender, name, opts) {
         const ld = opts?.load;
-        await Data.init(ld ? ld.ep ?? 1 : opts?.ep ?? Data.ep); // which episodes' data overlays are installed (saves remember theirs; a character carried between scenarios keeps it)
+        await Data.init(ld ? Math.max(ld.ep ?? 1, opts?.ep ?? 1) : opts?.ep ?? Data.ep); // which episodes' data overlays are installed (saves remember theirs; a character carried between scenarios keeps it)
         if (!ld && !opts?.carry) {
             savedVars.clear();
             savedGround.clear();

@@ -88,7 +88,8 @@ export class GameScene implements Scene {
   }
   /** Slot (0-5) this character is saved to; -1 = none free. */
   slot = -1;
-  private areaName() { return (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); }
+  /** Message 1000000 is only an area name on some maps (on others it is a speech line), so anything long or multi-line is ignored (GUESS: no real area-name table found yet). */
+  private areaName() { const t = (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); return t.length <= 24 && !t.includes('\n') ? t : ''; }
   save() {
     this.stash();
     const d: SaveData = {
@@ -374,7 +375,7 @@ export class GameScene implements Scene {
   }
   static async create(app: App, gender: Gender, name: string, opts?: { scenario?: string; carry?: GameScene; load?: SaveData; entry?: number; slot?: number; ep?: number }) {
     const ld = opts?.load;
-    await Data.init(ld ? ld.ep ?? 1 : opts?.ep ?? Data.ep);   // which episodes' data overlays are installed (saves remember theirs; a character carried between scenarios keeps it)
+    await Data.init(ld ? Math.max(ld.ep ?? 1, opts?.ep ?? 1) : opts?.ep ?? Data.ep);   // which episodes' data overlays are installed (saves remember theirs; a character carried between scenarios keeps it)
     if (!ld && !opts?.carry) { savedVars.clear(); savedGround.clear(); savedZones.clear(); savedGlobals = new Map(); }   // a new game must not inherit the previous character's world state
     if (ld) { savedGlobals = new Map(ld.globals); savedVars.clear(); for (const [k, v] of Object.entries(ld.vars)) savedVars.set(k, new Map(v)); savedGround.clear(); for (const [k, v] of Object.entries(ld.ground)) savedGround.set(k, v); savedZones.clear(); for (const [k, v] of Object.entries(ld.zones ?? {})) savedZones.set(k, v); }
     const scenario = opts?.scenario ?? SCENARIO;
