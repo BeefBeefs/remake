@@ -1,6 +1,7 @@
 import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
 import { GameMap, Drawable } from './map.js';
+import { Actor, loadActors } from './actors.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
 import { App, Scene, Text } from './app.js';
 import { Windows } from './windows.js';
@@ -10,6 +11,7 @@ import type { Gender } from './select.js';
 
 const q = new URLSearchParams(location.search);
 const MAP = q.get('map') ?? 'f00_01';
+const SCENARIO = q.get('scenario') ?? '00000000';
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
 const FRAME_MS = 60;
@@ -26,7 +28,7 @@ export class GameScene implements Scene {
   private expTable: number[] = []; private totalExp = 0; private devNext = 0;
   private drawPlayer: Drawable;
 
-  private constructor(private app: App, private name: string, private map: GameMap, private set: SpriteSet, private caf: Caf, private gui: Gui, private win: Windows, private text: Text) {
+  private constructor(private app: App, private name: string, private map: GameMap, private set: SpriteSet, private caf: Caf, private gui: Gui, private win: Windows, private text: Text, private actors: Actor[]) {
     const mk = map.markerReal();
     this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
     const p = this.player;
@@ -45,8 +47,8 @@ export class GameScene implements Scene {
     (window as any).game = this;
   }
   static async create(app: App, gender: Gender, name: string) {
-    const [map, set, caf, gui, win, text, tables] = await Promise.all([GameMap.load(MAP), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json())]);
-    const g = new GameScene(app, name, map, set, caf, gui, win, text);
+    const [map, set, caf, gui, win, text, tables, actors] = await Promise.all([GameMap.load(MAP), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), loadActors(app, SCENARIO).catch(() => [] as Actor[])]);
+    const g = new GameScene(app, name, map, set, caf, gui, win, text, actors);
     g.expTable = tables['13'].v; g.syncExp();
     return g;
   }
@@ -68,8 +70,12 @@ export class GameScene implements Scene {
       this.win.item = true;
     }
   }
+  private blocked(x: number, y: number) {
+    return this.map.blockedReal(x, y) || this.actors.some(a => Math.hypot(a.x - x, (a.y - y) * 1.6) < a.radius);
+  }
   update(dt: number) {
     this.dev();
+    for (const a of this.actors) a.update(dt);
     const inp = this.app.input, keys = inp.keys, p = this.player, hud = this.hud;
     if (inp.pressed.has('g') || inp.pressed.has('f1')) this.debug = !this.debug;
     if (inp.pressed.has('r')) hud.running = !hud.running;
@@ -100,9 +106,9 @@ export class GameScene implements Scene {
       p.dir = dirIndex(vx, vy);
       const nx = p.x + vx / n * sp, ny = p.y + vy / n * sp;
       // slide along obstacles: try both axes, then each alone
-      if (!this.map.blockedReal(nx, ny)) { p.x = nx; p.y = ny; }
-      else if (!this.map.blockedReal(nx, p.y)) p.x = nx;
-      else if (!this.map.blockedReal(p.x, ny)) p.y = ny;
+      if (!this.blocked(nx, ny)) { p.x = nx; p.y = ny; }
+      else if (!this.blocked(nx, p.y)) p.x = nx;
+      else if (!this.blocked(p.x, ny)) p.y = ny;
       const na = run ? ANIM_RUN : ANIM_WALK; if (na !== p.anim) { p.anim = na; p.t = 0; }
     } else if (p.anim !== ANIM_IDLE) { p.anim = ANIM_IDLE; p.t = 0; }
     p.t += dt;
@@ -112,8 +118,10 @@ export class GameScene implements Scene {
     const p = this.player, map = this.map, inp = this.app.input;
     this.camX = Math.round(Math.max(0, Math.min(map.realW - SCREEN_W, p.x - SCREEN_W / 2)));
     this.camY = Math.round(Math.max(0, Math.min(map.realH - HUD_Y, p.y - HUD_Y / 2)));
-    map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer]);
+    map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors]);
     if (this.debug) { map.drawJudge(ctx, this.camX, this.camY, SCREEN_W, HUD_Y); this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2); }
+    const hov = inp.y < HUD_Y ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
+    if (hov) this.text.drawCenter(ctx, hov.name, Math.round(hov.x - this.camX), Math.round(hov.y - this.camY - 84));
     ctx.fillStyle = '#000'; ctx.fillRect(0, HUD_Y, SCREEN_W, SCREEN_H - HUD_Y);
     this.win.draw(ctx, this.hud, this.name, inp.x, inp.y);
     this.gui.draw(ctx, this.hud);
