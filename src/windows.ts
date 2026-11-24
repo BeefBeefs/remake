@@ -7,6 +7,8 @@ import { ItemDb, ItemDef, Inventory, InvEntry, SECTION_NAMES, drawTooltip } from
 export interface CombatStats { atkMin: number; atkMax: number; defense: number; speed: number; }
 
 const GRID_X = 335, GRID_Y = 71, CELL = 32;
+/** Change Equipment buttons I / II (PLACEHOLDER position: the original icons are part of Status.njp, not located yet). */
+export const SET_BTN = [{ x: 540, y: 394, w: 22, h: 16 }, { x: 566, y: 394, w: 26, h: 16 }];
 
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
 export class Windows {
@@ -75,9 +77,11 @@ export class Windows {
         const cx = GRID_X + e.x * CELL + (e.w * CELL - f.canvas.width) / 2, cy = GRID_Y + e.y * CELL + (e.h * CELL - f.canvas.height) / 2;
         ctx.drawImage(f.canvas, Math.round(cx), Math.round(cy));
         if (e.unid) this.text.draw(ctx, '?', GRID_X + e.x * CELL + 3, GRID_Y + e.y * CELL + 3);
+        if (e.alt && !e.eq) { ctx.strokeStyle = '#5080c0'; ctx.lineWidth = 1; ctx.strokeRect(GRID_X + e.x * CELL + 3, GRID_Y + e.y * CELL + 3, e.w * CELL - 6, e.h * CELL - 6); }
         if (e.eq) { ctx.strokeStyle = Inventory.broken(e) ? '#e06060' : '#60e060'; ctx.lineWidth = 2; ctx.strokeRect(GRID_X + e.x * CELL + 1, GRID_Y + e.y * CELL + 1, e.w * CELL - 2, e.h * CELL - 2); }
       }
-      this.text.draw(ctx, `Gold: ${this.gold}`, 340, 398); this.text.draw(ctx, `Mines: ${this.mineStock}`, 450, 398);
+      this.text.draw(ctx, `Gold: ${this.gold}`, 340, 398); this.text.draw(ctx, `Mines: ${this.mineStock}`, 430, 398);
+      SET_BTN.forEach((b, i) => { ctx.strokeStyle = this.inv.set === i ? '#60e060' : '#807040'; ctx.lineWidth = 1; ctx.strokeRect(b.x + .5, b.y + .5, b.w, b.h); this.text.draw(ctx, i ? 'II' : 'I', b.x + 6, b.y + 3); });
       const hover = this.inv.at(Math.floor((mx - GRID_X) / CELL), Math.floor((my - GRID_Y) / CELL));
       if (hover && mx >= GRID_X) {
         const it = hover.unid ? this.db.base(hover.item) : hover.item, lines = [this.label(hover), `${it.type} (${SECTION_NAMES[it.sec]})`];
@@ -85,7 +89,7 @@ export class Windows {
         if (it.sec === 0) { const [a, b] = ItemDb.attack(it); lines.push(`Attack: ${a === b ? a : `${a}-${b}`}  Speed: ${ItemDb.speed(it)}%`); }
         else if (it.sec === 1) lines.push(`Defense: ${ItemDb.defense(it)}`);
         if (ItemDb.maxDur(it) > 0) lines.push(`Durability: ${Inventory.dur(hover)}/${ItemDb.maxDur(hover.item)}${Inventory.broken(hover) ? ' (broken)' : ''}`);
-        lines.push(`Price: ${ItemDb.price(it)}`); if (this.sellValue) lines.push(`Click to sell for ${this.sellValue(it)}`); else if (ItemDb.slot(it)) lines.push(hover.eq ? '[Equipped] click to remove' : 'Click to equip');
+        lines.push(`Price: ${ItemDb.price(it)}`); if (this.sellValue) lines.push(`Click to sell for ${this.sellValue(it)}`); else if (ItemDb.slot(it)) lines.push(hover.unid ? 'Cannot be used until identified' : hover.eq ? '[Equipped] click to remove' : hover.alt ? '[Set ' + (this.inv.set ? 'I' : 'II') + '] click to equip here' : 'Click to equip');
         drawTooltip(ctx, this.text, lines, mx + 12, my + 12);
       }
     }

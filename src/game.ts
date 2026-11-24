@@ -13,7 +13,7 @@ import { Pet, PetCtx, PetSave } from './companion.js';
 import { MapWindow, ExploredSave } from './mapwin.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y, BELT, MINE_BTN, POWER_BTN, PET_GAUGE, inBox } from './gui.js';
 import { App, Scene, Text } from './app.js';
-import { Windows } from './windows.js';
+import { Windows, SET_BTN } from './windows.js';
 import { ItemDb } from './items.js';
 import { TitleScene } from './title.js';
 import { writeSlot, firstFree } from './saves.js';
@@ -37,7 +37,7 @@ const savedZones = new Map<string, Record<number, boolean>>();
 export interface SaveData {
   v: 1; slot?: number; at?: number; area?: string; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
   inv: [number, number, number, number, number?, number?, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>; zones?: Record<string, Record<number, boolean>>;
-  magic?: MagicSave; explored?: ExploredSave; pet?: PetSave;
+  magic?: MagicSave; explored?: ExploredSave; pet?: PetSave; invSet?: number;
 }
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
 const LAYERS = (q.get('layers') ?? '1,0,3').split(',').map(Number);
@@ -82,7 +82,8 @@ export class GameScene implements Scene {
     this.stash();
     const d: SaveData = {
       v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-      inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0, e.unid ? 1 : 0, e.dur ?? -1]),
+      invSet: this.win.inv.set,
+      inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, (e.eq ? 1 : 0) | (e.alt ? 2 : 0), e.unid ? 1 : 0, e.dur ?? -1]),
       vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
       magic: this.magic.save(), explored: this.mapwin.encode(), pet: this.pet?.save(this.petKills),
     };
@@ -357,7 +358,8 @@ export class GameScene implements Scene {
     if (ld) {
       Object.assign(g.player, { x: ld.x, y: ld.y }); g.spawnPos = { x: map.markerReal()?.[0] ?? ld.x, y: map.markerReal()?.[1] ?? ld.y };
       g.hud = ld.hud; g.totalExp = ld.totalExp; g.syncExp(); g.win.gold = ld.gold;
-      for (const [sec, idx, x, y, eq, unid, dur] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h, eq: !!eq, unid: !!unid, dur: dur !== undefined && dur >= 0 ? dur : undefined }); } }
+      g.win.inv.set = ld.invSet ?? 0;
+      for (const [sec, idx, x, y, eq, unid, dur] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h, eq: !!((eq ?? 0) & 1), alt: !!((eq ?? 0) & 2), unid: !!unid, dur: dur !== undefined && dur >= 0 ? dur : undefined }); } }
     }
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
     // monsters addressed by the 'free slot' sentence 32 start dormant: the script summons them (trap rooms, waves). Sentence 31 ranges (alive checks, e.g. 'all monsters of the room are dead') address ordinary monsters
@@ -618,6 +620,7 @@ export class GameScene implements Scene {
     }
     if (inp.pressed.has('escape') && this.qlog) this.toggleQuestLog();
     else if (inp.pressed.has('escape')) { if (this.win.status || this.win.item || this.win.magic || this.mapwin.open) this.win.status = this.win.item = this.win.magic = this.mapwin.open = this.win.mapOpen = false; else { this.menu.open('main'); this.paused = true; return; } }
+    if (inp.pressed.has('shift+capslock')) this.win.inv.switchSet();
     if (inp.clicked) {
       const b = this.gui.button(inp.x, inp.y);
       const bk = this.magic.barHit(inp.x, inp.y);
@@ -628,6 +631,7 @@ export class GameScene implements Scene {
       else if ((this.win.status || this.win.magic) && inp.x < 320 && inp.y >= 4 && inp.y < 36 && inp.x >= 40 && inp.x < 280) this.showLeft(inp.x < 165 ? 'status' : 'magic', true);
       else if (this.win.magic && inp.x < 320 && inp.y < 416) this.magic.click(inp.x, inp.y);
       else if (this.qlog && inp.x < 320 && inp.y < 416) this.qlogClick(inp.x, inp.y);
+      else if (this.win.item && !this.shop && SET_BTN.some((r, i) => inBox(r, inp.x, inp.y) && (this.win.inv.switchSet(i), true))) { /* Change Equipment I / II */ }
       else if (!this.shop && this.win.entryAt(inp.x, inp.y)) this.win.inv.toggleEquip(this.win.entryAt(inp.x, inp.y)!);
       else if (b === 'status') this.showLeft('status');
       else if (b === 'item') this.win.item = !this.win.item;

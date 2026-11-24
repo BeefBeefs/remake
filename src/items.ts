@@ -40,7 +40,7 @@ export class ItemDb {
 
 export const INV_COLS = 9, INV_ROWS = 10;
 /** `unid`: magical variant not identified yet (shown as its plain base item with a '?'). `dur`: current durability, undefined = full (max = Item.Ibn field 25, weapons/armor only). */
-export interface InvEntry { item: ItemDef; x: number; y: number; w: number; h: number; eq?: boolean; unid?: boolean; dur?: number; }
+export interface InvEntry { item: ItemDef; x: number; y: number; w: number; h: number; eq?: boolean; alt?: boolean; unid?: boolean; dur?: number; }
 export type Slot = 'weapon' | 'head' | 'body' | 'shield' | 'boots' | 'accessory';
 const ARMOR_SLOTS: Slot[] = ['head', 'body', 'shield', 'boots'];
 
@@ -65,9 +65,17 @@ export class Inventory {
   /** Toggle equipping; equipping replaces whatever occupies the same slot. Returns false for non-equipment. */
   toggleEquip(e: InvEntry) {
     const slot = ItemDb.slot(e.item); if (!slot) return false;
+    if (e.unid) return false;   // an unidentified item cannot be used until a merchant identifies it
     if (e.eq) { e.eq = false; return true; }
     for (const o of this.entries) if (o.eq && ItemDb.slot(o.item) === slot) o.eq = false;
     e.eq = true; return true;
+  }
+  /** Active weapon/shield configuration (0 = I, 1 = II). The sword and shield of the other configuration are flagged `alt`. */
+  set = 0;
+  /** Change Equipment (buttons I / II or Shift+CapsLock): swap the worn sword and shield with the other configuration. */
+  switchSet(to = 1 - this.set) {
+    if (to === this.set) return; this.set = to;
+    for (const e of this.entries) { const s = ItemDb.slot(e.item); if (s === 'weapon' || s === 'shield') { const w = !!e.eq; e.eq = !!e.alt; e.alt = w; } }
   }
   equipped(slot?: Slot) { return this.entries.filter(e => e.eq && (!slot || ItemDb.slot(e.item) === slot)); }
 }

@@ -39,6 +39,8 @@ export class App {
             const k = e.key.toLowerCase();
             if (!i.keys.has(k))
                 i.pressed.add(k);
+            if (e.shiftKey && k === 'capslock')
+                i.pressed.add('shift+capslock');
             i.keys.add(k);
             if (e.key.length === 1 || e.key === 'Backspace')
                 i.typed.push(e.key);

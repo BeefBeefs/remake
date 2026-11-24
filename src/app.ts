@@ -28,6 +28,7 @@ export class App {
     addEventListener('mouseup', () => i.down = false);
     addEventListener('keydown', e => {
       const k = e.key.toLowerCase(); if (!i.keys.has(k)) i.pressed.add(k);
+      if (e.shiftKey && k === 'capslock') i.pressed.add('shift+capslock');
       i.keys.add(k); if (e.key.length === 1 || e.key === 'Backspace') i.typed.push(e.key);
       if (e.key.startsWith('Arrow') || e.key === 'F1' || e.key === ' ' || e.key === 'Tab') e.preventDefault();
     });

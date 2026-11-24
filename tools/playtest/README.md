@@ -15,3 +15,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `turret.mjs` stands in the Garam Goblin room and checks that the pillar turrets shoot bolts that hurt the hero.
 - `repair.mjs` — Malse identify/repair services, durability wear.
 - `heal.mjs` — Syria healing (HP/MP/dog).
+- `equipsets.mjs` — I/II equipment sets, unidentified equip block.

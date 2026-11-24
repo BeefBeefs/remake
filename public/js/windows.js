@@ -1,6 +1,8 @@
 import { put, Text } from './app.js';
 import { ItemDb, Inventory, SECTION_NAMES, drawTooltip } from './items.js';
 const GRID_X = 335, GRID_Y = 71, CELL = 32;
+/** Change Equipment buttons I / II (PLACEHOLDER position: the original icons are part of Status.njp, not located yet). */
+export const SET_BTN = [{ x: 540, y: 394, w: 22, h: 16 }, { x: 566, y: 394, w: 26, h: 16 }];
 /** Status (left) and Item (right) windows from System/Game/Pattern/Status.njp. Positions are absolute in the 640x480 screen. */
 export class Windows {
     constructor(st, icons, text, db) {
@@ -104,6 +106,11 @@ export class Windows {
                 ctx.drawImage(f.canvas, Math.round(cx), Math.round(cy));
                 if (e.unid)
                     this.text.draw(ctx, '?', GRID_X + e.x * CELL + 3, GRID_Y + e.y * CELL + 3);
+                if (e.alt && !e.eq) {
+                    ctx.strokeStyle = '#5080c0';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(GRID_X + e.x * CELL + 3, GRID_Y + e.y * CELL + 3, e.w * CELL - 6, e.h * CELL - 6);
+                }
                 if (e.eq) {
                     ctx.strokeStyle = Inventory.broken(e) ? '#e06060' : '#60e060';
                     ctx.lineWidth = 2;
@@ -111,7 +118,8 @@ export class Windows {
                 }
             }
             this.text.draw(ctx, `Gold: ${this.gold}`, 340, 398);
-            this.text.draw(ctx, `Mines: ${this.mineStock}`, 450, 398);
+            this.text.draw(ctx, `Mines: ${this.mineStock}`, 430, 398);
+            SET_BTN.forEach((b, i) => { ctx.strokeStyle = this.inv.set === i ? '#60e060' : '#807040'; ctx.lineWidth = 1; ctx.strokeRect(b.x + .5, b.y + .5, b.w, b.h); this.text.draw(ctx, i ? 'II' : 'I', b.x + 6, b.y + 3); });
             const hover = this.inv.at(Math.floor((mx - GRID_X) / CELL), Math.floor((my - GRID_Y) / CELL));
             if (hover && mx >= GRID_X) {
                 const it = hover.unid ? this.db.base(hover.item) : hover.item, lines = [this.label(hover), `${it.type} (${SECTION_NAMES[it.sec]})`];
@@ -129,7 +137,7 @@ export class Windows {
                 if (this.sellValue)
                     lines.push(`Click to sell for ${this.sellValue(it)}`);
                 else if (ItemDb.slot(it))
-                    lines.push(hover.eq ? '[Equipped] click to remove' : 'Click to equip');
+                    lines.push(hover.unid ? 'Cannot be used until identified' : hover.eq ? '[Equipped] click to remove' : hover.alt ? '[Set ' + (this.inv.set ? 'I' : 'II') + '] click to equip here' : 'Click to equip');
                 drawTooltip(ctx, this.text, lines, mx + 12, my + 12);
             }
         }

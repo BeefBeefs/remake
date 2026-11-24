@@ -224,3 +224,7 @@ GUESSES: 60% of dropped variants are unidentified (`UNID_CHANCE`); wear = 1 per 
 
 ## Syria's healing (sentences 42/43/63/7/8)
 Exe: 42 (0x432990) writes (HP, maxHP), 43 (0x4329e8) (MP, maxMP), 63 (0x432a40) (HP, maxHP) of the active dog or (-1,-1) when none/dead; 7 (0x43244d) sets HP = max and revives-heals a living dog to full, 8 (0x4324cf) MP = max. Syria's script offers the cure only when one of them is below max. Previously all returned 0 so she never healed. Test: `tools/playtest/heal.mjs`.
+
+## Change Equipment I / II, unidentified items unusable
+From the original help (item.htm): two sword+shield configurations, switched with the "I"/"II" buttons or Shift+CapsLock (right-clicking II = same sword/shield for both: not done); an item with a "?" must be identified by a merchant "before players can see their details and use them" -> unidentified items now cannot be equipped (earlier note said they could). The exe keeps the second configuration in two extra slots (player+0x50c weapon, +0x510 shield), armor is shared. `Inventory.set` + `InvEntry.alt` (equipped in the other configuration; blue frame), saved as eq bit 1 and `SaveData.invSet`. The I/II button positions (540,394)/(566,394) are a PLACEHOLDER; the original icons live in Status.njp (not located). Also from the help, not yet done: accessories go in four slots beside the Warehouse Transfer Box icon; two-handed weapons (Ep. 3+) hide the shield.
+Test: `tools/playtest/equipsets.mjs`.

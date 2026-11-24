@@ -37,6 +37,8 @@ const ARMOR_SLOTS = ['head', 'body', 'shield', 'boots'];
 export class Inventory {
     constructor() {
         this.entries = [];
+        /** Active weapon/shield configuration (0 = I, 1 = II). The sword and shield of the other configuration are flagged `alt`. */
+        this.set = 0;
     }
     fits(x, y, w, h) {
         if (x + w > INV_COLS || y + h > INV_ROWS)
@@ -63,6 +65,8 @@ export class Inventory {
         const slot = ItemDb.slot(e.item);
         if (!slot)
             return false;
+        if (e.unid)
+            return false; // an unidentified item cannot be used until a merchant identifies it
         if (e.eq) {
             e.eq = false;
             return true;
@@ -72,6 +76,20 @@ export class Inventory {
                 o.eq = false;
         e.eq = true;
         return true;
+    }
+    /** Change Equipment (buttons I / II or Shift+CapsLock): swap the worn sword and shield with the other configuration. */
+    switchSet(to = 1 - this.set) {
+        if (to === this.set)
+            return;
+        this.set = to;
+        for (const e of this.entries) {
+            const s = ItemDb.slot(e.item);
+            if (s === 'weapon' || s === 'shield') {
+                const w = !!e.eq;
+                e.eq = !!e.alt;
+                e.alt = w;
+            }
+        }
     }
     equipped(slot) { return this.entries.filter(e => e.eq && (!slot || ItemDb.slot(e.item) === slot)); }
 }
