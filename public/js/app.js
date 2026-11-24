@@ -15,6 +15,7 @@ export class Input {
     }
 }
 export class App {
+    openKeyboard() { this.kb.focus(); }
     constructor(cv) {
         this.cv = cv;
         this.input = new Input();
@@ -48,17 +49,40 @@ export class App {
                 touchId = -1;
                 i.down = false;
             } };
-        cv.addEventListener('touchend', tend);
+        cv.addEventListener('touchend', e => { tend(e); if (this.scene?.wantsTextAt?.(i.x, i.y))
+            this.openKeyboard(); });
         cv.addEventListener('touchcancel', tend);
+        // hidden text field that raises the phone's keyboard (name entry); changes are fed to Input.typed like key presses
+        const kb = this.kb = document.createElement('input');
+        kb.type = 'text';
+        kb.autocapitalize = 'off';
+        kb.autocomplete = 'off';
+        kb.spellcheck = false;
+        kb.setAttribute('aria-hidden', 'true');
+        kb.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;font-size:16px';
+        document.body.append(kb);
+        let prev = '';
+        kb.addEventListener('focus', () => { kb.value = this.scene?.textValue?.() ?? ''; prev = kb.value; });
+        kb.addEventListener('input', () => { const v = kb.value; if (v.length > prev.length && v.startsWith(prev))
+            for (const ch of v.slice(prev.length))
+                i.typed.push(ch);
+        else {
+            for (let n = 0; n < Math.max(0, prev.length - v.length); n++)
+                i.typed.push('Backspace');
+        } prev = v; });
+        kb.addEventListener('keydown', e => { if (e.key === 'Enter')
+            kb.blur(); });
         addEventListener('mouseup', () => i.down = false);
         addEventListener('keydown', e => {
+            if (e.target === this.kb)
+                return; // the phone keyboard field feeds Input.typed through its own input event
             const k = e.key.toLowerCase();
             if (!i.keys.has(k))
                 i.pressed.add(k);
             if (e.shiftKey && k === 'capslock')
                 i.pressed.add('shift+capslock');
             i.keys.add(k);
-            if (e.key.length === 1 || e.key === 'Backspace')
+            if ((e.key.length === 1 || e.key === 'Backspace') && e.target !== this.kb)
                 i.typed.push(e.key);
             if (e.key.startsWith('Arrow') || e.key === 'F1' || e.key === ' ' || e.key === 'Tab')
                 e.preventDefault();

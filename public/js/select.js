@@ -16,6 +16,9 @@ export class SelectScene {
         this.mode = null;
     }
     static async create(app) { return new SelectScene(app, await app.gui('Select_Select'), await app.gui('Title_Title'), await Text.load(app)); }
+    /** Touch: a tap on the name field raises the phone keyboard (App.openKeyboard). */
+    wantsTextAt(x, y) { return !this.mode && x >= 140 && x < 400 && y >= 398 && y < 434; }
+    textValue() { return this.name; }
     update(dt = 16) {
         const i = this.app.input;
         if (this.mode) {

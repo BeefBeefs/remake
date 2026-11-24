@@ -11,6 +11,9 @@ export class SelectScene implements Scene {
   gender: Gender = 'male'; name = 'SHADOW'; ep = 4; busy = false; private mode: ModeWindow | null = null;
   private constructor(private app: App, private s: SpriteSet, private t: SpriteSet, private text: Text) {}
   static async create(app: App) { return new SelectScene(app, await app.gui('Select_Select'), await app.gui('Title_Title'), await Text.load(app)); }
+  /** Touch: a tap on the name field raises the phone keyboard (App.openKeyboard). */
+  wantsTextAt(x: number, y: number) { return !this.mode && x >= 140 && x < 400 && y >= 398 && y < 434; }
+  textValue() { return this.name; }
   update(dt = 16) {
     const i = this.app.input;
     if (this.mode) {
