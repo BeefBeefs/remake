@@ -46,6 +46,6 @@ for (const ep of eps) {
   }
   const best = Object.fromEntries(globals.filter(([k, v]) => k.startsWith('q:') && v > 0).map(([k, v]) => [k.slice(2), v]));
   const qs = Object.keys(best).map(Number).sort((a, b) => a - b), done = qs.filter(q => best[q] >= 2), acc = qs.filter(q => best[q] === 1);
-  console.log(`Episode ${ep}: ${all.length} scenarios, quests started ${qs.length}, completed by script alone ${done.length}, accepted only ${acc.length}: [${acc.join(',')}]`);
+  console.log(`Episode ${ep}: ${all.length} scenarios, quests started ${qs.length}, completed by script alone ${done.length}, accepted only ${acc.length}: [${acc.join(',')}]\n  started [${qs.join(',')}]\n  done [${done.join(',')}]`);
 }
 await b.close();
