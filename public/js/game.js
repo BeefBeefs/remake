@@ -57,8 +57,16 @@ export class GameScene {
         savedZones.set(this.scenario, Object.fromEntries(this.zones.filter(z => z.visible !== (z.rec.vis !== 0)).map(z => [z.rec.id, z.visible])));
         savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold, unid: o.unid, dur: o.dur })));
     }
-    /** Message 1000000 is only an area name on some maps (on others it is a speech line), so anything long or multi-line is ignored (GUESS: no real area-name table found yet). */
-    areaName() { const t = (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); return t.length <= 24 && !t.includes('\n') ? t : ''; }
+    /** Area name: Table.Tbd 40 (rows (flag, scenario, entry) with the name in the first string of each row, the warp-gate list); scenarios not in it fall back to message 1000000 when that is a short single line (on other maps it is a speech line). */
+    areaName() {
+        const t = this.tables['40'], n = Number(this.scenario);
+        if (t?.v && t.cols)
+            for (let r = 0; r * t.cols < t.v.length; r++)
+                if (t.v[r * t.cols + 1] === n && t.s?.[r * t.cols])
+                    return t.s[r * t.cols];
+        const m = (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, '');
+        return m.length <= 24 && !m.includes('\n') ? m : '';
+    }
     save() {
         this.stash();
         const d = {

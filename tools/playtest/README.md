@@ -35,3 +35,5 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `upgrade.mjs` — an Episode-1 save is continued in Episode 3 from the LOAD DATA screen's "Continue in Episode N >" picker (gold and map kept, `Data.ep` = 3).
 - `compgear.mjs` — Companion Evasion gear makes the dog dodge, its status shows Hit Rate / Evasion.
 - `spelltables.mjs` — real spell data: MP cost (Table 16), Heal % (17), exp per level (27, +1 exp per cast, cap 20), cast-time multiplier (20).
+- `epscripts.mjs` — fires every script handler (talk chains, kills, zones, polls) of every scenario of Episodes 2-4 and reports unimplemented sentence types / page errors (none found).
+- `epexits.mjs` — every map exit (sentence 17) and warp-gate row of an episode leads to a scenario of its data chain.

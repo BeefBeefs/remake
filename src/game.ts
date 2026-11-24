@@ -88,8 +88,12 @@ export class GameScene implements Scene {
   }
   /** Slot (0-5) this character is saved to; -1 = none free. */
   slot = -1;
-  /** Message 1000000 is only an area name on some maps (on others it is a speech line), so anything long or multi-line is ignored (GUESS: no real area-name table found yet). */
-  private areaName() { const t = (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); return t.length <= 24 && !t.includes('\n') ? t : ''; }
+  /** Area name: Table.Tbd 40 (rows (flag, scenario, entry) with the name in the first string of each row, the warp-gate list); scenarios not in it fall back to message 1000000 when that is a short single line (on other maps it is a speech line). */
+  private areaName() {
+    const t = this.tables['40'], n = Number(this.scenario);
+    if (t?.v && t.cols) for (let r = 0; r * t.cols < t.v.length; r++) if (t.v[r * t.cols + 1] === n && t.s?.[r * t.cols]) return t.s[r * t.cols]!;
+    const m = (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); return m.length <= 24 && !m.includes('\n') ? m : '';
+  }
   save() {
     this.stash();
     const d: SaveData = {

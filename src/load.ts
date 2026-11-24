@@ -52,7 +52,7 @@ export class LoadScene implements Scene {
     if (!d) { this.text.drawCenter(ctx, 'No Data', r.x + r.w / 2, r.y + r.h / 2 - 6); return; }
     this.text.draw(ctx, d.name, r.x + 28, r.y + 8);
     this.text.draw(ctx, `Lv ${d.hud.level}   ${d.gender === 'male' ? 'Male' : 'Female'}`, r.x + 28, r.y + 28);
-    this.text.draw(ctx, d.area && d.area.length <= 24 && !d.area.includes('\n') ? d.area : d.scenario === '00000000' ? 'Remote Town' : `Area ${d.scenario}`, r.x + 28, r.y + 48);
+    this.text.draw(ctx, d.area && d.area.length <= 24 && !d.area.includes('\n') ? d.area : `Area ${d.scenario}`, r.x + 28, r.y + 48);
     this.text.draw(ctx, `${d.gold} G`, r.x + 28, r.y + 68);
     if (d.at) this.text.draw(ctx, new Date(d.at).toISOString().slice(0, 16).replace('T', ' '), r.x + r.w - 124, r.y + r.h - 18);
   }
