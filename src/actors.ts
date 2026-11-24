@@ -79,7 +79,7 @@ export class Actor implements Drawable {
     if (this.hidden || !this.enemy || !c || this.gen) return;
     if (this.state === 'die') { this.deadT += dt; return; }
     if (this.stun > 0) {   // staggered: slide back a little, no action
-      this.stun -= dt; const k = Math.max(0, this.stun) / 240 * 0.09 * dt, nx = this.x + this.kx * k, ny = this.y + this.ky * k * 0.6;
+      this.stun -= dt; const k = Math.min(240, Math.max(0, this.stun)) / 240 * 0.09 * dt, nx = this.x + this.kx * k, ny = this.y + this.ky * k * 0.6;
       if (!c.blocked(nx, ny)) { this.x = nx; this.y = ny; }
       this.set('idle'); return;
     }

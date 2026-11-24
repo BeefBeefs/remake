@@ -34,6 +34,8 @@ export class Pet {
         this.dashHit = new Set();
         this.cmdT = 0;
         this.fetchTo = null;
+        /** Companion HP / Attack / Defense lines of the hero's worn gear (set every frame by the game). */
+        this.gear = { hp: 0, atk: 0, def: 0 };
         this.x = x;
         this.y = y;
         this.hp = this.maxHp;
@@ -46,9 +48,9 @@ export class Pet {
     }
     get dead() { return this.hp <= 0; }
     get level() { return Math.max(1, Math.min(this.heroLevel, 1 + Math.floor(this.kills / 6))); }
-    get maxHp() { return Math.max(1, Math.round((100 + 30 * (this.level - 1)) * this.mult[0] / 1000)); }
-    get attack() { return (10 + 3 * (this.level - 1)) * this.mult[1] / 1000; }
-    get defense() { return Math.round((2 + 1.5 * (this.level - 1)) * this.mult[2] / 1000); }
+    get maxHp() { return Math.max(1, Math.round((100 + 30 * (this.level - 1)) * this.mult[0] / 1000) + this.gear.hp); }
+    get attack() { return (10 + 3 * (this.level - 1)) * this.mult[1] / 1000 + this.gear.atk; }
+    get defense() { return Math.round((2 + 1.5 * (this.level - 1)) * this.mult[2] / 1000) + this.gear.def; }
     get busy() { return this.state === 'attack' || this.state === 'jump' || this.state === 'dash'; }
     dmg(k = 1) { return Math.max(1, Math.round(this.attack * k * (9 + Math.floor(Math.random() * 3)) / 10)); }
     /** Damage taken from a monster. Returns the final amount. */

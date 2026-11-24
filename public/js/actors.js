@@ -103,7 +103,7 @@ export class Actor {
         }
         if (this.stun > 0) { // staggered: slide back a little, no action
             this.stun -= dt;
-            const k = Math.max(0, this.stun) / 240 * 0.09 * dt, nx = this.x + this.kx * k, ny = this.y + this.ky * k * 0.6;
+            const k = Math.min(240, Math.max(0, this.stun)) / 240 * 0.09 * dt, nx = this.x + this.kx * k, ny = this.y + this.ky * k * 0.6;
             if (!c.blocked(nx, ny)) {
                 this.x = nx;
                 this.y = ny;

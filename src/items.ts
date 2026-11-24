@@ -5,6 +5,17 @@ import { Text } from './app.js';
 export interface ItemDef { name: string; type: string; f: Record<string, number>; sec: number; idx: number; }
 export const SECTION_NAMES = ['Weapon', 'Armor', 'Accessory', 'Consumable', 'Misc'];
 
+/** The 39 bonus lines of an item in tooltip order (index = triplet number). Units: absolute points unless noted; lifeRec / mpRec in 0.1 % of max per second, mcost / reflGen / reflRate / stamina / mental / absGen / absRate / gold in %. 'x16' (field start + 48) is a flag (1,1,100 on every weapon and a few shields) of unknown meaning. */
+export const FX = ['atk', 'def', 'hit', 'eva', 'matk', 'mdef', 'mhit', 'meva', 'aspd', 'walk', 'hp', 'mp', 'str', 'mlv', 'stunP', 'stunD', 'x16', 'lifeRec', 'mpRec', 'mcost', 'reflGen', 'reflRate', 'stamina', 'mental', 'absGen', 'absRate', 'gold', 'mineFx', 'mines', 'chant', 'cHp', 'cAtk', 'cHit', 'cDef', 'cEva', 'cMatk', 'cMhit', 'cMdef', 'cMeva'] as const;
+export type Fx = typeof FX[number];
+/** Tooltip text (exe format strings) of each bonus line; `u` = unit suffix. */
+export const FX_TEXT: Partial<Record<Fx, [string, string]>> = {
+  atk: ['Attack', ''], def: ['Defense', ''], hit: ['Hit Rate', ''], eva: ['Evasion Rate', ''], matk: ['Magical Attack', ''], mdef: ['Magical Defense', ''], mhit: ['Magical Hit Rate', ''], meva: ['Magical Evasion Rate', ''],
+  aspd: ['Speed of Attack', ''], walk: ['Walking Speed', ''], hp: ['Maximum HP', ''], mp: ['Maximum MP', ''], str: ['Strength', ''], mlv: ['Magic Level', ''], stunP: ['Probability of Stiffness', '%'], stunD: ['Duration of Stiffness', ''],
+  lifeRec: ['Life Recovery', '/s'], mpRec: ['Mental Recovery', '/s'], mcost: ['Mental Consumption', '%'], reflGen: ['Generation of Reflection', '%'], reflRate: ['Reflection Rate', '%'], stamina: ['Effect of Stamina Medicine', '%'], mental: ['Effect of Mental Medicine', '%'],
+  absGen: ['Incidents of Absorption', '%'], absRate: ['Absorption Rate', '%'], gold: ['Amount of Gold', '%'], mineFx: ['Effect of Mine', ''], mines: ['Number of Mines', ''], chant: ['Speed of Chant', ''],
+  cHp: ['Companion HP', ''], cAtk: ['Companion Attack', ''], cHit: ['Companion Hit Rate', ''], cDef: ['Companion Defense', ''], cEva: ['Companion Evasion Rate', ''], cMatk: ['Companion Magical Attack', ''], cMhit: ['Companion Magical Hit Rate', ''], cMdef: ['Companion Magical Defense', ''], cMeva: ['Companion Magical Evasion Rate', ''],
+};
 export class ItemDb {
   sections: ItemDef[][];
   private constructor(raw: { name: string; type: string; f: Record<string, number> }[][]) {
@@ -43,12 +54,18 @@ export class ItemDb {
   /** Armor defense = field 28 (6 boots ... 170 Knight Plate; field 25 is durability, 36/37 the drop rank). */
   static defense(it: ItemDef) { return it.f['28'] ?? 0; }
   /**
-   * Variant / special-item bonuses are (min, max, chance %) field triplets at fixed slots. Decoded by comparing item names (Power/Strength/Devil's, Speed/Gale/Divine Wind, Fire Gem ...):
-   * weapons: 60 attack %, 66 hit rate %, 84 attack speed %, 177 + 3k attribute k; armor: 53 defense %, 59 evasion %, 65 magic defense %, 71 magic evasion %, 167 + 3k attribute k;
-   * accessories: 144 + 3k attribute k (k = Fire, Water, Earth, Thunder, Holy, Dark, Gel, Metal). GUESS: the value is the middle of min..max and the chance is ignored (always applies).
+   * Variant / special-item bonuses are (min, max, chance %) field triplets. Every item type has the SAME block of 39 triplets (the order of the tooltip lines of the exe, see FX), starting at
+   * field 60 for weapons, 50 for armor and 27 for accessories, followed by the 8 attribute triplets (177 / 167 / 144 = start + 117). Decoded by comparing names and magnitudes (Power / Speed / Gale / Divine Wind
+   * variants, Recovery / Healing armor, Gold boots, Reflective shields, Animal Bracelets ...) and checked against the exe's tooltip format strings ("Attack %+9d", "Life Recovery %4d.%1d%%/s", "Amount of Gold %+8d%%" ...).
+   * All are absolute amounts added to the matching parameter (Power Dagger +6..10 attack on a 10 attack dagger), except the %-lines (see FX). GUESS: the value is the middle of min..max (attack: the range itself) and the chance is ignored (always applies).
    */
-  static bonus(it: ItemDef, slot: number): number { const a = it.f[String(slot)]; if (a === undefined) return 0; const b = it.f[String(slot + 1)] ?? a; return (a + b) / 2; }
-  static attrBonus(it: ItemDef): number[] { const base = it.sec === 0 ? 177 : it.sec === 1 ? 167 : it.sec === 2 ? 144 : -1; return Array.from({ length: 8 }, (_, k) => base < 0 ? 0 : ItemDb.bonus(it, base + 3 * k)); }
+  static fxRange(it: ItemDef, k: Fx): [number, number] {
+    const start = it.sec === 0 ? 60 : it.sec === 1 ? 50 : it.sec === 2 ? 27 : -1; if (start < 0) return [0, 0];
+    const slot = start + 3 * FX.indexOf(k), a = it.f[String(slot)]; if (a === undefined) return [0, 0];
+    return [a, it.f[String(slot + 1)] ?? a];
+  }
+  static fx(it: ItemDef, k: Fx): number { const [a, b] = ItemDb.fxRange(it, k); return (a + b) / 2; }
+  static attrBonus(it: ItemDef): number[] { const base = it.sec === 0 ? 177 : it.sec === 1 ? 167 : it.sec === 2 ? 144 : -1; return Array.from({ length: 8 }, (_, k) => { const a = base < 0 ? undefined : it.f[String(base + 3 * k)]; return a === undefined ? 0 : (a + (it.f[String(base + 3 * k + 1)] ?? a)) / 2; }); }
 }
 
 export const INV_COLS = 9, INV_ROWS = 10;

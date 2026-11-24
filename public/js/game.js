@@ -799,7 +799,7 @@ export class GameScene {
             this.applyStats(false);
             this.banner = { text: `${it.name}: maximum ${fx.maxHp ? 'HP' : 'MP'} +${fx.maxHp || fx.maxMp}`, t: 0 };
         }
-        const hp = Math.min(fx.hp, h.hpMax - h.hp), mp = Math.min(fx.mp, h.mpMax - h.mp);
+        const hp = Math.min(Math.round(fx.hp * (1 + this.win.fx('stamina') / 100)), h.hpMax - h.hp), mp = Math.min(Math.round(fx.mp * (1 + this.win.fx('mental') / 100)), h.mpMax - h.mp); // Effect of Stamina / Mental Medicine lines
         h.hp += hp;
         h.mp += mp;
         if (hp > 0)
@@ -855,7 +855,7 @@ export class GameScene {
         const hm = this.harmony();
         if (this.dead)
             return;
-        const h = this.hud, ev = Math.max(0, this.win.attrLv(magic ? 7 : 3)) * 0.05 + (magic ? this.win.pct(1, 71) : this.win.pct(1, 59)) / 100 + hm.dodge;
+        const h = this.hud, ev = Math.max(0, this.win.attrLv(magic ? 7 : 3)) * 0.05 + this.win.fx(magic ? 'meva' : 'eva') / 100 + hm.dodge;
         if (Math.random() < ev) {
             this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: 'Miss' });
             return;
@@ -867,6 +867,13 @@ export class GameScene {
         d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
         if (hm.taken < 1 && !magic)
             d = Math.max(1, Math.round(d * hm.taken));
+        if (from && from.alive && Math.random() * 100 < this.win.fx('reflGen')) {
+            const r = Math.ceil(d * this.win.fx('reflRate') / 100);
+            if (r > 0) {
+                this.damage(from, r);
+                this.rings.push({ x: from.x, y: from.y, t: 0, r: 30, color: '#e0e0ff' });
+            }
+        } // shield reflection: chance = Generation of Reflection %, damage = Reflection Rate % (literal reading of the two lines)
         if (this.buffs.counter > 0 && from && !magic && from.alive) {
             this.damage(from, Math.max(1, Math.round(d * 0.5)));
             this.rings.push({ x: from.x, y: from.y, t: 0, r: 40, color: '#ffc040' });
@@ -898,7 +905,7 @@ export class GameScene {
         // exe 0x412a40 (player->monster): damage = power * (9 + rand%3 | 10 + rand%3) * Table11[neutral=10] / 100 - monster flat defence (+0xe8).
         // power = weapon attack (item field 26; fists = 10) * strength% (stat table row 4: 140 at level 1, +10 per fighter level). The real player attack builder was not found, so using strength as a multiplier is a GUESS.
         // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
-        const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
+        const st = this.win.stats(), str = this.win.strength(), power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
         if (Math.random() < Math.max(0, -this.win.attrLv(2)) * 0.05) {
             this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: 'Miss' });
             return;
@@ -909,7 +916,19 @@ export class GameScene {
             const w = this.win.inv.equipped('weapon')[0];
             this.usage[w && ItemDb.isRanged(w.item) ? 'ranged' : 'melee']++;
         }
-        this.damage(a, Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0)))));
+        const dealt = Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0))));
+        this.damage(a, dealt);
+        // weapon bonuses: absorption (chance %, then rate % of the damage becomes HP) and stiffness (chance %, longer stagger)
+        const w = this.win, h = this.hud;
+        if (!this.dead && Math.random() * 100 < w.fx('absGen')) {
+            const g = Math.min(h.hpMax - h.hp, Math.ceil(dealt * w.fx('absRate') / 100));
+            if (g > 0) {
+                h.hp += g;
+                this.floaters.push({ x: this.player.x, y: this.player.y - 90, t: 0, s: `+${g}` });
+            }
+        }
+        if (a.alive && Math.random() * 100 < w.fx('stunP'))
+            a.stun = Math.max(a.stun, 240 + 100 * w.fx('stunD'));
     }
     /** Apply final damage to a monster: floater, sound, and the death rewards (experience, gold, item drop, kill script event). */
     damage(a, dmg) {
@@ -926,7 +945,7 @@ export class GameScene {
                 this.pet.addKill();
             if (this.vm?.event(4, 14000000 + a.rec.id))
                 this.openDialog();
-            const [g0, g1] = a.stats.gold, gold = Math.random() * 100 < (a.stats.goldChance ?? 100) ? Math.max(1, g0 + Math.floor(Math.random() * (g1 - g0 + 1))) : 0; // exe 0x45a030: chance%, then min + rand%(max-min+1)
+            const [g0, g1] = a.stats.gold, gold = Math.random() * 100 < (a.stats.goldChance ?? 100) ? Math.max(1, Math.round((g0 + Math.floor(Math.random() * (g1 - g0 + 1))) * (1 + this.win.fx('gold') / 100))) : 0; // Amount of Gold line   // exe 0x45a030: chance%, then min + rand%(max-min+1)
             if (gold > 0 && g1 > 0)
                 this.ground.push({ x: a.x, y: a.y, gold });
             // item drop (exe 0x45a000): always calls the generator with the monster's drop level; the chance lives in Table.Tbd 30
@@ -1018,7 +1037,11 @@ export class GameScene {
             return;
         }
         this.win.inv.remove(e);
-        this.mines.push({ x: this.player.x, y: this.player.y + 4, t: 0 });
+        const n = 1 + Math.max(0, Math.round(this.win.fx('mines'))); // Number of Mines line (GUESS: extra mines laid in one go, spread around the hero)
+        for (let i = 0; i < n; i++) {
+            const an = i * 2.4;
+            this.mines.push({ x: this.player.x + (i ? Math.cos(an) * 36 : 0), y: this.player.y + 4 + (i ? Math.sin(an) * 22 : 0), t: 0 });
+        }
     }
     updateMines(dt) {
         this.win.mineStock = this.win.inv.entries.filter(e => e.item.sec === 4 && (e.item.f['1'] ?? 0) === 1).length;
@@ -1032,7 +1055,7 @@ export class GameScene {
                 return true;
             this.blasts.push({ x: m.x, y: m.y, t: 0 });
             audio.sfx(SFX.kill, 0.9);
-            const pw = 60 + 6 * (this.hud.level - 1);
+            const pw = 60 + 6 * (this.hud.level - 1) + this.win.fx('mineFx');
             for (const a of this.actors)
                 if (a.enemy && !a.gen && a.alive && Math.hypot(a.x - m.x, (a.y - m.y) * 1.6) < 110)
                     this.damage(a, Math.max(1, Math.round(pw * (9 + Math.floor(Math.random() * 3)) / 10)));
@@ -1104,7 +1127,7 @@ export class GameScene {
             this.banner = { text: `${sp.name} cannot be cast`, t: 0 };
             return;
         }
-        const h = this.hud, p = this.player, fx = SPELL_FX[sp.id], hm = this.harmony(), cost = Math.max(1, Math.round(sp.mp * hm.mpCost));
+        const h = this.hud, p = this.player, fx = SPELL_FX[sp.id], hm = this.harmony(), cost = Math.max(1, Math.round(sp.mp * hm.mpCost * Math.max(0.1, 1 + this.win.fx('mcost') / 100)));
         if (h.mp < cost) {
             this.banner = { text: 'Not enough MP', t: 0 };
             return;
@@ -1173,7 +1196,7 @@ export class GameScene {
         else if (sp.kind === 'blade') {
             if (this.atkT < 0)
                 p.dir = dirIndex(dx, dy);
-            bullet(0, Math.max(1, (this.win.stats().atkMax || 10) * (this.win.ps?.strength ?? 100) / 100 * fx.mult * hm.dmg), { phys: true });
+            bullet(0, Math.max(1, (this.win.stats().atkMax || 10) * this.win.strength() / 100 * fx.mult * hm.dmg), { phys: true });
         }
         else if (sp.kind === 'fan') {
             if (this.atkT < 0)
@@ -1188,13 +1211,13 @@ export class GameScene {
         }
         h.mp -= cost;
         this.usage.magic++;
-        this.castT = 400;
+        this.castT = 400 * 100 / Math.max(20, 100 + this.win.fx('chant'));
         audio.sfx(SFX.hit, 0.5);
         if (m.use(sp.id))
             this.banner = { text: `${sp.name} reached magic level ${m.level(sp.id)}`, t: 0 };
     }
     /** Base spell power: 24 + 3 per hero level (GUESS) x magic level bonus x Holy attribute x weapon magic attack % x power mode x harmony. */
-    spellPower(sp) { return (24 + 3 * (this.hud.level - 1)) * this.magic.power(sp.id) * this.win.attrMul(4) * (1 + this.win.pct(0, 78) / 100) * (this.powerT > 0 ? 1.3 : 1) * this.harmony().magic; }
+    spellPower(sp) { return (24 + 3 * (this.hud.level - 1) + this.win.fx('matk')) * Math.max(0.2, 1 + 0.2 * (this.magic.level(sp.id) - 1 + this.win.fx('mlv'))) * this.win.attrMul(4) * (this.powerT > 0 ? 1.3 : 1) * this.harmony().magic; }
     /** Elemental effect on a monster: the attribute opposite to the monster's is strong (x1.3), its own attribute weak (x0.7). GUESS. */
     elemMul(a, elem) { if (elem < 0)
         return 1; const m = a.stats.attr ?? 0; return elem === (m ^ 1) ? 1.3 : elem === m ? 0.7 : 1; }
@@ -1255,14 +1278,12 @@ export class GameScene {
                 this.harmonyKey = hk;
             }
         }
-        if ((this.regenT += dt) >= 5000 && !this.dead) {
+        if ((this.regenT += dt) >= 1000 && !this.dead) { // Life / Mental Recovery lines: tenths of a percent of the maximum per second (exe format "%4d.%1d%%/s")
             this.regenT = 0;
-            const hp = this.win.pct(1, 101), mp = this.win.pct(1, 104);
-            if (hp)
-                this.hud.hp = Math.min(this.hud.hpMax, this.hud.hp + hp);
-            if (mp)
-                this.hud.mp = Math.min(this.hud.mpMax, this.hud.mp + mp);
-        } // armor 101 / 104 = HP / MP recovery per 5 s (GUESS)
+            const hp = this.win.fx('lifeRec'), mp = this.win.fx('mpRec'), r = (v, max) => v ? (v > 0 ? Math.max(1, Math.round(max * v / 1000)) : Math.min(-1, Math.round(max * v / 1000))) : 0;
+            this.hud.hp = Math.max(1, Math.min(this.hud.hpMax, this.hud.hp + r(hp, this.hud.hpMax)));
+            this.hud.mp = Math.max(0, Math.min(this.hud.mpMax, this.hud.mp + r(mp, this.hud.mpMax)));
+        }
         for (const k of ['berserk', 'eshield', 'mshield', 'counter'])
             if (this.buffs[k] > 0 && (this.buffs[k] -= dt) <= 0) {
                 this.buffs[k] = 0;
@@ -1349,6 +1370,7 @@ export class GameScene {
             a.update(dt, this.actorCtx);
         if (this.pet) {
             this.pet.heroLevel = this.hud.level;
+            this.pet.gear = { hp: Math.round(this.win.fx('cHp')), atk: this.win.fx('cAtk'), def: Math.round(this.win.fx('cDef')) };
             this.pet.update(dt, this.petCtx);
         }
         this.updateMines(dt);

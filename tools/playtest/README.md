@@ -31,3 +31,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `allspells.mjs` — casts every spell, reports damage / stun / buffs; `spellpet.mjs` — Moon, Explosion, Identify, shields and Counter Burst; `gearslots.mjs` — HP/MP gear slots, M.Defense, harmony.
 
 - `episodes.mjs [eps] [limit]` loads every scenario of Episode N's patch with `?ep=N` (fresh page each) and reports 404s / page errors; all of Ep1-4 pass.
+- `fxslots.mjs` checks the full item bonus block (tooltip lines of Recovery / Gamble / Power Bracelet / Gilgamesh / Wildcat Bow ..., life and mental recovery per second, gold, strength).
