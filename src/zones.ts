@@ -28,7 +28,7 @@ export class Zone implements Drawable {
 
 /** Sprites come from Character/OBJECT/<record type>/Pattern (the Mct record's type field is the model number); types without a model are invisible trigger zones. */
 export async function loadZones(app: App, recs: ZoneRec[]): Promise<Zone[]> {
-  const types = [...new Set(recs.filter(r => r.pat >= 0 && r.type >= 0).map(r => r.type))];
+  const types = [...new Set(recs.filter(r => r.pat >= 0 && r.type >= 0 && r.type < 10000).map(r => r.type))];
   const sets = new Map<number, [SpriteSet | null, SpriteSet | null]>();
   await Promise.all(types.map(async t => {
     const get = (n: string) => app.set(`data/ep1/objects/${n}`).catch(() => null);

@@ -335,7 +335,7 @@ export class GameScene implements Scene {
   private hurtEnemy(a: Actor) {
     // placeholder formula: base from level + a roll of the equipped weapon's attack range (fists when none)
     const st = this.win.stats(), roll = st.atkMin + Math.random() * (st.atkMax - st.atkMin);
-    const dmg = Math.max(1, Math.round((4 + this.hud.level * 2 + (st.atkMax ? roll : 2)) * (0.9 + Math.random() * 0.2)));
+    const dmg = Math.max(1, Math.round((4 + this.hud.level * 2 + (st.atkMax ? roll : 2)) * (9 + Math.floor(Math.random() * 3)) / 10));   // exe 0x412a40: attack * (9 + rand%3) / 10 (minus defence * Table 11 / 10, defence not modelled)
     a.hp -= dmg; this.floaters.push({ x: a.x, y: a.y - 80, t: 0, s: String(dmg) }); audio.sfx(a.hp <= 0 ? SFX.kill : SFX.hit, 0.8);
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp();
