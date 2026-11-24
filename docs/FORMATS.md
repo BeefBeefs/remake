@@ -17,16 +17,34 @@ Parsed by `tools/sma.py`.
 flag byte read MSB-first; bit 1 = match (2 bytes: pos = b0 | (b1&0xF0)<<4, len = (b1&0x0F)+3), bit 0 = literal. Implemented in `tools/rclib.py` (verified: output size matches exactly on Gnd/Njp files).
 `RCLIB-H` (Huffman) also exists; not yet needed.
 
-## .njp sprite sheets ("NJudgeUniPat003")
-`magic[16]`, u32 imageCount, u32 totalSize, then per image: `u32 bpp, u32 width, u32 height, u32 compressedFlag(1)` + RCLIB-L block.
-Pixels: bpp 8 or 4, indexed, DIB-style (bottom-up rows, stride padded to 4 bytes). After the images: a metadata tail (per-image records with
-hotspot offsets and 1000 = 1.0 scale fields, animation-ish tables) and a 256-entry palette (4 bytes/entry, index 0 = colour key).
-In `3rd_terr03.njp` the palette starts at tailOffset 12 + 36*52 (=1884). Exact tail layout and channel order (likely RGB, not BGR) still TODO.
+## .njp sprite sheets (`UnitePatData` / `NJudgeUniPat` / `ShadowLowPat`, v002/v003)
+Parsed by `tools/njp.py` (derived from `RKC_UPDIB.dll`; all 484 .njp/.sdw files parse to exactly EOF).
+```
+magic[16]  u32 imageCount  [v3: u32 totalBytes]
+imageCount x { u32 bpp, u32 w, u32 h, u32 compressed } + RCLIB-L block (or raw)   // DIB: bottom-up, stride padded to 4 bytes
+u32 patternCount  [v3: u32 totalParts]
+patternCount x { u32 partCount, i32 rect[4], [UnitePatData only: 168-byte judgement block], u32 defaultPalette,
+                 partCount x { u32 flag, i32 imageIndex, i32 x, i32 y, u32 b, u32 scaleX(1000=1.0), u32 scaleY } }
+u32 paletteCount, paletteCount x 256 x (R,G,B,0)
+[v>=2: u32 hasNames, then per pattern: u32 len + cp932 name]
+```
+bpp is 8 or 4 (4-bit: high nibble is the left pixel); `ShadowLowPat` (.sdw) images are 1-bit masks. Palette index 0 is the transparent key.
+Patterns usually hold one part; `imageIndex == imageCount` means empty. Character .njp files have one palette per colour variant.
+
+## .caf character animation (`CHRAnimation000-002`)
+Parsed by `tools/caf.py` (derived from `RKC_RPGSCRN.dll`):
+```
+magic[16]  u32 animCount
+animCount x { u16 attr, 9 x { u32 layerCount, u16 frameCount, layerCount x { u32 n, n x { u16 a, u16 duration(1000), u32 patternIndex, u16 flags } } } }
+u32, u32 trailer
+```
+The 9 groups are directions (8 + 1 spare); the player has 23 layers per direction (body, equipment variants, weapon...) whose
+pattern indices point into the matching `Animation00.Njp`. Equipment-to-layer mapping is still TODO.
 
 ## Other formats (headers seen, not yet decoded)
 | ext | magic | role (guess) |
 |---|---|---|
-| .caf | `CHRAnimation002` | character animation |
+
 | .gnd | `RPGSCRN_GNDv000` | ground tile layer (RCLIB blocks) |
 | .obl | `RPGSCRN_OBJv001` | map object layer |
 | .map / .lst | text list of .njp names | map pattern lists |

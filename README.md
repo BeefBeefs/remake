@@ -11,3 +11,6 @@ Episode 1 game data (extracted, minus Windows binaries and the manual) is bundle
 
 ## Status
 See `docs/FORMATS.md` for what is understood so far and the roadmap.
+
+## Viewer
+`python3 tools/build_assets.py && npm install && npm run build && npm run serve` then open `index.html`: plays the player's animations (toggle equipment layers).

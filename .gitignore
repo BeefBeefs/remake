@@ -3,3 +3,4 @@
 *.sma
 node_modules/
 dist/
+.claude/

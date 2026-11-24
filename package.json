@@ -1,0 +1,11 @@
+{
+  "name": "shadowflare-remake",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "python3 tools/build_assets.py",
+    "build": "tsc -p .",
+    "serve": "npx http-server public -c-1"
+  },
+  "devDependencies": { "typescript": "^5.4.0" }
+}
