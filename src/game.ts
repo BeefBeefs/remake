@@ -153,6 +153,7 @@ export class GameScene implements Scene {
     (window as any).game = this;
     if (this.vm) this.vm.hooks = {
       charPos: char => { const r = this.actors.find(a => a.rec.kind === 'people' && 12000000 + a.rec.id === char); return r ? [r.rec.a, r.rec.b] : null; },
+      level: () => this.hud.level,
       quest: (q, st) => {
         const title = (this.titles[q] ?? `Quest ${q}`).replace(/[^\x20-\x7e]/g, '?');
         if (st === 1 || st === 2) this.banner = { text: `${st === 1 ? 'Quest accepted' : 'Quest completed'}: ${title}`, t: 0 };

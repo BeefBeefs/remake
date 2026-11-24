@@ -88,6 +88,9 @@ export class ScriptVM {
                 this.hooks?.quest(q, st);
                 return true;
             }
+            case 61:
+                this.set(o[0][0], o[0][1], this.hooks?.level() ?? 1);
+                return true; // handler at 0x433f16 reads the player's level (player+0x34)
             case 48: return true; // quest notice popup: shown by the quest hook
             case 18:
                 this.talking = true;

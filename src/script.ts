@@ -10,6 +10,8 @@ export interface ScriptHooks {
   drop(cat: number, id: number, a: number, b: number, amount: number): void;
   /** Sentence 62: quest `q` (Table.Tbd table 41 row) changed to `state` (1 accepted, 2 completed). */
   quest(q: number, state: number): void;
+  /** Sentence 61: the player's current level. */
+  level(): number;
 }
 export interface Pending { msg: number; text: string; resultVar: [number, number] | null; }
 const warned = new Set<number>();
@@ -59,6 +61,7 @@ export class ScriptVM {
       case 11: this.set(o[0][0], o[0][1], ev(0) + ev(1)); return true;
       case 12: this.set(o[0][0], o[0][1], ev(0) - ev(1)); return true;
       case 62: { const q = ev(0), st = ev(1); this.globals.set(`8:${q}`, st); this.hooks?.quest(q, st); return true; }
+      case 61: this.set(o[0][0], o[0][1], this.hooks?.level() ?? 1); return true;   // handler at 0x433f16 reads the player's level (player+0x34)
       case 48: return true;   // quest notice popup: shown by the quest hook
       case 18: this.talking = true; return true;
       case 19: this.ended = true; return true;
