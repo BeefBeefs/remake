@@ -4,7 +4,7 @@ import { Drawable, worldToReal } from './map.js';
 import { Zone, ZoneRec, loadZones } from './zones.js';
 import type { App } from './app.js';
 
-export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; }
+export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; /** per-monster parameters from the Mct record (tools/mct.py): hit points, attack power, speed %, drop chance %, drop level (-1 = none) */ st?: { hp: number; atk: number; spd: number; drop: number; dlv: number }; }
 const FRAME_MS = 80;
 /** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
 const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
@@ -32,6 +32,12 @@ export class Actor implements Drawable {
       // PLACEHOLDER scaling of the per-model base by the Mct strength multiplier; bosses get a flat bonus.
       const b = ENEMY_STATS[rec.model] ?? ENEMY_STATS[1], k = rec.power ?? 1, bs = rec.boss !== undefined, r = Math.round;
       this.stats = { hp: r(b.hp * k * (bs ? 5 : 1)), dmg: [r(b.dmg[0] * Math.sqrt(k) * (bs ? 1.6 : 1)), r(b.dmg[1] * Math.sqrt(k) * (bs ? 1.6 : 1))], exp: r(b.exp * k * (bs ? 8 : 1)), gold: bs ? [b.gold[0] * 4, b.gold[1] * 4] : b.gold, speed: b.speed };
+      const st = rec.st;
+      if (st && !this.gen) {
+        // Hit points, attack and speed come from the Mct record (Mct power multiplier on top); exp and gold are still derived from the hit points (the real fields are not decoded).
+        const hp = Math.max(1, r(st.hp * k)), at = st.atk * Math.sqrt(k), noLoot = st.dlv < 0;
+        this.stats = { hp, dmg: [Math.max(1, r(at * 0.7)), Math.max(1, r(at * 1.3))], exp: Math.max(1, r(hp * 0.3 * (bs ? 2 : 1))), gold: noLoot ? [0, 0] : [r(hp * 0.1), r(hp * 0.35)], speed: 0.07 * st.spd / 170 };
+      }
       if (this.gen) this.stats = { hp: 80, dmg: [0, 0], exp: 30, gold: [0, 0], speed: 0 };   // PLACEHOLDER hp for the Enemy Hole generators
       this.hp = this.maxHp = this.stats.hp;
     }

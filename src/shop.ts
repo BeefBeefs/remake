@@ -7,12 +7,25 @@ const ROWS = 14, ROW_H = 22, LIST_Y = 40, PANEL_W = 318;
 /** Sell price of an item (PLACEHOLDER: the original formula is unknown; a quarter of the listed price). */
 export const sellPrice = (it: ItemDef) => Math.max(ItemDb.price(it) > 0 ? 1 : 0, Math.floor(ItemDb.price(it) / 4));
 
+/** Table.Tbd slice: rows x cols of ints. */
+export interface Tbl { rows: number; cols: number; v: number[]; }
 /**
- * Stock of shop `index` (script sentence 5). PLACEHOLDER: the original stock list lives in a structure the script
- * VM owns (script context +0x34) that has not been located. We sell the plain base items (name == type) of weapons,
- * armor and consumables up to a price cap that grows with the shop index.
+ * Stock of shop `index` (script sentence 5 argument). Decoded from Table.Tbd: table 32 row `index` lists row numbers of table 33
+ * (-1 ends the list); a table-33 row is `(category, -1, -1, item id, count, ...)` where category/id address an item like script sentences 10/58
+ * do (category = Item.Ibn section, id = field 1). Rows whose category is -1 (shop 1, 3, 4 ...) are services, not goods, and are skipped.
+ * Falls back to a price-capped list when the tables are missing.
  */
-export function shopStock(db: ItemDb, index: number): ItemDef[] {
+export function shopStock(db: ItemDb, index: number, tables?: Record<string, Tbl>): ItemDef[] {
+  const t32 = tables?.['32'], t33 = tables?.['33'];
+  if (t32 && t33 && index >= 0 && index < t32.rows) {
+    const out: ItemDef[] = [];
+    for (const r of t32.v.slice(index * t32.cols, (index + 1) * t32.cols)) {
+      if (r < 0 || r >= t33.rows) continue;
+      const [cat, , , id] = t33.v.slice(r * t33.cols, r * t33.cols + 4);
+      const it = cat >= 0 ? db.find(cat, id) : undefined; if (it && !out.includes(it)) out.push(it);
+    }
+    if (out.length) return out;
+  }
   const cap = 1500 + index * 1500, out: ItemDef[] = [];
   for (const sec of [0, 1]) for (const it of db.sections[sec]) if (it.name === it.type && ItemDb.price(it) <= cap) out.push(it);
   for (const it of db.sections[3]) if (['Tablet', 'Capsule', 'Meat', 'Quality Meat'].includes(it.name)) out.push(it);

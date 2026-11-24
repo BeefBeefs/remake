@@ -4,7 +4,7 @@ import { GameMap, Drawable, worldToReal, realToWorld } from './map.js';
 import { ItemDef } from './items.js';
 import { Zone } from './zones.js';
 import { audio } from './audio.js';
-import { Shop, shopStock, sellPrice } from './shop.js';
+import { Shop, shopStock, sellPrice, Tbl } from './shop.js';
 import { Actor, ActorCtx, loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
@@ -172,7 +172,7 @@ export class GameScene implements Scene {
   musicFor(scenario: string) { return scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
   private shop: Shop | null = null;
   private openShop(index: number) {
-    this.qlog = null; this.shop = new Shop(shopStock(this.win.db, index)); this.dlg = null; this.win.item = true;
+    this.qlog = null; this.shop = new Shop(shopStock(this.win.db, index, this.tables as unknown as Record<string, Tbl>)); this.dlg = null; this.win.item = true;
     this.win.sellValue = sellPrice; this.win.panel = (x, y) => !!this.shop?.over(x, y);
   }
   private closeShop() { this.shop = null; this.win.sellValue = null; this.win.panel = null; }
@@ -305,7 +305,10 @@ export class GameScene implements Scene {
     if (a.hp <= 0) {
       a.die(); this.totalExp += a.stats.exp; this.syncExp();
       if (this.vm?.event(4, 14000000 + a.rec.id)) this.openDialog();
-      const [g0, g1] = a.stats.gold; this.ground.push({ x: a.x, y: a.y, gold: g0 + Math.floor(Math.random() * (g1 - g0 + 1)) });
+      const [g0, g1] = a.stats.gold, gold = g0 + Math.floor(Math.random() * (g1 - g0 + 1));
+      if (gold > 0) this.ground.push({ x: a.x, y: a.y, gold });
+      // item drop: chance (percent) and level come from the monster's Mct record; level picks the PLACEHOLDER table row (Table.Tbd 902-907 rows 2-8)
+      const st = a.rec.st; if (st && st.dlv >= 0 && Math.random() * 100 < st.drop) { const [wa, wb] = realToWorld(a.x, a.y); this.randomDrop(Math.min(8, 2 + Math.floor(st.dlv / 4)), wa, wb); }
     }
   }
   private blocked(x: number, y: number) {

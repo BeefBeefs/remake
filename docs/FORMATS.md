@@ -121,3 +121,17 @@ Folders: 00000000 (Remote Town, map f00_01), 00000001.., 000100xx, 01000000.., 9
 
 ## Voc audio (`VoiceData  V003`)
 `magic[16]`, u32 entry count, u32 type, then entries; each entry = 512-byte header (name at +0, zero padded; entry 0 starts at offset 28) + 16-byte PCM WAVEFORMAT + 2 ASCII bytes (`da`, `fa` in the boss track: probably a loop flag) + u32 data size + raw PCM. `System/Game/Music/BGM00-06.Voc` (city, field, villedge, boss, dungeon, cave, ending) are single 8-bit unsigned stereo 22050 Hz loops (~55-72 s); `System/Title/Music/BGM00.Voc` is 8-bit mono 12 kHz; `System/Game/Voice/Voice00.Voc` holds 160 mono 8/16-bit sound effects (named 0000-0159, 10-18 kHz). Script sentence 16 plays effect N (chest 77/78, Black Hammer's taunts 40-43). `tools/voc.py` converts everything to OGG (4 MB in total).
+
+
+## Monster parameter block (Scenario.Mct)
+Every monster record (name, 9-int placement block, then 719 ints) carries its own parameters; `tools/mct.py` exports `st`:
+`[654]` hit points (40 / 55 / 100-220 / 400-600 / 1000 for the Room of Judgment boss: tracks the monster names Goblin < Soldier < Hammer < Guard < Spike Head), `[655]` attack power (10 early, 20, 25-30, 40 for the final boss),
+`[675]` speed in percent (170 plain goblin, 200 soldier, 250 hammer/spike), `[659]` drop chance in percent and `[660]` drop level (the trap-room Hole Goblins have 0 / -1 = drop nothing).
+Not decoded: `[657]` (0-100, grows with monster strength), `[669]` (30-195), `[695..697]` (10/20/40-style triple, 0 for Hole Goblins) - exp and gold are probably among them. The 16.16 pairs `65537000` (= 1000 << 16 | 1000) filling the middle of the block are per-element/per-skill percent multipliers (resistances).
+Control.aid is NOT stats: it is the AI behaviour script library (names like "Goblin HITandAWAY", "Dragon magic attack").
+
+## Shop stock (Table.Tbd 32 / 33)
+Table 32 row n = shop n: up to 20 row numbers of table 33 (-1 = end). A table-33 row is `(category, -1, -1, item id, count, ...)` with category = Item.Ibn section (0 weapon, 1 armor, 3 consumable, 4 misc) and id = item field 1; rows with category -1 are services (shops 1, 3, 4). Shop 0 = Remote Town: Tablet, Capsule, Mine, Meat, Short Sword, Dagger, Leather Cloth, Round Shield, Wood Bowgun, Magic Staff, Leather Hat, Boots. Table 31 (524 x 5) is a master `(category, id)` list of the same kind; table 40 is the warp-gate list (name + 3 ints).
+
+## Drop tables (Table.Tbd 900-907, partly understood)
+900/901 (13 x 5) and 902-907 come in male/female (or normal/other) pairs that are loaded by one function (0x44e34c, array indexed by `[esi+0x28]`); rows 2-8 are the used tiers (sentence 24 argument). 902/903 = 150 weights per row (weapons), 904/905 = 100 (armor), 906/907 = 100 (others); weights fall with the column (higher column = rarer), so the column is almost certainly an item power rank, not yet mapped to items.

@@ -221,7 +221,7 @@ export class GameScene {
     musicFor(scenario) { return scenario === '00000000' ? 'bgm0' : scenario.startsWith('0001') ? 'bgm4' : 'bgm1'; }
     openShop(index) {
         this.qlog = null;
-        this.shop = new Shop(shopStock(this.win.db, index));
+        this.shop = new Shop(shopStock(this.win.db, index, this.tables));
         this.dlg = null;
         this.win.item = true;
         this.win.sellValue = sellPrice;
@@ -536,8 +536,15 @@ export class GameScene {
             this.syncExp();
             if (this.vm?.event(4, 14000000 + a.rec.id))
                 this.openDialog();
-            const [g0, g1] = a.stats.gold;
-            this.ground.push({ x: a.x, y: a.y, gold: g0 + Math.floor(Math.random() * (g1 - g0 + 1)) });
+            const [g0, g1] = a.stats.gold, gold = g0 + Math.floor(Math.random() * (g1 - g0 + 1));
+            if (gold > 0)
+                this.ground.push({ x: a.x, y: a.y, gold });
+            // item drop: chance (percent) and level come from the monster's Mct record; level picks the PLACEHOLDER table row (Table.Tbd 902-907 rows 2-8)
+            const st = a.rec.st;
+            if (st && st.dlv >= 0 && Math.random() * 100 < st.drop) {
+                const [wa, wb] = realToWorld(a.x, a.y);
+                this.randomDrop(Math.min(8, 2 + Math.floor(st.dlv / 4)), wa, wb);
+            }
         }
     }
     blocked(x, y) {

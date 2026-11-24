@@ -24,6 +24,12 @@ def parse(path):
         elif head[0] == 0 and head[1:4] == (1000, 1000, 1000): kind, model, rec_extra = 'enemy', head[7], dict(power=1.0, boss=head[5])
         elif head[0] == 200 and head[1] == 200 and head[4] == -65: kind, model, rec_extra = 'enemy', head[7], dict(power=1.0, boss=head[5])
         if kind == 'enemy': ident = head[6]   # monsters are addressed by their spawn number (script char = 14000000 + spawn#), e.g. 30001-30005 = trap-room group
+        if kind == 'enemy' and j + 4 + 36 + 4 * 700 <= len(d) and model >= 0:
+            # Per-monster parameter block (719 ints after the 9-int placement block). Fields identified by comparing records
+            # (see docs/FORMATS.md): [654] hit points, [655] attack power, [675] speed in percent, [659] drop chance in percent,
+            # [660] drop level (-1 = drops nothing, e.g. the trap-room Hole Goblins). Other fields (657, 669, 695-697 ...) not decoded.
+            v = struct.unpack_from('<700i', d, j + 4 + 36)
+            rec_extra['st'] = dict(hp=v[654], atk=v[655], spd=v[675], drop=v[659], dlv=v[660])
         out.append(dict(name=d[i+4:i+4+L].decode(), kind=kind, model=model, id=ident, a=w[1], b=w[2], dir=w[7], radius=w[0], col=col[:3].hex(), **rec_extra))
     return out
 if __name__ == '__main__': print(json.dumps(parse(sys.argv[1]), indent=1))
