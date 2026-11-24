@@ -25,6 +25,8 @@ let savedGlobals = new Map();
 const savedGround = new Map();
 /** Zone ids whose visibility differs from the Mct default (opened chests ...), per scenario. */
 /** PLACEHOLDER combat sound ids (indices into Voice00.Voc; script-driven sounds use the real ids, e.g. chest 77/78, Black Hammer's taunts 40-43). */
+/** GUESS: share of dropped magical variants that are still unidentified (the original rate is not decoded). */
+const UNID_CHANCE = 0.6;
 const SFX = { hit: 1, hurt: 2, kill: 10 };
 const savedZones = new Map();
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
@@ -43,14 +45,14 @@ export class GameScene {
             savedGlobals = this.vm.globals;
         }
         savedZones.set(this.scenario, Object.fromEntries(this.zones.filter(z => z.visible !== (z.rec.vis !== 0)).map(z => [z.rec.id, z.visible])));
-        savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold })));
+        savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold, unid: o.unid, dur: o.dur })));
     }
     areaName() { return (this.vm?.data.messages['1000000'] ?? '').replace(/\s+$/, ''); }
     save() {
         this.stash();
         const d = {
             v: 1, slot: this.slot, at: Date.now(), area: this.areaName(), name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
-            inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0]),
+            inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0, e.unid ? 1 : 0, e.dur ?? -1]),
             vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
             magic: this.magic.save(), explored: this.mapwin.encode(), pet: this.pet?.save(this.petKills),
         };
@@ -213,7 +215,7 @@ export class GameScene {
         if (!force && Math.hypot(g.x - this.player.x, (g.y - this.player.y) * 1.6) > 140)
             return;
         if (g.item) {
-            if (!this.win.inv.add(g.item))
+            if (!this.win.inv.add(g.item, { unid: g.unid, dur: g.dur }))
                 return;
         }
         else
@@ -298,7 +300,7 @@ export class GameScene {
                 continue;
             if (item.sec === 4 && (item.f['1'] ?? 0) >= 99000000 && this.hasQuestItem(item))
                 continue; // quest items drop until you hold one / the quest is done
-            this.ground.push({ x: x + (n ? (Math.random() - .5) * 40 : 0), y, item, gold: 0 });
+            this.ground.push({ x: x + (n ? (Math.random() - .5) * 40 : 0), y, item, gold: 0, unid: ItemDb.isVariant(item) && Math.random() < UNID_CHANCE });
         }
     }
     hasQuestItem(it) {
@@ -474,6 +476,8 @@ export class GameScene {
                 takeItem: (cat, id) => { const e = this.win.inv.entries.find(e => e.item.sec === cat && (e.item.f['1'] ?? 0) === id); if (e)
                     this.win.inv.remove(e); },
                 randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
+                needIdentify: () => this.win.needsIdentify(), identify: () => this.win.identifyAll(),
+                repairCost: slot => this.win.repairCostOf(slot), repair: slot => this.win.repair(slot),
                 drop: (cat, id, a, b, min, max) => {
                     const [x, y] = worldToReal(a, b), amount = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
                     if (cat === 4 && id === 0)
@@ -525,7 +529,7 @@ export class GameScene {
                     z.visible = sz[z.rec.id];
         const sg = savedGround.get(scenario);
         if (sg)
-            g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0 }] : []; })());
+            g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0, unid: o.unid, dur: o.dur }] : []; })());
         g.menu = await GameMenu.load(app);
         if (opts?.carry) {
             g.magic = opts.carry.magic;
@@ -550,11 +554,11 @@ export class GameScene {
             g.totalExp = ld.totalExp;
             g.syncExp();
             g.win.gold = ld.gold;
-            for (const [sec, idx, x, y, eq] of ld.inv) {
+            for (const [sec, idx, x, y, eq, unid, dur] of ld.inv) {
                 const item = win.db.get(sec, idx);
                 if (item) {
                     const [w, h] = ItemDb.size(item);
-                    g.win.inv.entries.push({ item, x, y, w, h, eq: !!eq });
+                    g.win.inv.entries.push({ item, x, y, w, h, eq: !!eq, unid: !!unid, dur: dur !== undefined && dur >= 0 ? dur : undefined });
                 }
             }
         }
@@ -722,6 +726,7 @@ export class GameScene {
         d = Math.max(1, Math.round(d * (9 + Math.floor(Math.random() * 3)) / 10) - this.win.stats().defense);
         // exe 0x412a40 monster->player: power*(9+rand%3)/10 - defence*Table11[neutral=10]/10, minimum 1
         h.hp = Math.max(0, h.hp - d);
+        this.win.wearArmor();
         this.floaters.push({ x: this.player.x, y: this.player.y - 70, t: 0, s: `-${d}` });
         audio.sfx(SFX.hurt, 0.8);
         if (h.hp <= 0) {
@@ -738,6 +743,7 @@ export class GameScene {
         // Monster defence is Mct record index 657 (0/20/40/70 by tier) - unverified, so a floor of 25% of power keeps early monsters killable.
         const st = this.win.stats(), str = this.win.ps?.strength ?? 100, power = (st.atkMax ? st.atkMin + Math.random() * (st.atkMax - st.atkMin) : 10) * str / 100;
         const raw = power * (this.powerT > 0 ? 1.5 : 1) * (9 + Math.floor(Math.random() * 3)) / 10;
+        this.win.wearWeapon();
         this.damage(a, Math.max(1, Math.round(Math.max(raw * 0.25, raw - (a.stats.defense ?? 0)))));
     }
     /** Apply final damage to a monster: floater, sound, and the death rewards (experience, gold, item drop, kill script event). */

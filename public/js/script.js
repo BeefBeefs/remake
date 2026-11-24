@@ -184,11 +184,11 @@ export class ScriptVM {
                 return true;
             } // arguments of the next message's %d
             case 52:
-                this.set(o[1][0], o[1][1], 0);
-                return true; // repair cost of the item in an equipment slot: items have no durability yet -> 0
+                this.set(o[1][0], o[1][1], this.hooks?.repairCost?.(ev(0)) ?? 0);
+                return true; // repair cost of the items in an equipment slot (exe 0x4310d7; slot 5 = all worn is a guess for the 'All Equipped Items' row)
             case 55:
-                this.set(o[0][0], o[0][1], 0);
-                return true; // 1 when the player carries unidentified items (not modelled) -> 0
+                this.set(o[0][0], o[0][1], this.hooks?.needIdentify?.() ? 1 : 0);
+                return true; // 1 when an item still needs identifying (exe 0x43397d tests item+0x1c == 0)
             case 53:
                 this.set(o[0][0], o[0][1], this.hooks?.gold() ?? 0);
                 return true;
@@ -214,7 +214,11 @@ export class ScriptVM {
                 return true; // read player/exe state (arrival id, player+0x28, ...): not modelled, 0
             case 6: return true;
             case 9:
-            case 4: return true; // repair an item / coin sound (no durability yet)
+                this.hooks?.repair?.(ev(0));
+                return true; // repair the items of a slot (exe 0x43234a)
+            case 4:
+                this.hooks?.identify?.();
+                return true; // identify every carried item (exe 0x432296)
             case 17:
                 this.hooks?.exit(ev(0), ev(1));
                 return true;

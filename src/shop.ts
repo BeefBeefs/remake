@@ -61,7 +61,7 @@ export class Shop {
   /** Sell the inventory entry under (x, y) if there is one. */
   sell(x: number, y: number, win: Windows) {
     const e = win.entryAt(x, y); if (!e) return false;
-    win.inv.remove(e); const g = sellPrice(e.item); win.gold += g; this.note = `Sold ${e.item.name} for ${g} gold.`; return true;
+    win.inv.remove(e); const g = sellPrice(e.unid ? win.db.base(e.item) : e.item); win.gold += g; this.note = `Sold ${e.item.name} for ${g} gold.`; return true;
   }
   draw(ctx: CanvasRenderingContext2D, text: Text, win: Windows, mx: number, my: number) {
     ctx.fillStyle = 'rgba(8,8,24,0.92)'; ctx.fillRect(0, 0, PANEL_W, 416);

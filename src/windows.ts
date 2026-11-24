@@ -22,10 +22,30 @@ export class Windows {
   drawIcon(ctx: CanvasRenderingContext2D, it: ItemDef, cx: number, cy: number, scale = 1) { const f = this.icons.pattern(ItemDb.icon(it)); if (f) { const w = f.canvas.width * scale, h = f.canvas.height * scale; ctx.drawImage(f.canvas, Math.round(cx - w / 2), Math.round(cy - h / 2), Math.round(w), Math.round(h)); } }
   /** Combat numbers from the equipped items (weapon attack range, summed armor defense, weapon attack speed %). */
   stats(): CombatStats {
-    const w = this.inv.equipped('weapon')[0];
-    const [atkMin, atkMax] = w ? ItemDb.attack(w.item) : [0, 0];
-    return { atkMin, atkMax, defense: this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 ? ItemDb.defense(e.item) : 0), 0), speed: w ? ItemDb.speed(w.item) : 100 };
+    const eff = (e: InvEntry) => e.unid ? this.db.base(e.item) : e.item;   // an unidentified variant only performs like its plain base item
+    const w = this.inv.equipped('weapon').find(e => !Inventory.broken(e));
+    const [atkMin, atkMax] = w ? ItemDb.attack(eff(w)) : [0, 0];
+    return { atkMin, atkMax, defense: this.inv.equipped().reduce((a, e) => a + (e.item.sec === 1 && !Inventory.broken(e) ? ItemDb.defense(eff(e)) : 0), 0), speed: w ? ItemDb.speed(eff(w)) : 100 };
   }
+  /** Durability wear (GUESS: 1 point per weapon hit dealt; 1 point on one random worn armor piece per hit taken). */
+  wearWeapon() { const w = this.inv.equipped('weapon')[0]; if (w && ItemDb.maxDur(w.item) > 0) w.dur = Math.max(0, Inventory.dur(w) - 1); }
+  wearArmor() { const a = this.inv.equipped().filter(e => e.item.sec === 1 && ItemDb.maxDur(e.item) > 0); if (a.length) { const e = a[Math.floor(Math.random() * a.length)]; e.dur = Math.max(0, Inventory.dur(e) - 1); } }
+  /** Entries a repair/identify service slot addresses (script slot numbers: 0 arms, 1 head, 2 body, 3 shield, 4 legs, -1 everything not worn, 5 everything worn). */
+  slotEntries(slot: number): InvEntry[] {
+    const worn = (n: string) => this.inv.equipped().filter(e => (e.item.sec === 0 ? 'weapon' : e.item.sec === 1 ? ['head', 'body', 'shield', 'boots'][e.item.f['0'] ?? 1] : '') === n);
+    if (slot === -1) return this.inv.entries.filter(e => !e.eq);
+    if (slot === 5) return this.inv.equipped();
+    return worn(['weapon', 'head', 'body', 'shield', 'boots'][slot] ?? '');
+  }
+  /** Repair cost (GUESS: half the listed price scaled by the lost durability fraction; the original formula is in exe 0x4667a0, not decoded). */
+  repairCost(e: InvEntry) { const m = ItemDb.maxDur(e.item); return m > 0 ? Math.ceil(ItemDb.price(e.item) * (m - Inventory.dur(e)) / m / 2) : 0; }
+  repairCostOf(slot: number) { return this.slotEntries(slot).reduce((a, e) => a + this.repairCost(e), 0); }
+  repair(slot: number) { for (const e of this.slotEntries(slot)) e.dur = undefined; }
+  /** Sentence 55: any item carried (worn or not) still unidentified? Sentence 4 identifies them all. */
+  needsIdentify() { return this.inv.entries.some(e => e.unid); }
+  identifyAll() { for (const e of this.inv.entries) e.unid = false; }
+  /** Name shown for an entry (unidentified variants show their plain base name and a '?'). */
+  label(e: InvEntry) { return e.unid ? `${this.db.base(e.item).name} ?` : e.item.name; }
   /** Inventory entry under screen point (x,y) while the item window is open. */
   entryAt(x: number, y: number): InvEntry | undefined { return this.item && x >= GRID_X ? this.inv.at(Math.floor((x - GRID_X) / CELL), Math.floor((y - GRID_Y) / CELL)) : undefined; }
   /** Extra left-hand panel (shop) that also blocks world clicks. */
@@ -54,14 +74,17 @@ export class Windows {
         const f = this.icons.pattern(ItemDb.icon(e.item)); if (!f) continue;
         const cx = GRID_X + e.x * CELL + (e.w * CELL - f.canvas.width) / 2, cy = GRID_Y + e.y * CELL + (e.h * CELL - f.canvas.height) / 2;
         ctx.drawImage(f.canvas, Math.round(cx), Math.round(cy));
-        if (e.eq) { ctx.strokeStyle = '#60e060'; ctx.lineWidth = 2; ctx.strokeRect(GRID_X + e.x * CELL + 1, GRID_Y + e.y * CELL + 1, e.w * CELL - 2, e.h * CELL - 2); }
+        if (e.unid) this.text.draw(ctx, '?', GRID_X + e.x * CELL + 3, GRID_Y + e.y * CELL + 3);
+        if (e.eq) { ctx.strokeStyle = Inventory.broken(e) ? '#e06060' : '#60e060'; ctx.lineWidth = 2; ctx.strokeRect(GRID_X + e.x * CELL + 1, GRID_Y + e.y * CELL + 1, e.w * CELL - 2, e.h * CELL - 2); }
       }
       this.text.draw(ctx, `Gold: ${this.gold}`, 340, 398); this.text.draw(ctx, `Mines: ${this.mineStock}`, 450, 398);
       const hover = this.inv.at(Math.floor((mx - GRID_X) / CELL), Math.floor((my - GRID_Y) / CELL));
       if (hover && mx >= GRID_X) {
-        const it = hover.item, lines = [it.name, `${it.type} (${SECTION_NAMES[it.sec]})`];
+        const it = hover.unid ? this.db.base(hover.item) : hover.item, lines = [this.label(hover), `${it.type} (${SECTION_NAMES[it.sec]})`];
+        if (hover.unid) lines.push('Unidentified (see a merchant)');
         if (it.sec === 0) { const [a, b] = ItemDb.attack(it); lines.push(`Attack: ${a === b ? a : `${a}-${b}`}  Speed: ${ItemDb.speed(it)}%`); }
         else if (it.sec === 1) lines.push(`Defense: ${ItemDb.defense(it)}`);
+        if (ItemDb.maxDur(it) > 0) lines.push(`Durability: ${Inventory.dur(hover)}/${ItemDb.maxDur(hover.item)}${Inventory.broken(hover) ? ' (broken)' : ''}`);
         lines.push(`Price: ${ItemDb.price(it)}`); if (this.sellValue) lines.push(`Click to sell for ${this.sellValue(it)}`); else if (ItemDb.slot(it)) lines.push(hover.eq ? '[Equipped] click to remove' : 'Click to equip');
         drawTooltip(ctx, this.text, lines, mx + 12, my + 12);
       }

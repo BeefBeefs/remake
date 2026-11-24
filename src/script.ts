@@ -24,6 +24,12 @@ export interface ScriptHooks {
   swapPartner?(index: number): void;
   /** Sentence 3: show the status of dog `index`. */
   partnerStatus?(index: number): void;
+  /** Sentences 55 / 4: any carried item unidentified? / identify everything. */
+  needIdentify?(): boolean;
+  identify?(): void;
+  /** Sentences 52 / 9: repair cost of the items in script slot (0 arms, 1 head, 2 body, 3 shield, 4 legs, -1 not worn, 5 all worn) / repair them. */
+  repairCost?(slot: number): number;
+  repair?(slot: number): void;
   /** Sentence 24: random item drop of tier `tier` at world position (a, b). */
   randomDrop(tier: number, a: number, b: number): void;
   /** Sentence 62: quest `q` (Table.Tbd table 41 row) changed to `state` (1 accepted, 2 completed). */
@@ -126,8 +132,8 @@ export class ScriptVM {
       case 25: this.hooks?.spawnSlot(ev(0), ev(1), ev(2)); return true;   // (slot, x, y, effect type)
       case 5: this.hooks?.openShop(ev(0)); return true;
       case 51: { this.fmt = []; for (const [k, v] of o) { if (k === 0 && v === -1) break; this.fmt.push(this.get(k, v)); } return true; }   // arguments of the next message's %d
-      case 52: this.set(o[1][0], o[1][1], 0); return true;   // repair cost of the item in an equipment slot: items have no durability yet -> 0
-      case 55: this.set(o[0][0], o[0][1], 0); return true;   // 1 when the player carries unidentified items (not modelled) -> 0
+      case 52: this.set(o[1][0], o[1][1], this.hooks?.repairCost?.(ev(0)) ?? 0); return true;   // repair cost of the items in an equipment slot (exe 0x4310d7; slot 5 = all worn is a guess for the 'All Equipped Items' row)
+      case 55: this.set(o[0][0], o[0][1], this.hooks?.needIdentify?.() ? 1 : 0); return true;   // 1 when an item still needs identifying (exe 0x43397d tests item+0x1c == 0)
       case 53: this.set(o[0][0], o[0][1], this.hooks?.gold() ?? 0); return true;
       case 54: this.hooks?.addGold(-ev(0)); return true;
       case 58: this.set(o[2][0], o[2][1], this.hooks?.hasItem(ev(0), ev(1)) ? 1 : 0); return true;   // quest hand-in check (no selection UI: any matching item counts)
@@ -135,7 +141,8 @@ export class ScriptVM {
       case 49: { const t = this.data.messages[String(ev(0))]; if (t) this.hooks?.notice(t.replace(/\s+$/, '')); return true; }
       case 50: case 57: case 66: this.set(o[0][0], o[0][1], 0); return true;   // read player/exe state (arrival id, player+0x28, ...): not modelled, 0
       case 6: return true;
-      case 9: case 4: return true;   // repair an item / coin sound (no durability yet)
+      case 9: this.hooks?.repair?.(ev(0)); return true;   // repair the items of a slot (exe 0x43234a)
+      case 4: this.hooks?.identify?.(); return true;   // identify every carried item (exe 0x432296)
       case 17: this.hooks?.exit(ev(0), ev(1)); return true;
       case 16: this.hooks?.sound(ev(0), ev(2), ev(3)); return true;   // (sound id, 0, x, y)
       case 24: this.hooks?.randomDrop(ev(0), ev(1), ev(2)); return true;

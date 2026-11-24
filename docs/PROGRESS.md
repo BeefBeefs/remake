@@ -216,3 +216,8 @@ The remake's `randomDrop` now follows this; monsters roll their own drop chance 
 
 ## Monster size scaling
 - Actors now scale hit box, approach radius and attack reach by the Mct radius (`Actor.scale`), so golems/gargoyles are bigger targets than bats. The hero's approach distance is multiplied by `target.scale`. Scale values are derived from the Mct hit rect (goblin ±80 = 1.0); the exact original formula is not decoded (GUESS).
+
+## Identify / durability / repair (Malse's services)
+Decoded from the exe: sentence 55 (0x43397d) = "any carried item unidentified" (item+0x1c == 0), sentence 4 (0x432296) = identify all, sentence 52 (0x4310d7) = repair cost of the items in a slot (0 arms, 1 head, 2 body, 3 shield, 4 legs, -1 everything not worn; the script sums 0-4 itself for "All Equipped Items"), sentence 9 (0x43234a) = repair that slot. Scripts then charge with 54 and show messages 1000013-18 (scenario 0) / 1000071-76 (01000000).
+Implemented: `InvEntry.unid` / `.dur`; unidentified magical variants show their plain base name with a "?" and perform like the base item until identified at the merchant (100 gold in the town script); weapons/armor have durability = Item.Ibn field 25, shown in the tooltip; a broken piece (0) gives no attack/defense (red frame). Saved in the inventory tuple (flags, dur).
+GUESSES: 60% of dropped variants are unidentified (`UNID_CHANCE`); wear = 1 per weapon hit dealt and 1 on a random worn armor piece per hit taken; repair cost = ceil(price * lostFraction / 2) (exe 0x4667a0 not decoded); an unidentified item can still be equipped. Test: `tools/playtest/repair.mjs`.

@@ -12,6 +12,12 @@ export class ItemDb {
     /** Footprint in inventory cells (fields 7 x 8). */
     static size(it) { return [it.f['7'] || 1, it.f['8'] || 1]; }
     static price(it) { return it.f['5'] ?? 0; }
+    /** Maximum durability (field 25) of weapons and armor; 0 = does not wear. */
+    static maxDur(it) { return it.sec <= 1 ? it.f['25'] ?? 0 : 0; }
+    /** Magical variants carry an item id (field 1); the plain item of the same type has none. Only variants can be unidentified. */
+    static isVariant(it) { return it.sec <= 2 && (it.f['1'] ?? 0) > 0 && it.name !== it.type; }
+    /** The plain item an unidentified variant looks like (same type, no variant id). */
+    base(it) { return this.sections[it.sec].find(o => o.type === it.type && o.name === o.type) ?? it; }
     /** Belt-pocket candidates: tablets, capsules, sources and fruits (consumables flagged with field 26). */
     static beltable(it) { return it.sec === 3 && (it.f['26'] ?? 0) === 1; }
     /** Effect of using a consumable: HP / MP recovered (fields 27 / 28) and permanent max HP / MP gained (fields 29 / 30). */
@@ -37,16 +43,19 @@ export class Inventory {
             return false;
         return !this.entries.some(e => x < e.x + e.w && x + w > e.x && y < e.y + e.h && y + h > e.y);
     }
-    add(item) {
+    add(item, extra = {}) {
         const [w, h] = ItemDb.size(item);
         for (let y = 0; y < INV_ROWS; y++)
             for (let x = 0; x < INV_COLS; x++)
                 if (this.fits(x, y, w, h)) {
-                    this.entries.push({ item, x, y, w, h });
+                    this.entries.push({ item, x, y, w, h, ...extra });
                     return true;
                 }
         return false;
     }
+    static dur(e) { return e.dur ?? ItemDb.maxDur(e.item); }
+    /** A worn-out piece (durability 0) gives no attack/defense. */
+    static broken(e) { return ItemDb.maxDur(e.item) > 0 && Inventory.dur(e) <= 0; }
     at(cx, cy) { return this.entries.find(e => cx >= e.x && cx < e.x + e.w && cy >= e.y && cy < e.y + e.h); }
     remove(e) { this.entries.splice(this.entries.indexOf(e), 1); }
     /** Toggle equipping; equipping replaces whatever occupies the same slot. Returns false for non-equipment. */

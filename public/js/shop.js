@@ -77,7 +77,7 @@ export class Shop {
         if (!e)
             return false;
         win.inv.remove(e);
-        const g = sellPrice(e.item);
+        const g = sellPrice(e.unid ? win.db.base(e.item) : e.item);
         win.gold += g;
         this.note = `Sold ${e.item.name} for ${g} gold.`;
         return true;
