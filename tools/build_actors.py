@@ -15,9 +15,15 @@ def convert_actor(kind, n):
     convert.convert_njp(os.path.join(s, 'Animation.Sdw'), o, f'{n}_sdw')
     convert.convert_caf(os.path.join(s, 'Animation.Caf'), os.path.join(o, f'{n}.caf.json'))
     return True
+def convert_object_model(n):
+    o = os.path.join(out, 'objects'); os.makedirs(o, exist_ok=True)
+    convert.convert_njp(os.path.join(src, 'Character', 'OBJECT', '%08d' % n, 'Pattern.njp'), o, str(n))
+    convert.convert_njp(os.path.join(src, 'Character', 'OBJECT', '%08d' % n, 'Pattern.sdw'), o, f'{n}_sdw')
 if __name__ == '__main__':
+    convert_object_model(0)
     for sc in sys.argv[1:]:
         recs = mct.parse(os.path.join(src, 'Scenario', sc, 'Scenario.Mct'))
         recs = [r for r in recs if convert_actor(r['kind'], r['model']) or print('skip (no model):', r['name'], r['kind'], r['model'])]
         os.makedirs(os.path.join(out, 'scenario'), exist_ok=True)
-        json.dump(dict(map=mct.map_name(os.path.join(src, 'Scenario', sc, 'Scenario.Mct')), actors=recs), open(os.path.join(out, 'scenario', sc + '.actors.json'), 'w'))
+        objs = mct.parse_objects(os.path.join(src, 'Scenario', sc, 'Scenario.Mct'))
+        json.dump(dict(map=mct.map_name(os.path.join(src, 'Scenario', sc, 'Scenario.Mct')), actors=recs, objects=objs), open(os.path.join(out, 'scenario', sc + '.actors.json'), 'w'))

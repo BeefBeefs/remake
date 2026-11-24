@@ -1,5 +1,6 @@
 import { loadCaf } from './caf.js';
 import { worldToReal } from './map.js';
+import { loadZones } from './zones.js';
 const FRAME_MS = 80;
 /** Facing index (CAF direction order, guessed) for 8 compass sectors starting at "right" going clockwise on screen. */
 const FACING = [6, 7, 0, 1, 2, 3, 4, 5];
@@ -121,6 +122,6 @@ export class Actor {
 }
 export async function loadScenarioActors(app, scenario) {
     const d = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
-    return { map: d.map, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))) };
+    return { map: d.map, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))), zones: await loadZones(app, d.objects ?? []) };
 }
 //# sourceMappingURL=actors.js.map

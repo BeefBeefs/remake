@@ -27,6 +27,17 @@ def parse(path):
     return out
 if __name__ == '__main__': print(json.dumps(parse(sys.argv[1]), indent=1))
 
+def parse_objects(path):
+    """Zone/object records (120 bytes each, in front of the character records):
+    i32 id (+10000000 = script id), type (0 chest/barrel with open+closed pair, 6/9/12/13 trigger or talk zones), 0, 0, worldA, worldB, rect x0 y0 x1 y1,
+    8, 3, visible, ?, ?, 0, -1, 1(has sprite), pattern (index into Character/OBJECT/00000000/Pattern.njp), -1, ... 1000 0 1000 1000 1000."""
+    d = open(path, 'rb').read(); out = []
+    for o in range(0x230, len(d) - 120):
+        v = struct.unpack_from('<30i', d, o)
+        if v[25] == 1000 and v[27] == v[28] == v[29] == 1000 and v[10] == 8 and v[11] == 3:
+            out.append(dict(id=10000000 + v[0], type=v[1], a=v[4], b=v[5], rect=list(v[6:10]), vis=v[12], pat=v[18]))
+    return out
+
 def map_name(path):
     m = re.search(rb'Map\\([A-Za-z0-9_\-]+)\.map', open(path, 'rb').read(), re.I)
     return m.group(1).decode() if m else None

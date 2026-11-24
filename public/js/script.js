@@ -21,7 +21,7 @@ export class ScriptVM {
         if (kind === 8 || (kind >= 10 && kind <= 12))
             return this.globals.get(`${kind}:${val}`) ?? 0;
         if (kind >= 3 && kind <= 5)
-            return this.vars.get(`${kind}:${val}`) ?? 0;
+            return this.vars.get(this.key(kind, val)) ?? 0;
         if (kind === 6 || kind === 7)
             return Math.round(this.hooks?.charPos(val)?.[kind - 6] ?? 0);
         return 0;
@@ -29,7 +29,9 @@ export class ScriptVM {
     set(kind, val, v) { if (kind === 8 || (kind >= 10 && kind <= 12))
         this.globals.set(`${kind}:${val}`, v);
     else if (kind >= 3 && kind <= 5)
-        this.vars.set(`${kind}:${val}`, v); }
+        this.vars.set(this.key(kind, val), v); }
+    /** Kind 5 = per-object locals: a value 1000000+n is local n of the current object, 100000000 + id is local 0 of object `id`. */
+    key(kind, val) { return kind !== 5 ? `${kind}:${val}` : val >= 100000000 ? `5:${val - 100000000}:1000000` : `5:${this.char}:${val}`; }
     /** Run block n; returns false if a sentence aborted the run. */
     runBlock(n, depth = 0) {
         const b = this.data.blocks[n];
@@ -74,7 +76,17 @@ export class ScriptVM {
                 return true;
             }
             case 10:
-                this.hooks?.drop(ev(0), ev(1), ev(2), ev(3), ev(4));
+                this.hooks?.drop(ev(0), ev(1), ev(2), ev(3), ev(4), o[5] ? ev(5) : ev(4));
+                return true;
+            case 22:
+                this.hooks?.show(ev(0), true);
+                return true;
+            case 23:
+                this.hooks?.show(ev(0), false);
+                return true;
+            case 16: return true; // play sound effect at a position (audio not implemented)
+            case 24:
+                this.hooks?.randomDrop(ev(0), ev(1), ev(2));
                 return true;
             case 11:
                 this.set(o[0][0], o[0][1], ev(0) + ev(1));
@@ -116,7 +128,11 @@ export class ScriptVM {
         return false;
     }
     /** Fire a scenario event: status 4 = character `char` (14000000 + Mct id) was killed. Returns true when a handler existed. */
-    event(status, char) { this.ended = false; const r = this.runStatus(status, char); return r; }
+    event(status, char) { this.char = char; this.ended = false; const r = this.runStatus(status, char); return r; }
+    /** Run every status-5 block (condition polls such as quest progress checks). */
+    poll() { this.char = 0; this.ended = false; for (const [, st, c, blk] of this.data.status)
+        if (st === 5 && c === 4294967295)
+            this.runBlock(blk); }
     /** Player clicked character `char` (Scenario char number, e.g. 12000000 + Mct id). */
     talk(char) { this.char = char; this.talking = true; this.ended = false; this.queue = []; this.runStatus(0, char); this.finish(); }
     /** The message window was closed; `choice` is the picked option index (when the message had options). */

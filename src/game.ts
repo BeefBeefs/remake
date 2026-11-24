@@ -2,6 +2,7 @@ import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
 import { GameMap, Drawable, worldToReal } from './map.js';
 import { ItemDef } from './items.js';
+import { Zone } from './zones.js';
 import { Actor, ActorCtx, loadScenarioActors, dirIndex as actorDir } from './actors.js';
 import { ScriptVM } from './script.js';
 import { Gui, HudState, SCREEN_W, SCREEN_H, HUD_Y } from './gui.js';
@@ -25,10 +26,12 @@ const AREAS: [string, string][] = [
 const savedVars = new Map<string, Map<string, number>>(); let savedGlobals = new Map<string, number>();
 interface GroundSave { x: number; y: number; sec: number; idx: number; gold: number; }
 const savedGround = new Map<string, GroundSave[]>();
+/** Zone ids whose visibility differs from the Mct default (opened chests ...), per scenario. */
+const savedZones = new Map<string, Record<number, boolean>>();
 const SAVE_KEY = 'shadowflare_save_v1';
 export interface SaveData {
   v: 1; name: string; gender: Gender; scenario: string; x: number; y: number; hud: HudState; totalExp: number; gold: number;
-  inv: [number, number, number, number, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>;
+  inv: [number, number, number, number, number?][]; vars: Record<string, [string, number][]>; globals: [string, number][]; ground: Record<string, GroundSave[]>; zones?: Record<string, Record<number, boolean>>;
 }
 export function readSave(): SaveData | null { try { const t = localStorage.getItem(SAVE_KEY); return t ? JSON.parse(t) : null; } catch { return null; } }
 /** CAF layers drawn for the player: 1 = shadow-ish base, 0 = body, 3.. = equipment variants (mapping still unknown). */
@@ -46,6 +49,7 @@ export class GameScene implements Scene {
   private camX = 0; private camY = 0;
   /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
   private titles: string[] = []; private banner: { text: string; t: number } | null = null;
+  private pollT = 0; zones: Zone[] = []; tables: Record<string, { cols: number; v: number[] }> = {};
   private expTable: number[] = []; private totalExp = 0; private devNext = 0;
   private drawPlayer: Drawable;
   // --- combat ---
@@ -57,6 +61,7 @@ export class GameScene implements Scene {
   /** Remember per-scenario script flags and ground items (used for transitions and saving). */
   private stash() {
     if (this.vm) { savedVars.set(this.scenario, this.vm.vars); savedGlobals = this.vm.globals; }
+    savedZones.set(this.scenario, Object.fromEntries(this.zones.filter(z => z.visible !== (z.rec.vis !== 0)).map(z => [z.rec.id, z.visible])));
     savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold })));
   }
   save() {
@@ -64,7 +69,7 @@ export class GameScene implements Scene {
     const d: SaveData = {
       v: 1, name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
       inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0]),
-      vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround),
+      vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch (e) { console.warn('save failed', e); }
   }
@@ -127,6 +132,25 @@ export class GameScene implements Scene {
     if (g.item) { if (!this.win.inv.add(g.item)) return; } else this.win.gold += g.gold;
     this.ground.splice(this.ground.indexOf(g), 1);
   }
+  /** Click a scripted object (chest, barrel...): runs its status-0 block when the player is close enough. */
+  private useZone(z: Zone) {
+    if (!this.vm || Math.hypot(z.x - this.player.x, (z.y - this.player.y) * 1.6) > 200) return;
+    this.vm.talk(z.rec.id); this.openDialog();
+  }
+  /** Sentence 24 (PLACEHOLDER): the real drop tables are Table.Tbd 900-907 (13 rows = tiers); rows give weights per base item type for weapons (902), armor (904) and another category (906). */
+  private randomDrop(tier: number, a: number, b: number) {
+    const [x, y] = worldToReal(a, b), t = this.tables, row = (id: string) => { const T = t[id]; return T ? T.v.slice(tier * T.cols, (tier + 1) * T.cols) as number[] : []; };
+    const cats: [number, number[]][] = [[0, row('902')], [1, row('904')], [3, row('906')]];
+    const sum = (w: number[]) => w.reduce((p, c) => p + c, 0), total = cats.reduce((p, c) => p + sum(c[1]), 0);
+    if (total <= 0) { this.ground.push({ x, y, gold: 10 + Math.floor(Math.random() * 40) * Math.max(1, tier) }); return; }
+    let r = Math.random() * total, sec = 0, w: number[] = [];
+    for (const [s, ws] of cats) { if (r < sum(ws)) { sec = s; w = ws; break; } r -= sum(ws); }
+    let r2 = Math.random() * sum(w), col = 0; for (; col < w.length; col++) { if (r2 < w[col]) break; r2 -= w[col]; }
+    const list = this.win.db.sections[sec], types = [...new Set(list.map(i => i.type))];
+    const pool = sec === 3 ? [list[col % list.length]] : list.filter(i => i.type === types[col % types.length]);
+    const item = Math.random() < 0.7 ? pool[0] : pool[Math.floor(Math.random() * pool.length)];
+    if (item) this.ground.push({ x, y, item, gold: 0 });
+  }
   private talkTo(a: Actor) {
     if (!this.vm || a.rec.kind !== 'people') return;
     if (Math.hypot(a.x - this.player.x, (a.y - this.player.y) * 1.6) > 260) return;
@@ -152,14 +176,16 @@ export class GameScene implements Scene {
     };
     (window as any).game = this;
     if (this.vm) this.vm.hooks = {
-      charPos: char => { const r = this.actors.find(a => a.rec.kind === 'people' && 12000000 + a.rec.id === char); return r ? [r.rec.a, r.rec.b] : null; },
+      charPos: char => { const r = this.actors.find(a => a.rec.kind === 'people' && 12000000 + a.rec.id === char); if (r) return [r.rec.a, r.rec.b]; const z = this.zones.find(z => z.rec.id === char); return z ? [z.rec.a, z.rec.b] : null; },
       level: () => this.hud.level,
       quest: (q, st) => {
         const title = (this.titles[q] ?? `Quest ${q}`).replace(/[^\x20-\x7e]/g, '?');
         if (st === 1 || st === 2) this.banner = { text: `${st === 1 ? 'Quest accepted' : 'Quest completed'}: ${title}`, t: 0 };
       },
-      drop: (cat, id, a, b, amount) => {
-        const [x, y] = worldToReal(a, b);
+      show: (id, v) => { const z = this.zones.find(z => z.rec.id === id); if (z) z.visible = v; },
+      randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
+      drop: (cat, id, a, b, min, max) => {
+        const [x, y] = worldToReal(a, b), amount = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
         if (cat === 4 && id === 0) this.ground.push({ x, y, gold: amount });
         else { const item = this.win.db.find(cat, id); if (item) this.ground.push({ x, y, item, gold: 0 }); else console.warn('script drop: unknown item', cat, id); }
       },
@@ -167,12 +193,13 @@ export class GameScene implements Scene {
   }
   static async create(app: App, gender: Gender, name: string, opts?: { scenario?: string; carry?: GameScene; load?: SaveData }) {
     const ld = opts?.load;
-    if (ld) { savedGlobals = new Map(ld.globals); savedVars.clear(); for (const [k, v] of Object.entries(ld.vars)) savedVars.set(k, new Map(v)); savedGround.clear(); for (const [k, v] of Object.entries(ld.ground)) savedGround.set(k, v); }
+    if (ld) { savedGlobals = new Map(ld.globals); savedVars.clear(); for (const [k, v] of Object.entries(ld.vars)) savedVars.set(k, new Map(v)); savedGround.clear(); for (const [k, v] of Object.entries(ld.ground)) savedGround.set(k, v); savedZones.clear(); for (const [k, v] of Object.entries(ld.zones ?? {})) savedZones.set(k, v); }
     const scenario = opts?.scenario ?? SCENARIO;
-    const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null as string | null, actors: [] as Actor[] }));
+    const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null as string | null, actors: [] as Actor[], zones: [] as Zone[] }));
     const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
     const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm, scenario, gender);
     if (vm) { vm.globals = savedGlobals; const sv = savedVars.get(scenario); if (sv) vm.vars = sv; }
+    const sz = savedZones.get(scenario); if (sz) for (const z of sc.zones) if (z.rec.id in sz) z.visible = sz[z.rec.id];
     const sg = savedGround.get(scenario);
     if (sg) g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0 }] : []; })());
     if (ld) {
@@ -181,7 +208,7 @@ export class GameScene implements Scene {
       for (const [sec, idx, x, y, eq] of ld.inv) { const item = win.db.get(sec, idx); if (item) { const [w, h] = ItemDb.size(item); g.win.inv.entries.push({ item, x, y, w, h, eq: !!eq }); } }
     }
     const cr = opts?.carry; if (cr) { g.hud = cr.hud; g.totalExp = cr.totalExp; g.win.inv = cr.win.inv; g.win.gold = cr.win.gold; }
-    g.expTable = tables['13'].v; g.titles = tables['41']?.s ?? []; g.syncExp();
+    g.zones = sc.zones; g.tables = tables; g.expTable = tables['13'].v; g.titles = tables['41']?.s ?? []; g.syncExp();
     return g;
   }
 
@@ -250,10 +277,13 @@ export class GameScene implements Scene {
       return;
     }
     if (this.dlg) { this.updateDialog(); return; }
+    if (this.vm && (this.pollT += dt) > 500) { this.pollT = 0; this.vm.poll(); if (this.vm.pending) this.openDialog(); }
     const hov = inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
     const gh = !hov && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
+    const zov = !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.zones.find(z => z.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
     if (hov?.enemy && (inp.clicked || inp.down)) this.target = hov;
     else if (inp.clicked && hov) this.talkTo(hov); else if (inp.clicked && gh) this.pickUp(gh);
+    else if (inp.clicked && zov) this.useZone(zov);
     else if (inp.clicked) this.target = null;
     if (this.target && !this.target.alive) this.target = null;
     let dx = 0, dy = 0;
@@ -300,7 +330,7 @@ export class GameScene implements Scene {
       c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(g.x - cx, g.y - cy, 14, 7, 0, 0, 7); c.fill();
       if (g.item) this.win.drawIcon(c, g.item, g.x - cx, g.y - cy - 10, 0.5); else this.text.drawCenter(c, `${g.gold}G`, g.x - cx, g.y - cy - 14);
     } }));
-    map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...gd]);
+    map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...this.zones.filter(z => z.drawn), ...gd]);
     for (const f of this.floaters) this.text.drawCenter(ctx, f.s, Math.round(f.x - this.camX), Math.round(f.y - this.camY - f.t / 25));
     if (this.banner) { const w = this.banner.text.length * 6 + 24; ctx.fillStyle = 'rgba(8,8,24,0.85)'; ctx.fillRect(320 - w / 2, 20, w, 24); ctx.strokeStyle = '#a89868'; ctx.strokeRect(320 - w / 2 + 0.5, 20.5, w - 1, 23); this.text.drawCenter(ctx, this.banner.text, 320, 26); }
     if (this.debug) { map.drawJudge(ctx, this.camX, this.camY, SCREEN_W, HUD_Y); this.text.draw(ctx, `${Math.round(p.x)},${Math.round(p.y)}`, 4, 2); }

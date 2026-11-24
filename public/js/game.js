@@ -21,6 +21,8 @@ const AREAS = [
 const savedVars = new Map();
 let savedGlobals = new Map();
 const savedGround = new Map();
+/** Zone ids whose visibility differs from the Mct default (opened chests ...), per scenario. */
+const savedZones = new Map();
 const SAVE_KEY = 'shadowflare_save_v1';
 export function readSave() { try {
     const t = localStorage.getItem(SAVE_KEY);
@@ -43,6 +45,7 @@ export class GameScene {
             savedVars.set(this.scenario, this.vm.vars);
             savedGlobals = this.vm.globals;
         }
+        savedZones.set(this.scenario, Object.fromEntries(this.zones.filter(z => z.visible !== (z.rec.vis !== 0)).map(z => [z.rec.id, z.visible])));
         savedGround.set(this.scenario, this.ground.map(o => ({ x: o.x, y: o.y, sec: o.item?.sec ?? 0, idx: o.item?.idx ?? 0, gold: o.gold })));
     }
     save() {
@@ -50,7 +53,7 @@ export class GameScene {
         const d = {
             v: 1, name: this.name, gender: this.gender, scenario: this.scenario, x: this.player.x, y: this.player.y, hud: this.hud, totalExp: this.totalExp, gold: this.win.gold,
             inv: this.win.inv.entries.map(e => [e.item.sec, e.item.idx, e.x, e.y, e.eq ? 1 : 0]),
-            vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround),
+            vars: Object.fromEntries([...savedVars].map(([k, v]) => [k, [...v]])), globals: [...savedGlobals], ground: Object.fromEntries(savedGround), zones: Object.fromEntries(savedZones),
         };
         try {
             localStorage.setItem(SAVE_KEY, JSON.stringify(d));
@@ -154,6 +157,43 @@ export class GameScene {
             this.win.gold += g.gold;
         this.ground.splice(this.ground.indexOf(g), 1);
     }
+    /** Click a scripted object (chest, barrel...): runs its status-0 block when the player is close enough. */
+    useZone(z) {
+        if (!this.vm || Math.hypot(z.x - this.player.x, (z.y - this.player.y) * 1.6) > 200)
+            return;
+        this.vm.talk(z.rec.id);
+        this.openDialog();
+    }
+    /** Sentence 24 (PLACEHOLDER): the real drop tables are Table.Tbd 900-907 (13 rows = tiers); rows give weights per base item type for weapons (902), armor (904) and another category (906). */
+    randomDrop(tier, a, b) {
+        const [x, y] = worldToReal(a, b), t = this.tables, row = (id) => { const T = t[id]; return T ? T.v.slice(tier * T.cols, (tier + 1) * T.cols) : []; };
+        const cats = [[0, row('902')], [1, row('904')], [3, row('906')]];
+        const sum = (w) => w.reduce((p, c) => p + c, 0), total = cats.reduce((p, c) => p + sum(c[1]), 0);
+        if (total <= 0) {
+            this.ground.push({ x, y, gold: 10 + Math.floor(Math.random() * 40) * Math.max(1, tier) });
+            return;
+        }
+        let r = Math.random() * total, sec = 0, w = [];
+        for (const [s, ws] of cats) {
+            if (r < sum(ws)) {
+                sec = s;
+                w = ws;
+                break;
+            }
+            r -= sum(ws);
+        }
+        let r2 = Math.random() * sum(w), col = 0;
+        for (; col < w.length; col++) {
+            if (r2 < w[col])
+                break;
+            r2 -= w[col];
+        }
+        const list = this.win.db.sections[sec], types = [...new Set(list.map(i => i.type))];
+        const pool = sec === 3 ? [list[col % list.length]] : list.filter(i => i.type === types[col % types.length]);
+        const item = Math.random() < 0.7 ? pool[0] : pool[Math.floor(Math.random() * pool.length)];
+        if (item)
+            this.ground.push({ x, y, item, gold: 0 });
+    }
     talkTo(a) {
         if (!this.vm || a.rec.kind !== 'people')
             return;
@@ -183,6 +223,9 @@ export class GameScene {
         /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
         this.titles = [];
         this.banner = null;
+        this.pollT = 0;
+        this.zones = [];
+        this.tables = {};
         this.expTable = [];
         this.totalExp = 0;
         this.devNext = 0;
@@ -226,15 +269,19 @@ export class GameScene {
         window.game = this;
         if (this.vm)
             this.vm.hooks = {
-                charPos: char => { const r = this.actors.find(a => a.rec.kind === 'people' && 12000000 + a.rec.id === char); return r ? [r.rec.a, r.rec.b] : null; },
+                charPos: char => { const r = this.actors.find(a => a.rec.kind === 'people' && 12000000 + a.rec.id === char); if (r)
+                    return [r.rec.a, r.rec.b]; const z = this.zones.find(z => z.rec.id === char); return z ? [z.rec.a, z.rec.b] : null; },
                 level: () => this.hud.level,
                 quest: (q, st) => {
                     const title = (this.titles[q] ?? `Quest ${q}`).replace(/[^\x20-\x7e]/g, '?');
                     if (st === 1 || st === 2)
                         this.banner = { text: `${st === 1 ? 'Quest accepted' : 'Quest completed'}: ${title}`, t: 0 };
                 },
-                drop: (cat, id, a, b, amount) => {
-                    const [x, y] = worldToReal(a, b);
+                show: (id, v) => { const z = this.zones.find(z => z.rec.id === id); if (z)
+                    z.visible = v; },
+                randomDrop: (tier, a, b) => this.randomDrop(tier, a, b),
+                drop: (cat, id, a, b, min, max) => {
+                    const [x, y] = worldToReal(a, b), amount = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
                     if (cat === 4 && id === 0)
                         this.ground.push({ x, y, gold: amount });
                     else {
@@ -257,9 +304,12 @@ export class GameScene {
             savedGround.clear();
             for (const [k, v] of Object.entries(ld.ground))
                 savedGround.set(k, v);
+            savedZones.clear();
+            for (const [k, v] of Object.entries(ld.zones ?? {}))
+                savedZones.set(k, v);
         }
         const scenario = opts?.scenario ?? SCENARIO;
-        const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null, actors: [] }));
+        const sc = await loadScenarioActors(app, scenario).catch(() => ({ map: null, actors: [], zones: [] }));
         const [map, set, caf, gui, win, text, tables, vm] = await Promise.all([GameMap.load(q.get('map') ?? sc.map ?? 'f00_01'), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json()), ScriptVM.load(scenario).catch(() => null)]);
         const g = new GameScene(app, name, map, set, caf, gui, win, text, sc.actors, vm, scenario, gender);
         if (vm) {
@@ -268,6 +318,11 @@ export class GameScene {
             if (sv)
                 vm.vars = sv;
         }
+        const sz = savedZones.get(scenario);
+        if (sz)
+            for (const z of sc.zones)
+                if (z.rec.id in sz)
+                    z.visible = sz[z.rec.id];
         const sg = savedGround.get(scenario);
         if (sg)
             g.ground = sg.flatMap(o => o.gold ? [{ x: o.x, y: o.y, gold: o.gold }] : (() => { const item = win.db.get(o.sec, o.idx); return item ? [{ x: o.x, y: o.y, item, gold: 0 }] : []; })());
@@ -293,6 +348,8 @@ export class GameScene {
             g.win.inv = cr.win.inv;
             g.win.gold = cr.win.gold;
         }
+        g.zones = sc.zones;
+        g.tables = tables;
         g.expTable = tables['13'].v;
         g.titles = tables['41']?.s ?? [];
         g.syncExp();
@@ -425,14 +482,23 @@ export class GameScene {
             this.updateDialog();
             return;
         }
+        if (this.vm && (this.pollT += dt) > 500) {
+            this.pollT = 0;
+            this.vm.poll();
+            if (this.vm.pending)
+                this.openDialog();
+        }
         const hov = inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.actors.find(a => a.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
         const gh = !hov && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.groundAt(inp.x + this.camX, inp.y + this.camY) : undefined;
+        const zov = !hov && !gh && inp.y < HUD_Y && !this.win.overUI(inp.x, inp.y) ? this.zones.find(z => z.hit(inp.x + this.camX, inp.y + this.camY)) : undefined;
         if (hov?.enemy && (inp.clicked || inp.down))
             this.target = hov;
         else if (inp.clicked && hov)
             this.talkTo(hov);
         else if (inp.clicked && gh)
             this.pickUp(gh);
+        else if (inp.clicked && zov)
+            this.useZone(zov);
         else if (inp.clicked)
             this.target = null;
         if (this.target && !this.target.alive)
@@ -531,7 +597,7 @@ export class GameScene {
                 else
                     this.text.drawCenter(c, `${g.gold}G`, g.x - cx, g.y - cy - 14);
             } }));
-        map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...gd]);
+        map.draw(ctx, this.camX, this.camY, SCREEN_W, HUD_Y, [this.drawPlayer, ...this.actors, ...this.zones.filter(z => z.drawn), ...gd]);
         for (const f of this.floaters)
             this.text.drawCenter(ctx, f.s, Math.round(f.x - this.camX), Math.round(f.y - this.camY - f.t / 25));
         if (this.banner) {

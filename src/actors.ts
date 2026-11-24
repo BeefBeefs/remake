@@ -1,6 +1,7 @@
 import { SpriteSet } from './sprites.js';
 import { loadCaf, Caf } from './caf.js';
 import { Drawable, worldToReal } from './map.js';
+import { Zone, ZoneRec, loadZones } from './zones.js';
 import type { App } from './app.js';
 
 export interface ActorRec { name: string; kind: 'people' | 'partner' | 'enemy'; model: number; id: number; a: number; b: number; dir: number; radius: number; /** enemies: strength multiplier from Mct (1000-based head[4]) and boss id when the record is a boss */ power?: number; boss?: number; col?: string; }
@@ -81,7 +82,7 @@ export class Actor implements Drawable {
   }
   hit(px: number, py: number) { return this.alive && Math.abs(px - this.x) < 20 && py < this.y + 6 && py > this.y - 70; }
 }
-export async function loadScenarioActors(app: App, scenario: string): Promise<{ map: string | null; actors: Actor[] }> {
-  const d: { map: string | null; actors: ActorRec[] } = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
-  return { map: d.map, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))) };
+export async function loadScenarioActors(app: App, scenario: string): Promise<{ map: string | null; actors: Actor[]; zones: Zone[] }> {
+  const d: { map: string | null; actors: ActorRec[]; objects?: ZoneRec[] } = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
+  return { map: d.map, actors: await Promise.all(d.actors.map(r => Actor.load(app, r))), zones: await loadZones(app, d.objects ?? []) };
 }
