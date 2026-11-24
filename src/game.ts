@@ -79,7 +79,7 @@ export class GameScene implements Scene {
   get partner() { return this.petIdx ?? this.pet?.idx ?? -1; }
   private mines: { x: number; y: number; t: number }[] = []; private blasts: { x: number; y: number; t: number }[] = [];
   private fightT = 0; private powerT = 0;
-  private pollT = 0; private musicT = 0; zones: Zone[] = []; tables: Record<string, { cols: number; v: number[]; s?: string[] }> = {};
+  arrivalEntry = 0; private pollT = 0; private musicT = 0; zones: Zone[] = []; tables: Record<string, { cols: number; v: number[]; s?: string[] }> = {};
   private expTable: number[] = []; private totalExp = 0; private devNext = 0;
   private drawPlayer: Drawable;
   // --- combat ---
@@ -393,6 +393,7 @@ export class GameScene implements Scene {
       blackjack: bet => { this.bj = new Blackjack(bet); this.dlg = null; },
       learnSpell: n => { this.magic.learn(600 + n); },
       hasSpell: n => this.magic.known.includes(600 + n),
+      arrival: () => this.arrivalEntry,
       expPct: pct => { this.totalExp += Math.floor(this.hud.expMax * pct / 100); this.syncExp(); },
       offeredClass: () => [0, 1, 3, 2][this.careerTarget] ?? 0,
       offerClass: idx => { const t = [0, 1, 3, 2][idx]; if (idx >= 1 && idx <= 3 && t !== undefined) { this.careerTarget = t; this.refreshCareer(); } },
@@ -455,6 +456,7 @@ export class GameScene implements Scene {
     // object-local 0 = "currently shown" (sentences 22/23 keep it up to date); objects placed visible start at 1 (the boss-room polls wait for the reward chest 10011000 to read 1)
     if (vm) for (const z of g.zones) if (z.visible && z.rec.id >= 10000000 && z.rec.id < 11000000 && !vm.vars.has(`5:${z.rec.id}:1000000`)) vm.vars.set(`5:${z.rec.id}:1000000`, 1);
     if (vm) for (const [, st, ch] of vm.data.status) if (st === 3) g.enterIds.add(ch);
+    g.arrivalEntry = opts?.entry ?? 0;
     if (opts?.entry !== undefined) { const pt = g.entryPoint(opts.entry); if (pt) { g.player.x = pt[0]; g.player.y = pt[1]; g.spawnPos = { x: pt[0], y: pt[1] }; } }
     if (cr?.pet) { g.pet = cr.pet; g.petKills = cr.petKills; Object.assign(g.pet, { x: g.player.x + 50, y: g.player.y + 20, state: 'idle', t: 0 }); }
     else if (ld?.pet) { g.petKills = new Map(ld.pet.others); const pet = await Pet.load(app, tables, ld.pet.idx, g.player.x + 50, g.player.y + 20); pet.kills = ld.pet.kills; pet.heroLevel = g.hud.level; pet.hp = ld.pet.hp; pet.mode = ld.pet.mode; g.pet = pet; }

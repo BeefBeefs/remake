@@ -244,6 +244,8 @@ export class ScriptVM {
                 return true;
             }
             case 50:
+                this.set(o[0][0], o[0][1], this.hooks?.arrival?.() ?? 0);
+                return true; // GUESS from 03110000 (quest 28 is completed on arriving through entry 2, the way back up from 03110001)
             case 57:
             case 66:
                 this.set(o[0][0], o[0][1], 0);

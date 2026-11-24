@@ -445,6 +445,7 @@ export class GameScene {
         this.blasts = [];
         this.fightT = 0;
         this.powerT = 0;
+        this.arrivalEntry = 0;
         this.pollT = 0;
         this.musicT = 0;
         this.zones = [];
@@ -590,6 +591,7 @@ export class GameScene {
                 blackjack: bet => { this.bj = new Blackjack(bet); this.dlg = null; },
                 learnSpell: n => { this.magic.learn(600 + n); },
                 hasSpell: n => this.magic.known.includes(600 + n),
+                arrival: () => this.arrivalEntry,
                 expPct: pct => { this.totalExp += Math.floor(this.hud.expMax * pct / 100); this.syncExp(); },
                 offeredClass: () => [0, 1, 3, 2][this.careerTarget] ?? 0,
                 offerClass: idx => { const t = [0, 1, 3, 2][idx]; if (idx >= 1 && idx <= 3 && t !== undefined) {
@@ -777,6 +779,7 @@ export class GameScene {
             for (const [, st, ch] of vm.data.status)
                 if (st === 3)
                     g.enterIds.add(ch);
+        g.arrivalEntry = opts?.entry ?? 0;
         if (opts?.entry !== undefined) {
             const pt = g.entryPoint(opts.entry);
             if (pt) {

@@ -53,6 +53,8 @@ export interface ScriptHooks {
   hasSpell?(n: number): boolean;
   /** Sentence 68 (exe 0x4342de): add `pct` percent of the experience the current level needs. */
   expPct?(pct: number): void;
+  /** Sentence 50: number of the exit zone the hero arrived through (sentence 17's second operand), 0 when the map was not entered through an exit. */
+  arrival?(): number;
   /** Sentences 71 / 70 (exe 0x434186 / 0x4341da): the offered profession as script index (0 Mercenary, 1 Warrior, 2 Hunter, 3 Wizard) / set it (1-3). */
   offeredClass?(): number;
   offerClass?(idx: number): void;
@@ -171,7 +173,8 @@ export class ScriptVM {
       case 74: this.set(o[0][0], o[0][1], this.bjResult); return true;   // result of the last hand: 0 draw, 1 win, 2 lose (as the branches in block 35 of 99000023 read it)
       case 75: this.hooks?.giveItem?.(ev(0), ev(1)); return true;   // reward item: used by the Ep3/Ep4 quest givers (Sacred Wing, Antidote, Demon Fang ...); signature taken from the call sites, same operands as 59
       case 49: { const t = this.data.messages[String(ev(0))]; if (t) this.hooks?.notice(t.replace(/\s+$/, '')); return true; }
-      case 50: case 57: case 66: this.set(o[0][0], o[0][1], 0); return true;   // read player/exe state (arrival id, player+0x28, ...): not modelled, 0
+      case 50: this.set(o[0][0], o[0][1], this.hooks?.arrival?.() ?? 0); return true;   // GUESS from 03110000 (quest 28 is completed on arriving through entry 2, the way back up from 03110001)
+      case 57: case 66: this.set(o[0][0], o[0][1], 0); return true;   // read player/exe state (arrival id, player+0x28, ...): not modelled, 0
       case 6: return true;
       case 9: this.hooks?.repair?.(ev(0)); return true;   // repair the items of a slot (exe 0x43234a)
       case 4: this.hooks?.identify?.(); return true;   // identify every carried item (exe 0x432296)
