@@ -24,7 +24,9 @@ export class ScriptVM {
             return this.hooks?.pressed?.(val) ?? 0; // operand 9 = object `val` was struck / clicked just now (a pulse, see Game.zonePulse)
         if (kind === 8)
             return 0; // operand 8 = game mode of the exe (0x482db0): 0 offline; scripts only compare it with 0/2 (always [8,0])
-        if (kind >= 10 && kind <= 12)
+        if (kind === 12)
+            return this.globals.get(`q:${val}`) ?? 0; // operand 12 = state of quest `val` (0 none, 1 accepted, 2 completed), the store written by sentence 62; scripts only read it
+        if (kind === 10 || kind === 11)
             return this.globals.get(`${kind}:${val}`) ?? 0;
         if (kind === 3) {
             const e = this.hooks?.entity?.(val);
