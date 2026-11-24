@@ -53,7 +53,9 @@ export class Actor implements Drawable {
   get alive() { return !this.hidden && (!this.enemy || this.state !== 'die'); }
   get solid() { return this.alive; }
   /** Collision radius in real pixels (the Mct radius is in world units). */
-  get radius() { return 22; }
+  /** Body size relative to a goblin (Mct radius 70 world units): golems / giants (120) are bigger, bats (60) a bit smaller. */
+  get scale() { return Math.max(0.85, Math.min(2, (this.rec.radius || 70) / 70)); }
+  get radius() { return 22 * this.scale; }
   static async load(app: App, r: ActorRec) {
     if (r.model < 0) return new Actor(r, null as unknown as SpriteSet, null as unknown as SpriteSet, null as unknown as Caf);
     const base = `data/ep1/actors/${r.kind}/${r.model}`;
@@ -75,11 +77,11 @@ export class Actor implements Drawable {
     const dx = tx - this.x, dy = (ty - this.y) * 1.6, d = Math.hypot(dx, dy);
     const frames = this.caf.anims[ANIM.attack]?.dirs[this.dir]?.frames || 10;
     if (this.state === 'attack') {
-      if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm); } }
+      if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) { this.hitDone = true; if (d < 70 * this.scale) { const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1)); if (onPet) c.hitPet?.(dm); else c.hitPlayer(dm); } }
       if (this.t >= frames * FRAME_MS) this.set('idle');
       return;
     }
-    if (d < 46) { this.dir = dirIndex(dx, ty - this.y); this.set('attack'); }
+    if (d < 46 * this.scale) { this.dir = dirIndex(dx, ty - this.y); this.set('attack'); }
     else if (d < 300) {
       this.dir = dirIndex(dx, ty - this.y); this.set('walk');
       const sp = this.stats.speed * dt, nx = this.x + dx / d * sp, ny = this.y + (ty - this.y) / Math.hypot(dx, ty - this.y) * sp;
@@ -104,7 +106,7 @@ export class Actor implements Drawable {
     const bx = Math.round(this.x - camX) - 16, by = Math.round(this.y - camY) + dy;
     c.fillStyle = '#000'; c.fillRect(bx - 1, by - 1, 34, 5); c.fillStyle = '#c02020'; c.fillRect(bx, by, Math.round(32 * this.hp / this.maxHp), 3);
   }
-  hit(px: number, py: number) { if (this.gen) return this.alive && Math.abs(px - this.x) < 55 && Math.abs(py - this.y) < 40; return this.alive && Math.abs(px - this.x) < 20 && py < this.y + 6 && py > this.y - 70; }
+  hit(px: number, py: number) { if (this.gen) return this.alive && Math.abs(px - this.x) < 55 && Math.abs(py - this.y) < 40; const k = this.scale; return this.alive && Math.abs(px - this.x) < 20 * k && py < this.y + 6 && py > this.y - 70 * k; }
 }
 export async function loadScenarioActors(app: App, scenario: string): Promise<{ map: string | null; music?: number; actors: Actor[]; zones: Zone[] }> {
   const d: { map: string | null; music?: number; actors: ActorRec[]; objects?: ZoneRec[] } = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();

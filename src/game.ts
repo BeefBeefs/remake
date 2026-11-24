@@ -667,7 +667,7 @@ export class GameScene implements Scene {
     if (!dx && !dy && this.target) {
       const tx = this.target.x - p.x, ty = this.target.y - p.y, td = Math.hypot(tx, ty * 1.6), tl = Math.hypot(tx, ty) || 1;
       if (!atk) p.dir = actorDir(tx, ty);
-      if (td > 58 && !atk) { vx = tx / tl; vy = ty / tl; } else { vx = vy = 0; if (!atk) { this.atkT = 0; this.atkHit = false; p.anim = 3; p.t = 0; } }
+      if (td > 58 * (this.target?.scale ?? 1) && !atk) { vx = tx / tl; vy = ty / tl; } else { vx = vy = 0; if (!atk) { this.atkT = 0; this.atkHit = false; p.anim = 3; p.t = 0; } }
     } else if (dx || dy) this.target = null;
     if (this.atkT >= 0) { vx = vy = 0; }
     if (vx || vy) {

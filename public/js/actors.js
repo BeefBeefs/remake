@@ -56,7 +56,9 @@ export class Actor {
     get alive() { return !this.hidden && (!this.enemy || this.state !== 'die'); }
     get solid() { return this.alive; }
     /** Collision radius in real pixels (the Mct radius is in world units). */
-    get radius() { return 22; }
+    /** Body size relative to a goblin (Mct radius 70 world units): golems / giants (120) are bigger, bats (60) a bit smaller. */
+    get scale() { return Math.max(0.85, Math.min(2, (this.rec.radius || 70) / 70)); }
+    get radius() { return 22 * this.scale; }
     static async load(app, r) {
         if (r.model < 0)
             return new Actor(r, null, null, null);
@@ -93,7 +95,7 @@ export class Actor {
         if (this.state === 'attack') {
             if (!this.hitDone && this.t >= frames * FRAME_MS * 0.5) {
                 this.hitDone = true;
-                if (d < 70) {
+                if (d < 70 * this.scale) {
                     const dm = this.stats.dmg[0] + Math.floor(Math.random() * (this.stats.dmg[1] - this.stats.dmg[0] + 1));
                     if (onPet)
                         c.hitPet?.(dm);
@@ -105,7 +107,7 @@ export class Actor {
                 this.set('idle');
             return;
         }
-        if (d < 46) {
+        if (d < 46 * this.scale) {
             this.dir = dirIndex(dx, ty - this.y);
             this.set('attack');
         }
@@ -159,7 +161,7 @@ export class Actor {
         c.fillRect(bx, by, Math.round(32 * this.hp / this.maxHp), 3);
     }
     hit(px, py) { if (this.gen)
-        return this.alive && Math.abs(px - this.x) < 55 && Math.abs(py - this.y) < 40; return this.alive && Math.abs(px - this.x) < 20 && py < this.y + 6 && py > this.y - 70; }
+        return this.alive && Math.abs(px - this.x) < 55 && Math.abs(py - this.y) < 40; const k = this.scale; return this.alive && Math.abs(px - this.x) < 20 * k && py < this.y + 6 && py > this.y - 70 * k; }
 }
 export async function loadScenarioActors(app, scenario) {
     const d = await (await fetch(`data/ep1/scenario/${scenario}.actors.json`)).json();
