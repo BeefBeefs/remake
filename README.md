@@ -21,3 +21,5 @@ See `docs/FORMATS.md` for what is understood so far and the roadmap.
 
 ## Saving
 The game autosaves to your browser (localStorage) every 10 seconds, when changing maps and when you exit to the title; use *Load game* on the title screen to continue.
+
+https://beefbeefs.github.io/remake/
