@@ -88,3 +88,19 @@ All UI sprite sets are ordinary `.njp` files whose pattern rects hold **absolute
 - **Select/Select**: 36 = CREATE NEW CHARACTER header, 7/8 male portrait (dark/lit), 9/10 female, 4/5 OK, 2/3 BACK, 34 NAME label, 38/39 dialog frames.
 - **System** (Common/Game): 0/1 = mouse cursor (normal/pressed).
 - Other sets seen: Game/Card (69 cards), Game/Item00xx (inventory icons), MagicIcon/MagicBarIcon/JobIcon/StatusIcon/MapIcon, Hukidasi (+ .sdw) speech balloons, Dark (darkness overlay), Common/Visual0x (full-screen cut-ins), Waiting.
+
+## Parameter files (System/Game/Parameter)
+
+**Table.Tbd** ("TABLE DATA V000"): 16-byte magic, u32 1, RCLIB-L block (at 0x14). Decoded: u32 tableCount (138), then per table `u32 tableNo, rows, cols; rows*cols x i32; rows*cols x (u32 length + cp932 string)`. Parses to exactly the end of the data (`tools/tbd.py`, exported to `data/ep1/tables.json`). Known: **table 13** = cumulative EXP needed to leave level n (25, 80, 150, 200, 300, ... 100 rows). The 22-row tables (16-21, 27, 35, 70-78, 104-107) are probably per-class/character parameters; not mapped yet.
+
+**Item.Ibn** ("SFItemDataV0000"): 16-byte magic, u32 key (ignored), u32 1, then an RCLIB-L block at 0x18 whose bytes **from file offset 0x28 on are passed through a 256-byte substitution table** (permutation of 0..255 built on the stack in ShadowFlare.exe at 0x46302d, copied to `tools/ibn.py`) before LZ decoding. Decoded layout is five sections, each `u32 count` + records of `u32 len + bit-inverted cp932 name, u32 len + bit-inverted type name, N bytes of i32 fields`:
+
+| section | meaning | count | field bytes |
+|---|---|---|---|
+| 0 | weapons | 1264 | 804 |
+| 1 | armor / shields / hats / boots | 1281 | 764 |
+| 2 | accessories | 239 | 672 |
+| 3 | consumables | 31 | 140 |
+| 4 | quest / misc items | 45 | 100 |
+
+Fields known so far (index): 1 = item id (category*1e6 + n), 5 = price, 7/8 = footprint in inventory cells (w x h), 11 = icon pattern in `System/Game/Pattern/Item0000.njp`, 15-21 = 1000-based multipliers; weapon stat blocks start around 25 (probably attack min/max/speed) and (min, max, 100) triples at 60+, 84+ (element/status boosts). `tools/build_data.py` writes `data/ep1/items.json` (zero fields omitted).

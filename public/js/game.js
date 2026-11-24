@@ -28,6 +28,9 @@ export class GameScene {
         this.paused = false;
         this.camX = 0;
         this.camY = 0;
+        this.expTable = [];
+        this.totalExp = 0;
+        this.devNext = 0;
         const mk = map.markerReal();
         this.player = { x: +(q.get('x') ?? mk?.[0] ?? 3600), y: +(q.get('y') ?? mk?.[1] ?? 8100), dir: 0, t: 0, anim: ANIM_IDLE };
         const p = this.player;
@@ -50,10 +53,43 @@ export class GameScene {
         window.game = this;
     }
     static async create(app, gender, name) {
-        const [map, set, caf, gui, win, text] = await Promise.all([GameMap.load(MAP), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app)]);
-        return new GameScene(app, name, map, set, caf, gui, win, text);
+        const [map, set, caf, gui, win, text, tables] = await Promise.all([GameMap.load(MAP), app.set(`data/ep1/${gender}`), loadCaf(`data/ep1/${gender}.caf.json`), Gui.load(), Windows.load(app), Text.load(app), fetch('data/ep1/tables.json').then(r => r.json())]);
+        const g = new GameScene(app, name, map, set, caf, gui, win, text);
+        g.expTable = tables['13'].v;
+        g.syncExp();
+        return g;
+    }
+    /** Table.Tbd table 13: cumulative EXP needed to leave level n (1-based). */
+    syncExp() {
+        const t = this.expTable, h = this.hud;
+        while (h.level < 100 && this.totalExp >= t[h.level - 1]) {
+            h.level++;
+            h.hpMax += 12;
+            h.mpMax += 6;
+            h.hp = h.hpMax;
+            h.mp = h.mpMax;
+        }
+        const lo = h.level > 1 ? t[h.level - 2] : 0;
+        h.exp = this.totalExp - lo;
+        h.expMax = Math.max(1, t[h.level - 1] - lo);
+    }
+    /** Dev helpers: X = +30 exp, F2 = add the next item from Item.Ibn to the inventory (cycles weapons, armor, ...). */
+    dev() {
+        const p = this.app.input.pressed;
+        if (p.has('x')) {
+            this.totalExp += 30;
+            this.syncExp();
+        }
+        if (p.has('f2')) {
+            const all = this.win.db.sections.flat();
+            const it = all[(this.devNext += 37) % all.length];
+            if (!this.win.inv.add(it))
+                this.win.inv.entries.length = 0;
+            this.win.item = true;
+        }
     }
     update(dt) {
+        this.dev();
         const inp = this.app.input, keys = inp.keys, p = this.player, hud = this.hud;
         if (inp.pressed.has('g') || inp.pressed.has('f1'))
             this.debug = !this.debug;
@@ -140,7 +176,7 @@ export class GameScene {
         }
         ctx.fillStyle = '#000';
         ctx.fillRect(0, HUD_Y, SCREEN_W, SCREEN_H - HUD_Y);
-        this.win.draw(ctx, this.hud, this.name);
+        this.win.draw(ctx, this.hud, this.name, inp.x, inp.y);
         this.gui.draw(ctx, this.hud);
         if (this.paused) {
             ctx.fillStyle = 'rgba(0,0,0,0.6)';
