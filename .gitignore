@@ -1,0 +1,7 @@
+# Original game data is NOT redistributed from this repo.
+game-data/
+public/assets/
+*.zip
+*.sma
+node_modules/
+dist/
