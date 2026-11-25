@@ -320,6 +320,10 @@ export class ScriptVM {
             case 48: return true; // quest notice popup: shown by the quest hook
             case 18:
                 this.talking = true;
+                if (o[0] && ev(0) !== this.char) {
+                    this.char = ev(0);
+                    this.ended = false;
+                } // hand the talk over to another character (19 for the old one precedes it): its continuation handler (kind 1) runs after the messages
                 return true;
             case 19:
                 this.ended = true;

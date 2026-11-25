@@ -196,7 +196,8 @@ export class ScriptVM {
         this.globals.set(`q:${q}`, st); this.hooks?.quest(q, st); return true; }
       case 61: this.set(o[0][0], o[0][1], this.hooks?.level() ?? 1); return true;   // handler at 0x433f16 reads the player's level (player+0x34)
       case 48: return true;   // quest notice popup: shown by the quest hook
-      case 18: this.talking = true; return true;
+      case 18: this.talking = true; if (o[0] && ev(0) !== this.char) { this.char = ev(0); this.ended = false; }   // hand the talk over to another character (19 for the old one precedes it): its continuation handler (kind 1) runs after the messages
+        return true;
       case 19: this.ended = true; return true;
       case 21: return true;
       default:
