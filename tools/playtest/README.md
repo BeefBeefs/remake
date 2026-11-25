@@ -52,3 +52,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `quest28.mjs` - quest 28 completes on arriving through exit entry 2 (sentence 50).
 - `epplay.mjs [ep]` - ordered-play quest sweep (see docs/PROGRESS.md); env CHEAT, LEAVES, TALKS, ROUNDS, PASSES, REVISIT, ONLY.
 - `boardfuzz.mjs <ep> <scenario> [trials]` - random-flag fuzz of one scenario (SHOW=1 prints the flag sets that started each quest).
+- `tools/guardchain.py <ep> <scenario> <block> [sets]` (not a playtest, a static helper): prints the guard conditions that lead from a script block to its status entries; `sets` lists guarded `V1 := const` conversation-chain setters. Quest start paths for 12-14, 34, 37, 38, 40 were driven in the VM with seeded globals (see docs/PROGRESS.md).
