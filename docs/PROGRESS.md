@@ -427,3 +427,8 @@ Ep4 ordered-play sweep (CHEAT=1, 2 passes): 38 quests started (26 and 27 are new
 
 ## Quests 29, 31, 36 proven (guild stage ladder with every NPC)
 Talking to all 03900003 guild NPCs (12000000, 03, 01, 02, 04-08) at each g11:85 stage with items stubbed: 26/27 start at stage 1, 29 at stage 3, 30 at 4, 31 at 6, 36 at 10–11, 37, 47 later. With quests 12–14, 34, 37, 38, 40 shown above, every quest of Ep1–4 is now seen to start under its documented flags (28 by arrival, proven earlier). What is NOT proven: a single uninterrupted playthrough through the real kill/item conditions (items were stubbed), and the item drops for Tears of Oberon (guess), Angel's Nail/Silver Orb/Gold Orb (no script asks for them).
+
+## Ep1 quest item sources, no cheats (verified in game)
+- Quest 1 Malse's Gem (99000000): Black Hammer, scenario 00000004 (dlv 6). Quest 2 Syria's Spirit Stone (99000001): Stone Spike, 00010005 (dlv 23). Quest 4 Memorable Ruby (99000002): Wild Ice, 01000001 (dlv 56). Each drops when the boss is killed through the damage path (`/tmp/ep1drop.mjs`-style check).
+- Quest 5 hands in the **Crimson Dagger** (category 0, id 90000000; sold nowhere in Ep1 – only Table 33 row 177 / shop 6, which no script opens): the Remote Town NPC 12000001 of 00000000 gives it with sentence 10 once quest 5 is accepted (V1==61 branch); reward Knight Broad Sword 90000001 comes from 01000000 block 98.
+- Script flags (`flags` in the script json) hold these ids as initial variable values (e.g. V23=99000002, V25=90000000), so a missing assignment in the blocks is not a bug.
