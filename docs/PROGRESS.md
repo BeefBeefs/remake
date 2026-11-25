@@ -446,3 +446,7 @@ Talking to all 03900003 guild NPCs (12000000, 03, 01, 02, 04-08) at each g11:85 
 ## Exp thresholds are per level (was a guess)
 - Table 13 = 25, 80, 150, 200, 300, 400, 600, 1200 …: read as cumulative it would need 55, 70, **50**, 100 more exp for levels 2–5 (a dip), read per level it rises smoothly, and the exe's level-up routine resets the player's exp (+0xe8) at each level-up. `syncExp` now uses prefix sums of the per-level values (`expCum`), the bar shows `exp / Table13[level-1]`, and sentence 68's `pct` is `pct`% of that bar as in the exe. Old saves are clamped to the new level threshold on load. Check: 25 exp → level 2 (bar 0/80), +80 → level 3.
 - Class stats cross-check: Table 900/902/904/906 give Mercenary +40 HP, +10 Str, +4 Atk, +4 Def, +2 MAtk, +2 MDef per level, the same as the Wikipedia ShadowFlare article (Warrior at level 5, Hunter/Wizard offered from 6).
+
+## Warning scan and no-op sentences
+- `tools/playtest/warnscan.mjs 4`: all 209 scenarios of Ep1–4 load and idle for 2.5 s with no console warning, error or page error (VM sentence types used in the scripts are all handled; no "unimplemented" left).
+- Remaining no-op sentences (20, 26, 40, 60, 64, 72, 27, 46): 27/46 are the hard-wired town-gate / lift pieces (they come with 34/41 in the town gate blocks), 40 plays sound ids 20010/20018 for which no `sfx20010/20018` file exists in the converted audio, the rest are NPC / visual markers. Their effect cannot be checked offline.
