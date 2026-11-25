@@ -165,10 +165,15 @@ export class ScriptVM {
             case 65:
                 this.hooks?.ambient?.(ev(0), ev(1), ev(2));
                 return true; // GUESS: (r, g, b, fade) ambient light; the data uses 224/224/224 (normal), 224/64/64, 224/128/128 and 64/64/224
+            case 56: {
+                const v = ev(1) !== 0;
+                this.vars.set(`5:${ev(0)}:1000000`, v ? 1 : 0);
+                this.hooks?.show(ev(0), v);
+                return true;
+            } // GUESS: (object, shown, 0, 0): like 22/23 in one sentence; used in pairs that swap two objects drawn at the same place (03000006: pattern 2 vs 3) when a quest changes state
             case 29:
             case 27:
-            case 46:
-            case 56: return true; // 27 = styled area title; the area name is already shown through sentence 49
+            case 46: return true; // 27 = styled area title; the area name is already shown through sentence 49
             case 36:
                 this.hooks?.effect?.(ev(0), ev(1), ev(2));
                 return true; // exe 0x43332d: effect object (OPTION sprite set)

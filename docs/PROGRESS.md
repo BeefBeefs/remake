@@ -394,3 +394,6 @@ Four blocks (03900003 in Ep3 and Ep4, two each) end one NPC's talk with sentence
 
 ## Ambient tint (sentence 65)
 Sentence 65 = ambient light colour `(r, g, b, fade)`; 224/224/224 is normal, and the data also has 224/64/64 (03010000-03010004, 04000006, 04000009, 04900003: red, matches the volcanic-looking maps), 224/128/128 (02200003) and 64/64/224 (03000101: blue, an ice-looking map). Implemented as a multiply fill over the world (`rgb * 255/224`, clamped) faded in at ~0.06 per ms. GUESS: the exact tint maths. Sentence 27 (`zone, x, y offset, message, r, g, b, time`) is a styled area title shown on arrival through a warp gate; the plain banner already shows the area name through sentence 49, so 27 stays a no-op.
+
+## Sentence 56 (object shown/hidden)
+`56 (object, shown, 0, 0)` was a no-op. It is used in pairs that swap two objects sitting at the same place (e.g. 00000006: objects 10001020 / 10001021, patterns 2 and 3, flip when quest 3 is done: before = 1020 shown and 1021 hidden, after = the opposite). Implemented like 22/23 (zone visibility plus the object's local 0). GUESS for the two trailing operands (always 0). Sentence 46 (`object, var`, reads an object's state; 134 uses, always on objects 10000203/10000204) and 27 stay no-ops. Checked by flipping quest 3 and polling in 00000006.

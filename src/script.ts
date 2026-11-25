@@ -154,7 +154,8 @@ export class ScriptVM {
       case 33: { const t = this.hooks?.nearTarget?.(ev(0), ev(2)) ?? null; this.set(o[3][0], o[3][1], t ? 0 : -1); if (t) { this.set(o[4][0], o[4][1], Math.round(t[0])); this.set(o[5][0], o[5][1], Math.round(t[1])); } return true; }   // (char, 0, range, outTarget, outX, outY): nearest player within range (exe 0x43288d)
       case 30: { if (ev(2) === 0 && ev(7) > 0) this.hooks?.bullet?.(ev(0), ev(1), ev(3), ev(6)); return true; }   // (x, y, kind, angle, .., power, travel, ..): create an attack object (exe 0x43309b); kind 0 with a travel value = trap projectile, the other kinds are scenery effects
       case 65: this.hooks?.ambient?.(ev(0), ev(1), ev(2)); return true;   // GUESS: (r, g, b, fade) ambient light; the data uses 224/224/224 (normal), 224/64/64, 224/128/128 and 64/64/224
-      case 29: case 27: case 46: case 56: return true;   // 27 = styled area title; the area name is already shown through sentence 49
+      case 56: { const v = ev(1) !== 0; this.vars.set(`5:${ev(0)}:1000000`, v ? 1 : 0); this.hooks?.show(ev(0), v); return true; }   // GUESS: (object, shown, 0, 0): like 22/23 in one sentence; used in pairs that swap two objects drawn at the same place (03000006: pattern 2 vs 3) when a quest changes state
+      case 29: case 27: case 46: return true;   // 27 = styled area title; the area name is already shown through sentence 49
       case 36: this.hooks?.effect?.(ev(0), ev(1), ev(2)); return true;   // exe 0x43332d: effect object (OPTION sprite set)
       case 31: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1); return true;
       case 32: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), false) ?? -1); return true;
