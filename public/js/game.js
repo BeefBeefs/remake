@@ -36,6 +36,8 @@ const savedGround = new Map();
 /** GUESS: share of dropped magical variants that are still unidentified (the original rate is not decoded). */
 const UNID_CHANCE = 0.6;
 /** GUESS: phantom floor scenario -> [dlv of its final monster, drop level of the card it rolls] (Jack, Queen, King, Joker = Table 30 rows 162-165). */
+/** GUESS: nothing carries drop level 166 (Tears of Oberon, the gem the elf quest 34 asks for); the Ancient Dragon at the end of the elf forest (02210004, dlv 150) also rolls it. */
+const BOSS_EXTRA = { '02210004': [150, 166] };
 const PHANTOM_FLOORS = { '99000019': [265, 162], '99000020': [268, 163], '99000021': [271, 164], '99000022': [276, 165] };
 /** Voice00.Voc ids. From the exe: the item method 0x466110 returns the weapon sounds (kind 0/1 swing 47 or 48 [light weapon 48], bow/gun class 93, kind 4 impact 1 = light / 2 = heavy); monster behaviour functions use constants 22 (melee, most common), 21 (cast release), 94 (cast start), 29/23 (bats), 19. Which weapon counts as 'light' (item+0x28 < 60) is not mapped to an Item.Ibn field, so the arms class stands in (GUESS); hurt / kill keep placeholders. */
 const TRIPLE_LEVEL = 10;
@@ -1031,7 +1033,7 @@ export class GameScene {
                 const [wa, wb] = realToWorld(a.x, a.y);
                 this.randomDrop(st.dlv, wa, wb);
                 // GUESS: no monster carries drop levels 162-165 (Jack, Queen, King, Joker, wanted by the card quest in 99000018); the final monster of each phantom floor 99000019..22 rolls its card
-                const fl = PHANTOM_FLOORS[this.scenario];
+                const fl = PHANTOM_FLOORS[this.scenario] ?? BOSS_EXTRA[this.scenario];
                 if (fl && st.dlv === fl[0])
                     this.randomDrop(fl[1], wa, wb);
             }
