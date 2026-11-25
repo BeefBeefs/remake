@@ -432,3 +432,7 @@ Talking to all 03900003 guild NPCs (12000000, 03, 01, 02, 04-08) at each g11:85 
 - Quest 1 Malse's Gem (99000000): Black Hammer, scenario 00000004 (dlv 6). Quest 2 Syria's Spirit Stone (99000001): Stone Spike, 00010005 (dlv 23). Quest 4 Memorable Ruby (99000002): Wild Ice, 01000001 (dlv 56). Each drops when the boss is killed through the damage path (`/tmp/ep1drop.mjs`-style check).
 - Quest 5 hands in the **Crimson Dagger** (category 0, id 90000000; sold nowhere in Ep1 – only Table 33 row 177 / shop 6, which no script opens): the Remote Town NPC 12000001 of 00000000 gives it with sentence 10 once quest 5 is accepted (V1==61 branch); reward Knight Broad Sword 90000001 comes from 01000000 block 98.
 - Script flags (`flags` in the script json) hold these ids as initial variable values (e.g. V23=99000002, V25=90000000), so a missing assignment in the blocks is not a bug.
+
+## Quests 43, 45, 46 driven (g11:110 stage 4–6 chain)
+- 46: 03900005 with `g11:110==4` and q45==2 → q46 starts (V1=900 chain). 45: 03900003 NPC 12000003 with `g11:88==1`, q32==2 → q45 starts (g11:88 is written 1/2 by 03900003 itself). 43: 04900002 with `g11:112==2`, q42==2 → q43 starts (g11:112 written 1–4 by 04900002; g11:113 by 04000009).
+- Helmets/boots: re-checked the CAF layers; layers 19–22 have no frames, so the original has no helmet/boot overlay to draw. Left as is (not a gap in the data).
