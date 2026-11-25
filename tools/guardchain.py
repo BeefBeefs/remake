@@ -13,7 +13,7 @@ for bi,b in enumerate(B):
         if s[0]==0 and len(s[1])==4: calls[s[1][3][1]].append((bi,s))
 entry={r[3]:r for r in d['status']}
 def nm(o): return {1:str(o[1]),4:f'V{o[1]}',5:f'L{o[1]}',10:f'g10:{o[1]}',11:f'g11:{o[1]}',12:f'q{o[1]}'}.get(o[0],str(o))
-OP={0:'==',1:'!=',2:'<',3:'>',4:'<=',5:'>='}
+OP={0:'==',1:'!=',2:'>',3:'<'}
 res=[]
 def climb(bi,conds,seen):
     if bi in seen: return

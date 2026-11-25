@@ -414,3 +414,8 @@ Ep4 ordered-play sweep (CHEAT=1, 2 passes): 38 quests started (26 and 27 are new
 - **37**: 03900003 with `g11:85==11` and item 4:99000024 held → quests 36 completes, 37 starts.
 - So these are only "unstarted" in the sweep because the stage globals (`g11:110`, `g11:85`) and the hand-in items from earlier quests are not reached by the random-flag fuzz; the engine does not block them. Item sources for 99000010–12 and 99000024 are NOT re-verified here.
 - Method: `/tmp/qt2.mjs` (not committed) = direct `vm.talk(12000000)` loops with seeded globals and `hasItem` stubbed true.
+
+## Quest 34 (Ep3 02200000) and a tool fix
+- `tools/guardchain.py` printed comparison op 2/3 swapped; the VM has 2 = `>`, 3 = `<` (script.ts case 0). Fixed in the tool. Reading the real guards, quest 34 starts when `g11:44==2 && g11:101!=0 && g11:85>9 && q34==0` (the earlier note "85<9" came from the swapped labels).
+- Driven in the VM: those flags → talk to 12000003 sets q34=1 (V1=400 chain); next talk with item 4:99000022 (stubbed) completes it. The item is the "gem of King Oberon" hand-in; it has no known source (matches the Tears of Oberon gap).
+- Summary of unproven-from-fresh quests now: all of 12–14, 34, 37, 38, 40 start under their documented stage flags and the engine does not block them. What remains unverified is that the *stage globals* (g11:44, g11:85, g11:101, g11:110) reach the needed values through normal play, and the item sources above.
