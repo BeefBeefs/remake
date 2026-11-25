@@ -397,3 +397,6 @@ Sentence 65 = ambient light colour `(r, g, b, fade)`; 224/224/224 is normal, and
 
 ## Sentence 56 (object shown/hidden)
 `56 (object, shown, 0, 0)` was a no-op. It is used in pairs that swap two objects sitting at the same place (e.g. 00000006: objects 10001020 / 10001021, patterns 2 and 3, flip when quest 3 is done: before = 1020 shown and 1021 hidden, after = the opposite). Implemented like 22/23 (zone visibility plus the object's local 0). GUESS for the two trailing operands (always 0). Sentence 46 (`object, var`, reads an object's state; 134 uses, always on objects 10000203/10000204) and 27 stay no-ops. Checked by flipping quest 3 and polling in 00000006.
+
+## After the talk handoff fix
+Ep4 ordered-play sweep (CHEAT=1, 2 passes): 38 quests started (26 and 27 are new), 33 done. Still not started by the sweep: 12, 13, 14, 29, 31, 34, 36, 37, 38, 40. Of those, 29 starts under random flags in `tools/playtest/boardfuzz.mjs 4 03900003` (needs 26 done), and 31 / 36 start with the board stage seeded (stage 6 and 11); the rest sit in the other guild-board scenarios (03900005 for 38 and 40, 02200000 for 34). So everything probed is reachable under the right flags, and what is left is the order the sweep walks in, not a missing engine feature. Not proven for 12-14, 34, 37, 38, 40 with a fresh game.
