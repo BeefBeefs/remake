@@ -5,7 +5,7 @@ import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import fs from 'fs';
 const ep = Number(process.argv[2] ?? 1), cheat = !!process.env.CHEAT, ROUNDS = Number(process.env.ROUNDS ?? 3), LEAVES = Number(process.env.LEAVES ?? 30), TALKS = Number(process.env.TALKS ?? 4);
 const all = (process.env.ONLY ? process.env.ONLY.split(",") : [...new Set([1, 2, 3, 4].filter(k => k <= ep).flatMap(k => fs.readdirSync(`public/data/ep${k}/scenario`).filter(f => f.endsWith(".script.json")).map(f => f.slice(0, 8))))].sort());
-const b = await chromium.launch({ args: ['--no-sandbox'] }); let p, globals = [];
+const b = await chromium.launch({ args: ['--no-sandbox'] }); let p, globals = process.env.INIT ? Object.entries(JSON.parse(process.env.INIT)) : [];   // INIT='{"11:85":1}' seeds globals
 // REVISIT=1: after every scenario go back to the previous one (a quest chain often needs the town again right after its dungeon, before later quests close the dialogue branch)
 const seq = process.env.REVISIT ? all.flatMap((s, i) => i ? [s, all[i - 1]] : [s]) : all;
 for (let pass = 0; pass < Number(process.env.PASSES ?? (process.env.REVISIT ? 1 : 2)); pass++) for (let i = 0; i < seq.length; i += 8) {
