@@ -400,3 +400,9 @@ Sentence 65 = ambient light colour `(r, g, b, fade)`; 224/224/224 is normal, and
 
 ## After the talk handoff fix
 Ep4 ordered-play sweep (CHEAT=1, 2 passes): 38 quests started (26 and 27 are new), 33 done. Still not started by the sweep: 12, 13, 14, 29, 31, 34, 36, 37, 38, 40. Of those, 29 starts under random flags in `tools/playtest/boardfuzz.mjs 4 03900003` (needs 26 done), and 31 / 36 start with the board stage seeded (stage 6 and 11); the rest sit in the other guild-board scenarios (03900005 for 38 and 40, 02200000 for 34). So everything probed is reachable under the right flags, and what is left is the order the sweep walks in, not a missing engine feature. Not proven for 12-14, 34, 37, 38, 40 with a fresh game.
+
+## Ep2 quests 12–14 proven (chain 11 → 12 → 13 → 14)
+- The ordered sweep missed them because the Kanfore offer for 13 needs `q11==2, q12==1, g11:24==1, g11:23!=0, q17!=2` and the offer for 14 comes at the end of the long Kirushutat conversation after 13 is handed in (block 31 sets V1=100, then the chain increments V1 to 115 and block 43 starts quest 14).
+- Verified by driving the VM directly (`/tmp/q13.mjs`, `/tmp/q14.mjs` style, not committed): with q11=2,q12=1,g11:24=1 quest 13 starts; with q13=1 the Kirushutat talk completes 13, runs the full message chain (needs >12 advances) and sets q14=1.
+- Note: block 33 of 02110000 lists `V1==115` twice (→35 reset, →43 offer); the engine reaches 43 only because the chain's intermediate talk step reaches 115 via the increment block rather than the dispatch table. No engine change needed.
+- Still unproven from a fresh game: 34, 37, 38, 40 (and 29, 31, 36 only under seeded flags).
