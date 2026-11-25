@@ -434,6 +434,8 @@ export class GameScene {
         this.camX = 0;
         this.camY = 0;
         /** Quest titles (Table.Tbd table 41) and the banner shown when a quest changes state. */
+        this.ambient = [224, 224, 224];
+        this.ambientTo = [224, 224, 224];
         this.titles = [];
         this.banner = null;
         /** Companion dog (null = none). `petIdx` is set while a swapped-in dog is still loading so the scripts already see it. */
@@ -592,6 +594,7 @@ export class GameScene {
                 learnSpell: n => { this.magic.learn(600 + n); },
                 hasSpell: n => this.magic.known.includes(600 + n),
                 arrival: () => this.arrivalEntry,
+                ambient: (r, g, b) => { this.ambientTo = [r, g, b]; },
                 expPct: pct => { this.totalExp += Math.floor(this.hud.expMax * pct / 100); this.syncExp(); },
                 offeredClass: () => [0, 1, 3, 2][this.careerTarget] ?? 0,
                 offerClass: idx => { const t = [0, 1, 3, 2][idx]; if (idx >= 1 && idx <= 3 && t !== undefined) {
@@ -1482,6 +1485,8 @@ export class GameScene {
         this.floaters = this.floaters.filter(f => f.t < 900);
         if (this.banner && (this.banner.t += dt) > 5000)
             this.banner = null;
+        for (let i = 0; i < 3; i++)
+            this.ambient[i] += Math.sign(this.ambientTo[i] - this.ambient[i]) * Math.min(Math.abs(this.ambientTo[i] - this.ambient[i]), dt * 0.06);
         const inp = this.app.input, keys = inp.keys, p = this.player, hud = this.hud;
         if (!this.paused && inp.pressed.has('g'))
             this.debug = !this.debug;
@@ -1879,6 +1884,12 @@ export class GameScene {
             ctx.lineTo(ax, ay);
             ctx.stroke();
         }
+        if (this.ambient.some(c => Math.abs(c - 224) > 1)) {
+            ctx.globalCompositeOperation = 'multiply';
+            ctx.fillStyle = `rgb(${this.ambient.map(c => Math.min(255, Math.round(c * 255 / 224))).join(',')})`;
+            ctx.fillRect(0, 0, 640, 480);
+            ctx.globalCompositeOperation = 'source-over';
+        } // ambient tint (sentence 65)
         if (this.holdZone) {
             const left = Math.max(0, Math.ceil((90 - this.holdT * 0.03) / 30));
             this.text.drawCenter(ctx, String(left), Math.round(this.holdZone.x - this.camX), Math.round(this.holdZone.y - this.camY - 110));

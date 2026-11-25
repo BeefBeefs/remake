@@ -31,6 +31,8 @@ export interface ScriptHooks {
   heal?(kind: 0 | 1): void;
   /** Sentence 36: spawn effect `id` (20007-20009 ...) at world position (a, b). */
   effect?(id: number, a: number, b: number): void;
+  /** Sentence 65: ambient light colour (224 = unchanged), faded in. */
+  ambient?(r: number, g: number, b: number): void;
   /** Sentence 41: open the warehouse window. */
   warehouse?(): void;
   /** Sentences 55 / 4: any carried item unidentified? / identify everything. */
@@ -151,7 +153,8 @@ export class ScriptVM {
       case 28: { const c = this.char, e = this.ended; this.char = ev(0); this.runStatus(6, ev(0)); this.char = c; this.ended = e; return true; }
       case 33: { const t = this.hooks?.nearTarget?.(ev(0), ev(2)) ?? null; this.set(o[3][0], o[3][1], t ? 0 : -1); if (t) { this.set(o[4][0], o[4][1], Math.round(t[0])); this.set(o[5][0], o[5][1], Math.round(t[1])); } return true; }   // (char, 0, range, outTarget, outX, outY): nearest player within range (exe 0x43288d)
       case 30: { if (ev(2) === 0 && ev(7) > 0) this.hooks?.bullet?.(ev(0), ev(1), ev(3), ev(6)); return true; }   // (x, y, kind, angle, .., power, travel, ..): create an attack object (exe 0x43309b); kind 0 with a travel value = trap projectile, the other kinds are scenery effects
-      case 29: case 27: case 46: case 56: case 65: return true;
+      case 65: this.hooks?.ambient?.(ev(0), ev(1), ev(2)); return true;   // GUESS: (r, g, b, fade) ambient light; the data uses 224/224/224 (normal), 224/64/64, 224/128/128 and 64/64/224
+      case 29: case 27: case 46: case 56: return true;   // 27 = styled area title; the area name is already shown through sentence 49
       case 36: this.hooks?.effect?.(ev(0), ev(1), ev(2)); return true;   // exe 0x43332d: effect object (OPTION sprite set)
       case 31: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), true) ?? -1); return true;
       case 32: this.set(o[2][0], o[2][1], this.hooks?.findSlot(ev(0), ev(1), false) ?? -1); return true;

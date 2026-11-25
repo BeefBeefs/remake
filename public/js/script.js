@@ -162,11 +162,13 @@ export class ScriptVM {
                     this.hooks?.bullet?.(ev(0), ev(1), ev(3), ev(6));
                 return true;
             } // (x, y, kind, angle, .., power, travel, ..): create an attack object (exe 0x43309b); kind 0 with a travel value = trap projectile, the other kinds are scenery effects
+            case 65:
+                this.hooks?.ambient?.(ev(0), ev(1), ev(2));
+                return true; // GUESS: (r, g, b, fade) ambient light; the data uses 224/224/224 (normal), 224/64/64, 224/128/128 and 64/64/224
             case 29:
             case 27:
             case 46:
-            case 56:
-            case 65: return true;
+            case 56: return true; // 27 = styled area title; the area name is already shown through sentence 49
             case 36:
                 this.hooks?.effect?.(ev(0), ev(1), ev(2));
                 return true; // exe 0x43332d: effect object (OPTION sprite set)
