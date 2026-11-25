@@ -442,3 +442,7 @@ Talking to all 03900003 guild NPCs (12000000, 03, 01, 02, 04-08) at each g11:85 
 - Shop stock: shop 0 (12 goods incl. Tablet, Capsule, Short Sword, Leather Cloth) and shop 1/2 open with the full lists in Ep3 data; Ep1's shop 1 is a service row only (skipped).
 - Sprites: `tools/playtest/missing404.mjs 4` over all 209 scenarios found 9 missing files, all `objects/N_sdw.json` shadow sets of a few objects (optional shadows), no missing actor, map or object sprite.
 - Test helpers added to tools/playtest: `missing404.mjs`, `talkseed.mjs`, `ladder.mjs`.
+
+## Exp thresholds are per level (was a guess)
+- Table 13 = 25, 80, 150, 200, 300, 400, 600, 1200 …: read as cumulative it would need 55, 70, **50**, 100 more exp for levels 2–5 (a dip), read per level it rises smoothly, and the exe's level-up routine resets the player's exp (+0xe8) at each level-up. `syncExp` now uses prefix sums of the per-level values (`expCum`), the bar shows `exp / Table13[level-1]`, and sentence 68's `pct` is `pct`% of that bar as in the exe. Old saves are clamped to the new level threshold on load. Check: 25 exp → level 2 (bar 0/80), +80 → level 3.
+- Class stats cross-check: Table 900/902/904/906 give Mercenary +40 HP, +10 Str, +4 Atk, +4 Def, +2 MAtk, +2 MDef per level, the same as the Wikipedia ShadowFlare article (Warrior at level 5, Hunter/Wizard offered from 6).

@@ -508,14 +508,15 @@ export class GameScene implements Scene {
     h.hpMax = ps.hp + (h.hpBonus ?? 0) + this.win.itemHp(); h.mpMax = ps.mp + (h.mpBonus ?? 0) + this.win.itemMp(); this.win.ps = ps;
     if (refill || full) { h.hp = h.hpMax; h.mp = h.mpMax; } else { h.hp = Math.min(h.hp, h.hpMax); h.mp = Math.min(h.mp, h.mpMax); }
   }
-  /** Table.Tbd table 13: cumulative EXP needed to leave level n (1-based). */
+  /** Table.Tbd table 13 = EXP needed to leave level n (1-based) *from the start of that level* (the exe resets the player's exp at each level-up, so the values are per level, not cumulative: 25, 80, 150, 200, 300 ... rises smoothly where a cumulative reading would dip). `totalExp` stays a running sum for saves, so thresholds are prefix sums. */
+  private expCum(n: number) { let s = 0; for (let i = 0; i < n; i++) s += this.expTable[i] ?? 0; return s; }
   private syncExp() {
     const t = this.expTable, h = this.hud;
     const before = h.level;
-    while (h.level < 100 && this.totalExp >= t[h.level - 1]) { h.level++; this.hist.push(CLASS_ID[this.win.career]); this.careerLevelUp(); }
+    if (this.totalExp < this.expCum(h.level - 1)) this.totalExp = this.expCum(h.level - 1);   // old saves counted exp against cumulative thresholds
+    while (h.level < 100 && this.totalExp >= this.expCum(h.level)) { h.level++; this.hist.push(CLASS_ID[this.win.career]); this.careerLevelUp(); }
     this.applyStats(h.level > before);
-    const lo = h.level > 1 ? t[h.level - 2] : 0;
-    h.exp = this.totalExp - lo; h.expMax = Math.max(1, t[h.level - 1] - lo);
+    h.exp = this.totalExp - this.expCum(h.level - 1); h.expMax = Math.max(1, t[h.level - 1] ?? 1);
   }
   /** Dev helpers: X = +30 exp, F2 = add the next item from Item.Ibn to the inventory (cycles weapons, armor, ...). */
   private dev() {
