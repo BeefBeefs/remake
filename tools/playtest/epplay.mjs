@@ -6,13 +6,15 @@ import fs from 'fs';
 const ep = Number(process.argv[2] ?? 1), cheat = !!process.env.CHEAT, ROUNDS = Number(process.env.ROUNDS ?? 3), LEAVES = Number(process.env.LEAVES ?? 30), TALKS = Number(process.env.TALKS ?? 4);
 const all = (process.env.ONLY ? process.env.ONLY.split(",") : [...new Set([1, 2, 3, 4].filter(k => k <= ep).flatMap(k => fs.readdirSync(`public/data/ep${k}/scenario`).filter(f => f.endsWith(".script.json")).map(f => f.slice(0, 8))))].sort());
 const b = await chromium.launch({ args: ['--no-sandbox'] }); let p, globals = [];
-for (let pass = 0; pass < 2; pass++) for (let i = 0; i < all.length; i += 8) {
-  const batch = all.slice(i, i + 8);
+// REVISIT=1: after every scenario go back to the previous one (a quest chain often needs the town again right after its dungeon, before later quests close the dialogue branch)
+const seq = process.env.REVISIT ? all.flatMap((s, i) => i ? [s, all[i - 1]] : [s]) : all;
+for (let pass = 0; pass < Number(process.env.PASSES ?? (process.env.REVISIT ? 1 : 2)); pass++) for (let i = 0; i < seq.length; i += 8) {
+  const batch = seq.slice(i, i + 8);
   if (p) await p.close().catch(() => {}); p = await b.newPage({ viewport: { width: 640, height: 480 } });
   await p.goto(`http://localhost:8123/play.html?skip=male&ep=${ep}&scenario=${batch[0]}`);
   try { await p.waitForFunction(() => window.game?.vm, null, { timeout: 30000 }); } catch { continue; }
   p.on('pageerror', e => console.log('pageerr', e.message.slice(0, 120)));
-  globals = await p.evaluate(async ({ batch, globals, cheat, ROUNDS, TALKS, kill, LEAVES, noStart }) => {
+  try { globals = await p.evaluate(async ({ batch, globals, cheat, ROUNDS, TALKS, kill, LEAVES, noStart }) => {
     const { GameScene } = await import('./js/game.js');
     let g = window.game; g.vm.globals = new Map(globals);
     for (let k = 0; k < batch.length; k++) {
@@ -43,7 +45,7 @@ for (let pass = 0; pass < 2; pass++) for (let i = 0; i < all.length; i += 8) {
       }
     }
     window.__log = window.__log; return [...g.vm.globals];
-  }, { batch, globals, cheat, ROUNDS, TALKS, LEAVES, noStart: !!process.env.NOSTART, kill: process.env.KILL !== '0' });
+  }, { batch, globals, cheat, ROUNDS, TALKS, LEAVES, noStart: !!process.env.NOSTART, kill: process.env.KILL !== '0' }); } catch (e) { console.log('batch crashed', batch[0], e.message.slice(0, 60)); }
   if (process.env.DEBUG) console.log((await p.evaluate(() => window.__log)).join('\n'));
 }
 const best = Object.fromEntries(globals.filter(([k, v]) => k.startsWith('q:') && v > 0).map(([k, v]) => [k.slice(2), v]));

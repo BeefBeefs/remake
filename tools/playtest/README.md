@@ -50,3 +50,4 @@ Serve `public/` (`cd public && python3 -m http.server 8123`) then run with node 
 - `questpoll.mjs` - the nine accepted-only quests: set state 1, kill all monsters of the completion scenario, expect state 2 (8 of 9; 28 uses `quest28.mjs`).
 - `quest3.mjs [scenario] [quest]` - single-quest version of the kill-all completion check.
 - `quest28.mjs` - quest 28 completes on arriving through exit entry 2 (sentence 50).
+- `epplay.mjs [ep]` - ordered-play quest sweep (see docs/PROGRESS.md); env CHEAT, LEAVES, TALKS, ROUNDS, PASSES, REVISIT, ONLY.
