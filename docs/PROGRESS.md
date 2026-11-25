@@ -406,3 +406,11 @@ Ep4 ordered-play sweep (CHEAT=1, 2 passes): 38 quests started (26 and 27 are new
 - Verified by driving the VM directly (`/tmp/q13.mjs`, `/tmp/q14.mjs` style, not committed): with q11=2,q12=1,g11:24=1 quest 13 starts; with q13=1 the Kirushutat talk completes 13, runs the full message chain (needs >12 advances) and sets q14=1.
 - Note: block 33 of 02110000 lists `V1==115` twice (→35 reset, →43 offer); the engine reaches 43 only because the chain's intermediate talk step reaches 115 via the increment block rather than the dispatch table. No engine change needed.
 - Still unproven from a fresh game: 34, 37, 38, 40 (and 29, 31, 36 only under seeded flags).
+
+## Ep4 quests 37, 38, 40 and Ep3/4 quest 34 — guard chains (tools/guardchain.py)
+- New `tools/guardchain.py <ep> <scenario> <block> [sets]` climbs the script call graph from a block to its status entries and prints the guard conditions; with `sets` it lists every guarded `V1 := const` setter (the stage-based conversation chains).
+- **38**: 03900005 with `g11:110==0 && q37!=0` → chain V1=100…113 → quest 38 starts (driven in the VM; q37 is completed on the way).
+- **40**: 03900005 with `g11:110==1` and sentence 58 (hand-in check) satisfied for item 4:99000011/99000012 (then 99000010 on the second talk) → quest 40 starts, second talk completes it. `V1000005` there is the result of sentence 58, not the arrival entry (block 6's `V5 := g11:116` is for other stages).
+- **37**: 03900003 with `g11:85==11` and item 4:99000024 held → quests 36 completes, 37 starts.
+- So these are only "unstarted" in the sweep because the stage globals (`g11:110`, `g11:85`) and the hand-in items from earlier quests are not reached by the random-flag fuzz; the engine does not block them. Item sources for 99000010–12 and 99000024 are NOT re-verified here.
+- Method: `/tmp/qt2.mjs` (not committed) = direct `vm.talk(12000000)` loops with seeded globals and `hasItem` stubbed true.
