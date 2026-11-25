@@ -436,3 +436,9 @@ Talking to all 03900003 guild NPCs (12000000, 03, 01, 02, 04-08) at each g11:85 
 ## Quests 43, 45, 46 driven (g11:110 stage 4–6 chain)
 - 46: 03900005 with `g11:110==4` and q45==2 → q46 starts (V1=900 chain). 45: 03900003 NPC 12000003 with `g11:88==1`, q32==2 → q45 starts (g11:88 is written 1/2 by 03900003 itself). 43: 04900002 with `g11:112==2`, q42==2 → q43 starts (g11:112 written 1–4 by 04900002; g11:113 by 04000009).
 - Helmets/boots: correction to the earlier note "layers 19–22 are empty": layers 19–21 (22 in the female file) DO have frames, but only in 105 of 226 direction animations (attack, cast and the pose animations 3, 9, 11–15, 16–21, 25–28), never in idle/walk. Drawing them one at a time on the idling hero changes nothing (compared crops), and their sheet indices (10–19) differ from the body sets (layers 5–8 use 1–16), so they look like effect / swing layers, not a helmet or boots. No helmet/boot overlay found; head and foot gear stay invisible (GUESS: the original also does not show them). Not verified during an attack frame.
+
+## Missing-item audit (ground items, shops, belt, sprites)
+- Ground drops: kill test shows gold and items landing on `ground` (Red Goblin etc.), quest items for Ep1 bosses verified; belt keys/right-click, warehouse and kill playtests pass.
+- Shop stock: shop 0 (12 goods incl. Tablet, Capsule, Short Sword, Leather Cloth) and shop 1/2 open with the full lists in Ep3 data; Ep1's shop 1 is a service row only (skipped).
+- Sprites: `tools/playtest/missing404.mjs 4` over all 209 scenarios found 9 missing files, all `objects/N_sdw.json` shadow sets of a few objects (optional shadows), no missing actor, map or object sprite.
+- Test helpers added to tools/playtest: `missing404.mjs`, `talkseed.mjs`, `ladder.mjs`.
